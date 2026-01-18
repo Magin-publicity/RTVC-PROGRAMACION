@@ -428,11 +428,11 @@ export default function MealManagement() {
 
     // Configurar opciones del PDF
     const opt = {
-      margin: [3, 8, 3, 8],
+      margin: [8, 8, 8, 8],
       filename: `${selectedService}_${formattedDate}_RTVC.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: {
-        scale: 2,
+        scale: 1.5,
         useCORS: true,
         logging: false,
         letterRendering: true,
@@ -733,19 +733,19 @@ export default function MealManagement() {
       </div>
 
       {/* Contenedor oculto para PDF */}
-      <div id="meals-pdf-content" style={{ position: 'absolute', left: '-9999px', top: 0, width: '700px' }}>
+      <div id="meals-pdf-content" style={{ position: 'absolute', left: '-9999px', top: 0, width: '650px' }}>
         {/* Encabezado del PDF */}
-        <div className="pdf-header" style={{ textAlign: 'center', marginBottom: '10px' }}>
-          <h1 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '6px', border: '2px solid black', padding: '4px', margin: 0 }}>
+        <div className="pdf-header" style={{ textAlign: 'center', marginBottom: '8px' }}>
+          <h1 style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '5px', border: '2px solid black', padding: '5px', margin: 0 }}>
             REQUERIMIENTO DE ALIMENTACIÓN - {selectedService}
           </h1>
-          <table style={{ width: '100%', fontSize: '10px', marginBottom: '8px', marginTop: '6px', border: '1px solid black', tableLayout: 'fixed' }}>
+          <table style={{ width: '100%', fontSize: '11px', marginBottom: '8px', marginTop: '5px', border: '1px solid black', tableLayout: 'fixed' }}>
             <tbody>
               <tr>
-                <td style={{ textAlign: 'left', padding: '4px 6px', borderRight: '1px solid black', width: '50%' }}>
+                <td style={{ textAlign: 'left', padding: '5px 8px', borderRight: '1px solid black', width: '50%' }}>
                   <strong>Programa:</strong> {programName || '__________________________'}
                 </td>
-                <td style={{ textAlign: 'left', padding: '4px 6px', width: '50%' }}>
+                <td style={{ textAlign: 'left', padding: '5px 8px', width: '50%' }}>
                   <strong>Fecha:</strong> {new Date(selectedDate + 'T00:00:00').toLocaleDateString('es-CO', {
                     day: '2-digit',
                     month: 'long',
@@ -758,36 +758,36 @@ export default function MealManagement() {
         </div>
 
         {/* Tabla de lista de firmas */}
-        <table className="meal-table no-break" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', tableLayout: 'fixed' }}>
+        <table className="meal-table no-break" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', tableLayout: 'fixed' }}>
           <thead>
-            <tr style={{ backgroundColor: '#e5e7eb', height: '28px' }}>
-              <th style={{ border: '1px solid black', padding: '4px 2px', textAlign: 'center', fontWeight: 'bold', width: '30px' }}>
+            <tr style={{ backgroundColor: '#e5e7eb' }}>
+              <th style={{ border: '1px solid black', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '30px' }}>
                 #
               </th>
-              <th style={{ border: '1px solid black', padding: '4px 3px', textAlign: 'left', fontWeight: 'bold', width: '260px' }}>
+              <th style={{ border: '1px solid black', padding: '6px 4px', textAlign: 'left', fontWeight: 'bold', width: '260px' }}>
                 NOMBRE
               </th>
-              <th style={{ border: '1px solid black', padding: '4px 3px', textAlign: 'left', fontWeight: 'bold', width: '210px' }}>
+              <th style={{ border: '1px solid black', padding: '6px 4px', textAlign: 'left', fontWeight: 'bold', width: '210px' }}>
                 CARGO
               </th>
-              <th style={{ border: '1px solid black', padding: '4px 3px', textAlign: 'center', fontWeight: 'bold', width: '200px' }}>
+              <th style={{ border: '1px solid black', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '150px' }}>
                 FIRMA
               </th>
             </tr>
           </thead>
           <tbody>
             {requests.map((request, index) => (
-              <tr key={request.id} style={{ height: '32px', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-                <td style={{ border: '1px solid black', padding: '4px 2px', textAlign: 'center', fontSize: '9px' }}>
+              <tr key={request.id} style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                <td style={{ border: '1px solid black', padding: '6px 4px', textAlign: 'center', fontSize: '11px' }}>
                   {index + 1}
                 </td>
-                <td style={{ border: '1px solid black', padding: '4px 3px', wordWrap: 'break-word', overflow: 'hidden', fontSize: '9px' }}>
+                <td style={{ border: '1px solid black', padding: '6px 4px', wordWrap: 'break-word', overflow: 'hidden', fontSize: '11px' }}>
                   {request.personnel_name}
                 </td>
-                <td style={{ border: '1px solid black', padding: '4px 3px', wordWrap: 'break-word', overflow: 'hidden', fontSize: '9px' }}>
+                <td style={{ border: '1px solid black', padding: '6px 4px', wordWrap: 'break-word', overflow: 'hidden', fontSize: '11px' }}>
                   {request.cargo || '-'}
                 </td>
-                <td style={{ border: '1px solid black', padding: '4px 3px' }}>
+                <td style={{ border: '1px solid black', padding: '6px 4px', minHeight: '20px' }}>
                   {/* Espacio vacío para firma */}
                 </td>
               </tr>

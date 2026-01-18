@@ -294,15 +294,15 @@ export const RoutesManagement = () => {
 
     // Configurar opciones del PDF optimizado para 2 rutas por página
     const opt = {
-      margin: [2, 2, 2, 2],
+      margin: [6, 8, 6, 8],
       filename: `Rutas_RTVC_${formattedDate}_Llamado_${shiftType}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
+      image: { type: 'jpeg', quality: 0.95 },
       html2canvas: {
-        scale: 1.8,
+        scale: 1.65,
         useCORS: true,
         logging: false,
         letterRendering: true,
-        allowTaint: true,
+        allowTaint: false,
         backgroundColor: '#ffffff'
       },
       jsPDF: {
@@ -1161,30 +1161,30 @@ const RoutesTab = ({ routes, selectedDate, shiftType, programTitle, onAssignVehi
           {/* Tabla de Pasajeros */}
           {route.passengers && Array.isArray(route.passengers) && (
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100 border-b-2 border-gray-300">
+              <table className="w-full border-collapse">
+                <thead className="bg-gray-100">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700" style={{width: '5%'}}>#</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700" style={{width: '25%'}}>Pasajero</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700" style={{width: '40%'}}>Dirección</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700" style={{width: '18%'}}>Localidad</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700" style={{width: '12%'}}>Mover a</th>
+                    <th className="border border-gray-400 px-4 py-2 text-left text-xs font-semibold text-gray-700" style={{width: '5%'}}>#</th>
+                    <th className="border border-gray-400 px-4 py-2 text-left text-xs font-semibold text-gray-700" style={{width: '25%'}}>Pasajero</th>
+                    <th className="border border-gray-400 px-4 py-2 text-left text-xs font-semibold text-gray-700" style={{width: '40%'}}>Dirección</th>
+                    <th className="border border-gray-400 px-4 py-2 text-left text-xs font-semibold text-gray-700" style={{width: '18%'}}>Localidad</th>
+                    <th className="border border-gray-400 px-4 py-2 text-center text-xs font-semibold text-gray-700" style={{width: '12%'}}>Mover a</th>
                   </tr>
                 </thead>
                 <tbody>
                   {route.passengers.filter(p => p.name).map((passenger, idx) => (
-                    <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
-                      <td className="px-4 py-3 text-center">
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="border border-gray-400 px-4 py-3 text-center">
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-800 font-bold text-sm">
                           {passenger.pickup_order || idx + 1}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{passenger.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{passenger.address}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
+                      <td className="border border-gray-400 px-4 py-3 font-medium text-gray-900">{passenger.name}</td>
+                      <td className="border border-gray-400 px-4 py-3 text-sm text-gray-700">{passenger.address}</td>
+                      <td className="border border-gray-400 px-4 py-3 text-sm text-gray-600">
                         {passenger.localidad || passenger.barrio || '-'}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="border border-gray-400 px-4 py-3 text-center">
                         <select
                           className="text-xs border border-gray-300 rounded px-2 py-1"
                           value={route.route_number}

@@ -3,3 +3,4 @@ backend/node_modules/
 backups/
 dist/
 backend/nul
+node_modules
