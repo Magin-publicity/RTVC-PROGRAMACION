@@ -1,0 +1,110 @@
+const express = require('express');
+const router = express.Router();
+const pool = require('../config/database');
+
+// Obtener la semana de rotación actual
+router.get('/rotation-week', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT current_week, week_start_date FROM rotation_config ORDER BY id DESC LIMIT 1');
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error getting rotation week:', error);
+    res.status(500).json({ error: 'Error al obtener semana de rotación' });
+  }
+});
+
+// Actualizar la semana de rotación
+router.post('/rotation-week', async (req, res) => {
+  try {
+    const { current_week, week_start_date } = req.body;
+    await pool.query(
+      'UPDATE rotation_config SET current_week = $1, week_start_date = $2, updated_at = CURRENT_TIMESTAMP',
+      [current_week, week_start_date]
+    );
+    res.json({ message: 'Semana de rotación actualizada' });
+  } catch (error) {
+    console.error('Error updating rotation week:', error);
+    res.status(500).json({ error: 'Error al actualizar semana de rotación' });
+  }
+});
+
+// Obtener turnos automáticos para una fecha específica
+router.get('/auto-shifts/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    const selectedDate = new Date(date);
+    
+    // Calcular la semana de rotación basándose en la fecha
+    // Usar una fecha base conocida (por ejemplo, 11 de noviembre de 2025 = Semana 1)
+    const baseDate = new Date('2025-11-11');
+    const daysDiff = Math.floor((selectedDate - baseDate) / (1000 * 60 * 60 * 24));
+    const weeksDiff = Math.floor(daysDiff / 7);
+    // Ciclo de 4 semanas: semana 1, 2, 3, 4, luego vuelve a 1
+    const currentWeek = ((weeksDiff % 4) + 4) % 4 + 1;
+    
+    console.log(`📅 Fecha: ${date}, Semana de rotación: ${currentWeek}`);
+    
+    // Obtener todo el personal
+    const personnelResult = await pool.query('SELECT * FROM personnel WHERE active = true ORDER BY area, name');
+    
+    // Obtener patrones de rotación para la semana calculada
+    const patternsResult = await pool.query(
+      'SELECT * FROM rotation_patterns WHERE week_number = $1 ORDER BY area, shift_start',
+      [currentWeek]
+    );
+    
+    // Agrupar patrones por área
+    const patternsByArea = {};
+    patternsResult.rows.forEach(pattern => {
+      if (!patternsByArea[pattern.area]) {
+        patternsByArea[pattern.area] = [];
+      }
+      patternsByArea[pattern.area].push(pattern);
+    });
+    
+    // Asignar turnos al personal
+    const shifts = [];
+    const personnelByArea = {};
+    
+    // Agrupar personal por área
+    personnelResult.rows.forEach(person => {
+      if (!personnelByArea[person.area]) {
+        personnelByArea[person.area] = [];
+      }
+      personnelByArea[person.area].push(person);
+    });
+    
+    // Asignar turnos según patrones con rotación
+Object.keys(personnelByArea).forEach(area => {
+  const patterns = patternsByArea[area] || [];
+  const people = personnelByArea[area];
+  
+  if (patterns.length === 0) return;
+  
+  people.forEach((person, index) => {
+    // Rotar el índice basándose en la semana
+    // Semana 1: índice normal, Semana 2: +1, Semana 3: +2, Semana 4: +3
+    const rotatedIndex = (index + (currentWeek - 1)) % patterns.length;
+    const pattern = patterns[rotatedIndex];
+    
+    if (pattern) {
+      shifts.push({
+        personnel_id: person.id,
+        name: person.name,
+        area: person.area,
+        shift_start: pattern.shift_start,
+        shift_end: pattern.shift_end,
+        week_number: currentWeek
+      });
+    }
+  });
+});
+    
+    res.json(shifts);
+  } catch (error) {
+    console.error('Error getting auto shifts:', error);
+    res.status(500).json({ error: 'Error al obtener turnos automáticos' });
+  }
+});
+
+module.exports = router;

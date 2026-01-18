@@ -1,0 +1,52 @@
+{
+  "name": "rtvc-scheduling-frontend",
+  "version": "2.0.0",
+  "description": "Frontend para sistema de programación RTVC",
+  "main": "src/main.jsx",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "keywords": [
+    "rtvc",
+    "scheduling",
+    "api",
+    "rest",
+    "nodejs",
+    "postgresql"
+  ],
+  "author": "Tu Nombre",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
+    "lucide-react": "^0.553.0",
+    "morgan": "^1.10.0",
+    "pg": "^8.11.3",
+    "postcss": "^8.5.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^8.54.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.10",
+    "supertest": "^6.3.3",
+    "tailwindcss": "^3.4.18",
+    "vite": "^4.5.14"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

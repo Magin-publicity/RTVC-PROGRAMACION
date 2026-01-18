@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 13436 -Force\")",
+      "Bash(npm install:*)",
+      "Bash(npm start)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 27680 -Force\")",
+      "Bash(node scripts/run-assignment-migration.js:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(node -e:*)",
+      "Bash(psql:*)",
+      "Bash(curl -X GET \"http://localhost:3000/api/asignaciones-reporteria/fecha/2025-12-20\" -H \"Content-Type: application/json\")",
+      "Bash(curl:*)",
+      "Bash(node server.js:*)",
+      "Bash(node backend/scripts/run-turno-migration.js:*)",
+      "Bash(node backend/scripts/crear-llamados-reporteria.js:*)",
+      "Bash(node:*)",
+      "Bash(timeout:*)",
+      "Bash(echo \"Abre la consola del navegador (F12) y ejecuta este comando:\nconsole.log(JSON.parse(localStorage.getItem(''rtvc_program_mappings'') || ''{}''))\n\nLuego copia aquí el resultado para ver si hay mappings guardados.\")",
+      "Bash(python3:*)",
+      "Bash(python -c:*)",
+      "Bash(echo:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(xargs -I {} powershell -Command \"Stop-Process -Id {} -Force\")",
+      "Bash(find:*)",
+      "Bash(pg_dump:*)",
+      "Bash(xargs ls:*)",
+      "Bash(xargs -I {} powershell -Command 'Stop-Process -Id {} -Force')",
+      "Bash(start cmd /k \"npm start\")",
+      "Bash(start cmd /k \"npm run dev\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

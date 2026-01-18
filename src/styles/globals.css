@@ -1,0 +1,236 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* src/styles/globals.css */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Print Styles */
+@media print {
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Animation Classes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Utility Classes */
+.truncate-2-lines {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.shadow-soft {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* PDF Generation Styles - Solo se aplican durante generación PDF */
+.pdf-generating #routes-pdf-content {
+  padding: 2px !important;
+  font-size: 13px !important;
+}
+
+.pdf-generating .pdf-header {
+  display: block !important;
+  margin-bottom: 2px !important;
+}
+
+.pdf-generating .pdf-header table {
+  font-size: 12px !important;
+}
+
+.pdf-generating .pdf-header td {
+  padding: 3px 5px !important;
+  font-size: 12px !important;
+}
+
+.pdf-generating .pdf-header h1 {
+  font-size: 18px !important;
+  font-weight: bold !important;
+}
+
+.pdf-generating .route-card {
+  margin-bottom: 2px !important;
+  border: 1px solid black !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  page-break-inside: avoid !important;
+}
+
+.pdf-generating .route-card > div:first-child {
+  padding: 5px 10px !important;
+  font-size: 14px !important;
+  font-weight: bold !important;
+}
+
+.pdf-generating .route-card table {
+  font-size: 12px !important;
+  width: 100% !important;
+}
+
+.pdf-generating .route-card th {
+  padding: 4px 6px !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+  background-color: #e5e7eb !important;
+}
+
+.pdf-generating .route-card td {
+  padding: 4px 7px !important;
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+
+.pdf-generating .route-card .bg-green-50,
+.pdf-generating .route-card .bg-yellow-50,
+.pdf-generating .route-card .bg-blue-50 {
+  padding: 5px 10px !important;
+  font-size: 11px !important;
+}
+
+.pdf-generating button {
+  display: none !important;
+}
+
+.pdf-generating select {
+  display: none !important;
+}
+
+/* Optimizar anchos de columna en PDF para eliminar espacios vacíos */
+.pdf-generating .route-card table th:nth-child(1),
+.pdf-generating .route-card table td:nth-child(1) {
+  width: 4% !important;
+  padding: 2px !important;
+}
+
+.pdf-generating .route-card table th:nth-child(2),
+.pdf-generating .route-card table td:nth-child(2) {
+  width: 28% !important;
+}
+
+.pdf-generating .route-card table th:nth-child(3),
+.pdf-generating .route-card table td:nth-child(3) {
+  width: 48% !important;
+}
+
+.pdf-generating .route-card table th:nth-child(4),
+.pdf-generating .route-card table td:nth-child(4) {
+  width: 20% !important;
+}
+
+/* Ocultar columna "Mover a" en PDF */
+.pdf-generating .route-card table th:nth-child(5),
+.pdf-generating .route-card table td:nth-child(5) {
+  display: none !important;
+}
+
+/* Page break control */
+.page-break-after {
+  page-break-after: always !important;
+  break-after: page !important;
+}
+
+/* PDF Generation Styles - Meal Management */
+.pdf-generating #meals-pdf-content {
+  position: static !important;
+  left: auto !important;
+  width: 650px !important;
+  padding: 6px !important;
+}
+
+.pdf-generating #meals-pdf-content .pdf-header h1 {
+  font-size: 15px !important;
+  font-weight: bold !important;
+  margin-bottom: 8px !important;
+  border: 2px solid black !important;
+  padding: 5px !important;
+}
+
+.pdf-generating #meals-pdf-content .pdf-header table {
+  font-size: 11px !important;
+  margin-bottom: 12px !important;
+  border: 1px solid black !important;
+  table-layout: fixed !important;
+}
+
+.pdf-generating #meals-pdf-content .meal-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-size: 11px !important;
+  table-layout: fixed !important;
+}
+
+.pdf-generating #meals-pdf-content .meal-table th {
+  border: 1px solid black !important;
+  padding: 6px 4px !important;
+  font-size: 11px !important;
+  font-weight: bold !important;
+  background-color: #e5e7eb !important;
+}
+
+.pdf-generating #meals-pdf-content .meal-table td {
+  border: 1px solid black !important;
+  padding: 6px 4px !important;
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+  word-wrap: break-word !important;
+  overflow: hidden !important;
+}

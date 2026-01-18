@@ -1,0 +1,2172 @@
+const express = require('express');
+const router = express.Router();
+const pool = require('../config/database');
+const { WEEKEND_PERSONNEL_NUMBERED } = require('../config/weekend-rotation-numbered');
+
+// ✨ FUNCIÓN CENTRALIZADA PARA GENERAR TURNOS AUTOMÁTICOS
+// Esta función contiene toda la lógica de generación de turnos y puede ser llamada desde cualquier endpoint
+async function generateAutoShifts(date) {
+  // Agregar 'T12:00:00' para evitar problemas de zona horaria
+  const selectedDate = new Date(date + 'T12:00:00');
+
+  // Verificar si es fin de semana (sábado = 6, domingo = 0)
+  const dayOfWeek = selectedDate.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    // Sistema de rotación numerado para fin de semana
+    // Calcular el número de rotación basado en semanas desde fecha base
+    // Fecha base: sábado 13 de diciembre 2025 (Rotación 0)
+    const baseDate = new Date('2025-12-13T12:00:00');
+    const daysDiff = Math.floor((selectedDate - baseDate) / (1000 * 60 * 60 * 24));
+    const weekendCount = Math.floor(daysDiff / 7); // Cuántos fines de semana han pasado
+
+    console.log(`📅 Fecha: ${date} es fin de semana (día ${dayOfWeek}), Rotación #${weekendCount}`);
+
+    // Obtener todo el personal activo y disponible
+    const personnelResult = await pool.query(`
+      SELECT id, name, area FROM personnel
+      WHERE active = true
+      AND (
+        is_available = true
+        OR is_available IS NULL
+        OR (unavailability_start_date IS NOT NULL AND unavailability_end_date IS NOT NULL
+            AND NOT ($1::date BETWEEN unavailability_start_date AND unavailability_end_date))
+      )
+    `, [date]);
+
+    const personnelMap = {};
+    personnelResult.rows.forEach(person => {
+      personnelMap[person.name] = person;
+    });
+
+    const shifts = [];
+
+    // Procesar cada área
+    Object.keys(WEEKEND_PERSONNEL_NUMBERED).forEach(area => {
+      const areaPersonnel = WEEKEND_PERSONNEL_NUMBERED[area];
+
+      // 🆕 LÓGICA ESPECIAL PARA CONTRIBUCIONES EN FIN DE SEMANA
+      if (area === 'CONTRIBUCIONES') {
+        console.log(`📹 CONTRIBUCIONES (fin de semana): Usando sistema de rotación de 3 turnos`);
+
+        // Las 3 personas trabajan TODOS los fines de semana
+        // Cada persona rota su turno según la semana
+        const turnos = [
+          { start: '05:00:00', end: '11:00:00', label: '05:00-11:00' },
+          { start: '11:00:00', end: '17:00:00', label: '11:00-17:00' },
+          { start: '17:00:00', end: '22:00:00', label: '17:00-22:00' }
+        ];
+
+        areaPersonnel.forEach((personConfig, personIndex) => {
+          const person = personnelMap[personConfig.name];
+          if (person) {
+            // Calcular el turno para esta persona en este fin de semana
+            const turnoIndex = (personIndex + weekendCount) % turnos.length;
+            const turno = turnos[turnoIndex];
+
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: turno.start,
+              shift_end: turno.end,
+              week_number: 0,
+              original_shift: turno.label,
+              is_weekend: true,
+              rotation_number: personConfig.number
+            });
+
+            console.log(`   ✅ #${personConfig.number} ${person.name} → ${turno.label}`);
+          }
+        });
+
+        return; // Salir para que no use la lógica estándar
+      }
+
+      // 🎥 LÓGICA ESPECIAL PARA CAMARÓGRAFOS DE ESTUDIO EN FIN DE SEMANA
+      // Rotación por GRUPOS de 4 personas que ALTERNAN entre AM y PM
+      // Ejemplo: Grupo A semana 0 en AM → semana 1 en PM → semana 2 en AM...
+      if (area === 'CAMARÓGRAFOS DE ESTUDIO') {
+        console.log(`📹 CAMARÓGRAFOS DE ESTUDIO (fin de semana): Rotación por grupos de 4 (alternando AM/PM)`);
+
+        // Todo el personal de camarógrafos (sin separar por turno preferido)
+        const allCameras = areaPersonnel;
+        console.log(`   Total personal: ${allCameras.length} personas`);
+        console.log(`   Rotación #${weekendCount}`);
+
+        // Dividir en grupos de 4
+        const numGroups = Math.ceil(allCameras.length / 4);
+        console.log(`   Total grupos: ${numGroups}`);
+
+        // Determinar qué 2 grupos trabajan esta semana
+        // Cada par de grupos trabaja juntos en una semana
+        const pairIndex = weekendCount % numGroups; // Qué par de grupos trabaja
+        const groupIndexA = (pairIndex * 2) % numGroups;
+        const groupIndexB = (pairIndex * 2 + 1) % numGroups;
+
+        console.log(`   Grupos trabajando: Grupo ${groupIndexA} y Grupo ${groupIndexB}`);
+
+        // Determinar si cada grupo trabaja AM o PM
+        // Contar cuántas veces ha trabajado cada grupo hasta ahora
+        const timesWorkedA = Math.floor(weekendCount / numGroups) * 2 + (pairIndex * 2 < numGroups * 2 ? 1 : 0);
+        const timesWorkedB = timesWorkedA; // Trabajan juntos siempre
+
+        // El primer grupo siempre AM, el segundo siempre PM ESTA SEMANA
+        // Pero alternan en la próxima vez que trabajen
+        const groupAShift = (timesWorkedA % 2 === 0) ? 'AM' : 'PM';
+        const groupBShift = (timesWorkedA % 2 === 0) ? 'PM' : 'AM';
+
+        console.log(`   Grupo ${groupIndexA} → ${groupAShift} (ciclo ${timesWorkedA})`);
+        console.log(`   Grupo ${groupIndexB} → ${groupBShift} (ciclo ${timesWorkedB})`);
+
+        // Asignar Grupo A
+        const startIdxA = groupIndexA * 4;
+        const shiftA = groupAShift === 'AM' ? { start: '08:00:00', end: '16:00:00', label: '08:00-16:00' } : { start: '14:00:00', end: '22:00:00', label: '14:00-22:00' };
+
+        for (let i = 0; i < 4 && (startIdxA + i) < allCameras.length; i++) {
+          const personConfig = allCameras[startIdxA + i];
+          const person = personnelMap[personConfig.name];
+
+          if (person) {
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: shiftA.start,
+              shift_end: shiftA.end,
+              week_number: 0,
+              original_shift: shiftA.label,
+              is_weekend: true,
+              rotation_number: personConfig.number
+            });
+            console.log(`   ✅ Grupo ${groupIndexA} (${groupAShift}) #${personConfig.number} ${person.name} → ${shiftA.label}`);
+          }
+        }
+
+        // Asignar Grupo B
+        const startIdxB = groupIndexB * 4;
+        const shiftB = groupBShift === 'AM' ? { start: '08:00:00', end: '16:00:00', label: '08:00-16:00' } : { start: '14:00:00', end: '22:00:00', label: '14:00-22:00' };
+
+        for (let i = 0; i < 4 && (startIdxB + i) < allCameras.length; i++) {
+          const personConfig = allCameras[startIdxB + i];
+          const person = personnelMap[personConfig.name];
+
+          if (person) {
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: shiftB.start,
+              shift_end: shiftB.end,
+              week_number: 0,
+              original_shift: shiftB.label,
+              is_weekend: true,
+              rotation_number: personConfig.number
+            });
+            console.log(`   ✅ Grupo ${groupIndexB} (${groupBShift}) #${personConfig.number} ${person.name} → ${shiftB.label}`);
+          }
+        }
+
+        return; // Salir para no usar la lógica estándar
+      }
+
+      // 🔧 LÓGICA ESPECIAL PARA REPORTERÍA EN FIN DE SEMANA CON ROTACIÓN
+      if (area === 'CAMARÓGRAFOS DE REPORTERÍA') {
+        console.log(`📹 ${area}: Asignando 4 AM + 4 PM con rotación #${weekendCount}`);
+
+        // Total: 18 personas, cada fin de semana rotan 8 (4 AM + 4 PM)
+        const totalPersonnel = areaPersonnel.length;
+        console.log(`   Total personal en pool: ${totalPersonnel}`);
+
+        // Calcular índice de inicio: avanza 8 posiciones cada fin de semana
+        const startIndex = (weekendCount * 8) % totalPersonnel;
+
+        console.log(`   Índice de inicio: ${startIndex}`);
+
+        // Tomar 8 personas consecutivas del pool
+        // Las primeras 4 siempre van a AM, las siguientes 4 siempre van a PM
+        const toAssign = [];
+        for (let i = 0; i < 8; i++) {
+          const idx = (startIndex + i) % totalPersonnel;
+          const personConfig = areaPersonnel[idx];
+
+          // Determinar turno fijo según posición en el bloque de 8
+          // Primeros 4 → AM, Siguientes 4 → PM (sin alternar)
+          const shift = i < 4 ? '08:00-14:00' : '14:00-20:00';
+
+          toAssign.push({
+            ...personConfig,
+            assignedShift: shift
+          });
+        }
+
+        let amAssigned = 0;
+        let pmAssigned = 0;
+
+        toAssign.forEach(personConfig => {
+          const person = personnelMap[personConfig.name];
+          if (person && personConfig.hasContract !== false) {
+            const [startTime, endTime] = personConfig.assignedShift.split('-');
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: startTime + ':00',
+              shift_end: endTime + ':00',
+              week_number: 0,
+              original_shift: personConfig.assignedShift,
+              is_weekend: true,
+              rotation_number: personConfig.number
+            });
+            console.log(`   ✅ #${personConfig.number} ${person.name} → ${personConfig.assignedShift}`);
+
+            if (personConfig.assignedShift === '08:00-14:00') {
+              amAssigned++;
+            } else {
+              pmAssigned++;
+            }
+          } else if (!person) {
+            console.warn(`   ⚠️ Personal no encontrado: ${personConfig.name} (#${personConfig.number})`);
+          }
+        });
+
+        console.log(`   ✅ Total asignado REAL: ${amAssigned} AM + ${pmAssigned} PM = ${amAssigned + pmAssigned}`);
+
+        if (amAssigned < 4 || pmAssigned < 4) {
+          console.warn(`   ⚠️ FALTA PERSONAL: Se asignaron ${amAssigned}/4 AM y ${pmAssigned}/4 PM`);
+        }
+
+        return; // Salir del área
+      }
+
+      if (area === 'ASISTENTES DE REPORTERÍA') {
+        console.log(`📹 ${area}: Asignando 2 AM + 2 PM con rotación #${weekendCount}`);
+
+        // Total: 8 personas, cada fin de semana rotan 4 (2 AM + 2 PM)
+        const totalPersonnel = areaPersonnel.length;
+        console.log(`   Total personal en pool: ${totalPersonnel}`);
+
+        // Calcular índice de inicio: avanza 4 posiciones cada fin de semana
+        const startIndex = (weekendCount * 4) % totalPersonnel;
+
+        // Determinar si deben alternar turnos: cada 2 semanas cambian AM↔PM
+        // Dividir weekendCount por 2 (ciclos completos) para saber cuántas veces han rotado
+        const cycleNumber = Math.floor(weekendCount / 2);
+        const shouldSwap = cycleNumber % 2 === 1;
+
+        console.log(`   Índice de inicio: ${startIndex}, Ciclo: ${cycleNumber}, Alternar: ${shouldSwap}`);
+
+        // Tomar 4 personas consecutivas del pool
+        const toAssign = [];
+        for (let i = 0; i < 4; i++) {
+          const idx = (startIndex + i) % totalPersonnel;
+          const personConfig = areaPersonnel[idx];
+
+          // Determinar turno base: primeros 2 → AM, siguientes 2 → PM
+          let shift;
+          if (shouldSwap) {
+            // Intercambiar: primeros 2 → PM, siguientes 2 → AM
+            shift = i < 2 ? '14:00-20:00' : '08:00-14:00';
+          } else {
+            // Normal: primeros 2 → AM, siguientes 2 → PM
+            shift = i < 2 ? '08:00-14:00' : '14:00-20:00';
+          }
+
+          toAssign.push({
+            ...personConfig,
+            assignedShift: shift
+          });
+        }
+
+        let amAssigned = 0;
+        let pmAssigned = 0;
+
+        toAssign.forEach(personConfig => {
+          const person = personnelMap[personConfig.name];
+          if (person && personConfig.hasContract !== false) {
+            const [startTime, endTime] = personConfig.assignedShift.split('-');
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: startTime + ':00',
+              shift_end: endTime + ':00',
+              week_number: 0,
+              original_shift: personConfig.assignedShift,
+              is_weekend: true,
+              rotation_number: personConfig.number
+            });
+            console.log(`   ✅ #${personConfig.number} ${person.name} → ${personConfig.assignedShift}`);
+
+            if (personConfig.assignedShift === '08:00-14:00') {
+              amAssigned++;
+            } else {
+              pmAssigned++;
+            }
+          } else if (!person) {
+            console.warn(`   ⚠️ Personal no encontrado: ${personConfig.name} (#${personConfig.number})`);
+          }
+        });
+
+        console.log(`   ✅ Total asignado REAL: ${amAssigned} AM + ${pmAssigned} PM = ${amAssigned + pmAssigned}`);
+
+        if (amAssigned < 2 || pmAssigned < 2) {
+          console.warn(`   ⚠️ FALTA PERSONAL: Se asignaron ${amAssigned}/2 AM y ${pmAssigned}/2 PM`);
+        }
+
+        return; // Salir del área
+      }
+
+      // Determinar cuántas personas necesitamos por área
+      let peopleNeeded = 2; // Por defecto 2 personas
+
+      // Para áreas con 2 personas: rotación consecutiva con turnos alternados
+      if (peopleNeeded === 2) {
+        // PRIMERO: Filtrar solo personas disponibles
+        const availablePersonnel = areaPersonnel.filter(pc => {
+          const person = personnelMap[pc.name];
+          return person && pc.hasContract !== false;
+        });
+
+        if (availablePersonnel.length < 2) {
+          console.warn(`⚠️ ${area}: Solo ${availablePersonnel.length} personas disponibles, se necesitan 2`);
+          return;
+        }
+
+        // Determinar si el área DISPONIBLE es PAR o IMPAR
+        const isEvenArea = availablePersonnel.length % 2 === 0;
+
+        // Calcular rotación sobre personas DISPONIBLES
+        let startIndex;
+        if (isEvenArea) {
+          // ÁREAS PARES: avanza 2 posiciones cada semana
+          startIndex = (weekendCount * 2) % availablePersonnel.length;
+        } else {
+          // ÁREAS IMPARES: patrón A+B, C+D, E+A, B+C, D+E
+          // Fórmula: (semana * 2) % total
+          startIndex = (weekendCount * 2) % availablePersonnel.length;
+        }
+
+        let assigned = 0;
+        let currentIndex = startIndex;
+        const attemptedIndices = new Set();
+
+        // Asignar 2 personas desde el array filtrado
+        for (let i = 0; i < 2; i++) {
+          const idx = (startIndex + i) % availablePersonnel.length;
+          const personConfig = availablePersonnel[idx];
+          const person = personnelMap[personConfig.name];
+
+          let shift;
+
+          if (isEvenArea) {
+            // ÁREAS PARES: calcular cuántas veces esta pareja ha trabajado
+            const pairWorkCount = Math.floor(weekendCount / (availablePersonnel.length / 2));
+            const shouldAlternate = pairWorkCount % 2 === 1;
+
+            // Usar el turno base de la configuración
+            const baseShift = personConfig.shift;
+
+            // Alternar si la pareja ya trabajó un ciclo completo
+            if (shouldAlternate) {
+              shift = baseShift === '08:00-16:00' ? '14:00-22:00' : '08:00-16:00';
+            } else {
+              shift = baseShift;
+            }
+          } else {
+            // ÁREAS IMPARES: calcular cuántas veces esta persona ha trabajado
+            let timesWorked = 0;
+            for (let w = 0; w < weekendCount; w++) {
+              const wStart = (w * 2) % availablePersonnel.length;
+              const wEnd = (w * 2 + 1) % availablePersonnel.length;
+              if (wStart === idx || wEnd === idx) {
+                timesWorked++;
+              }
+            }
+
+            // Alternar turno cada vez que trabaja
+            const shouldAlternate = timesWorked % 2 === 1;
+
+            if (shouldAlternate) {
+              shift = i === 0 ? '14:00-22:00' : '08:00-16:00';
+            } else {
+              shift = i === 0 ? '08:00-16:00' : '14:00-22:00';
+            }
+          }
+
+          const [startTime, endTime] = shift.split('-');
+
+          shifts.push({
+            personnel_id: person.id,
+            name: person.name,
+            area: person.area,
+            shift_start: startTime + ':00',
+            shift_end: endTime + ':00',
+            week_number: 0,
+            original_shift: shift,
+            is_weekend: true,
+            rotation_number: personConfig.number
+          });
+
+          console.log(`✅ ${area}: #${personConfig.number} ${person.name} → ${shift}`);
+        }
+      } else {
+        // Para áreas con 3 o 4 personas o más (reportería)
+        console.log(`📹 ${area}: Asignando ${peopleNeeded} personas en rotación #${weekendCount}`);
+
+        const startIndex = (weekendCount * peopleNeeded) % areaPersonnel.length;
+        let assigned = 0;
+        let currentIndex = startIndex;
+        const attemptedIndices = new Set();
+
+        while (assigned < peopleNeeded && attemptedIndices.size < areaPersonnel.length) {
+          attemptedIndices.add(currentIndex);
+          const personConfig = areaPersonnel[currentIndex];
+          const person = personnelMap[personConfig.name];
+
+          if (person && personConfig.hasContract !== false) {
+            const [startTime, endTime] = personConfig.shift.split('-');
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: startTime + ':00',
+              shift_end: endTime + ':00',
+              week_number: 0,
+              original_shift: personConfig.shift,
+              is_weekend: true,
+              rotation_number: personConfig.number
+            });
+            console.log(`   ✅ #${personConfig.number} ${person.name} → ${personConfig.shift}`);
+            assigned++;
+          } else if (!person) {
+            console.warn(`   ⚠️ Personal no encontrado: ${personConfig.name} (#${personConfig.number}) en ${area}`);
+          } else if (personConfig.hasContract === false) {
+            console.log(`   ⏭️ Saltando ${personConfig.name} (#${personConfig.number}) - Sin contrato`);
+          }
+
+          currentIndex = (currentIndex + 1) % areaPersonnel.length;
+        }
+
+        if (assigned < peopleNeeded) {
+          console.warn(`   ⚠️ ${area}: Solo se pudieron asignar ${assigned} de ${peopleNeeded} personas necesarias`);
+        }
+
+        console.log(`   ✅ Total asignado para ${area}: ${assigned} personas`);
+      }
+    });
+
+    console.log(`✅ Asignados ${shifts.length} turnos de fin de semana (Rotación #${weekendCount})`);
+    return shifts;
+  }
+
+  // Calcular la semana de rotación basándose en el inicio de la semana (lunes)
+  // Encontrar el lunes de la semana actual
+  const dayOfWeekNum = selectedDate.getDay();
+  const daysFromMonday = dayOfWeekNum === 0 ? 6 : dayOfWeekNum - 1; // Si es domingo (0), son 6 días desde lunes
+  const mondayOfWeek = new Date(selectedDate);
+  mondayOfWeek.setDate(selectedDate.getDate() - daysFromMonday);
+
+  // Usar como base el lunes 11 de noviembre de 2025 = Semana 1
+  const baseMonday = new Date('2025-11-10T12:00:00'); // Lunes 10 de noviembre (corregido)
+  const daysDiff = Math.floor((mondayOfWeek - baseMonday) / (1000 * 60 * 60 * 24));
+  const weeksDiff = Math.floor(daysDiff / 7);
+  // Ciclo de 4 semanas: semana 1, 2, 3, 4, luego vuelve a 1
+  const currentWeek = ((weeksDiff % 4) + 4) % 4 + 1;
+
+  const mondayStr = `${mondayOfWeek.getFullYear()}-${String(mondayOfWeek.getMonth() + 1).padStart(2, '0')}-${String(mondayOfWeek.getDate()).padStart(2, '0')}`;
+  console.log(`📅 Fecha: ${date}, Lunes de esta semana: ${mondayStr}, Semana de rotación: ${currentWeek}`);
+
+  // Obtener todo el personal disponible
+  // Filtra por: active=true Y (is_available=true O fecha fuera del rango de no disponibilidad)
+  const personnelResult = await pool.query(`
+    SELECT * FROM personnel
+    WHERE active = true
+    AND (
+      is_available = true
+      OR is_available IS NULL
+      OR (unavailability_start_date IS NOT NULL AND unavailability_end_date IS NOT NULL
+          AND NOT ($1::date BETWEEN unavailability_start_date AND unavailability_end_date))
+    )
+    ORDER BY area, name
+  `, [date]);
+
+  // Obtener patrones de rotación para la semana calculada
+  const patternsResult = await pool.query(
+    'SELECT * FROM rotation_patterns WHERE week_number = $1 ORDER BY area, shift_start',
+    [currentWeek]
+  );
+
+  // Agrupar patrones por área
+  const patternsByArea = {};
+  patternsResult.rows.forEach(pattern => {
+    if (!patternsByArea[pattern.area]) {
+      patternsByArea[pattern.area] = [];
+    }
+    patternsByArea[pattern.area].push(pattern);
+  });
+
+  // Asignar turnos al personal
+  const shifts = [];
+  const personnelByArea = {};
+
+  // Agrupar personal por área
+  personnelResult.rows.forEach(person => {
+    if (!personnelByArea[person.area]) {
+      personnelByArea[person.area] = [];
+    }
+    personnelByArea[person.area].push(person);
+  });
+
+  // Asignar turnos según patrones con rotación y redistribución equitativa
+  Object.keys(personnelByArea).forEach(area => {
+    const patterns = patternsByArea[area] || [];
+    const people = personnelByArea[area];
+
+    if (patterns.length === 0) return;
+
+    // 📺 LÓGICA ESPECIAL PARA ÁREAS CON 5 PERSONAS (plantilla de relevos)
+    if (people.length === 5) {
+      console.log(`📺 ${area}: Plantilla de 5 turnos con relevos automáticos`);
+
+      // Plantilla de 5 turnos que rotan semanalmente
+      const turnos = [
+        { id: 'T1', start: '05:00:00', end: '09:00:00', label: '05:00', description: 'Apertura' },
+        { id: 'T2', start: '09:00:00', end: '13:00:00', label: '09:00', description: 'Mañana' },
+        { id: 'T3', start: '13:00:00', end: '17:00:00', label: '13:00', description: 'Tarde' },
+        { id: 'T4', start: '16:00:00', end: '20:00:00', label: '16:00', description: 'Cierre' },
+        { id: 'T5', start: '18:00:00', end: '22:00:00', label: '18:00', description: 'Cierre Total' }
+      ];
+
+      // Ordenar personas por nombre para mantener consistencia
+      const sortedPeople = people.slice().sort((a, b) => a.name.localeCompare(b.name));
+
+      console.log(`   Semana ${currentWeek}, weeksDiff: ${weeksDiff}`);
+      console.log(`   Rotación: Cada persona avanza un turno cada semana`);
+
+      // Asignar cada persona a su turno correspondiente según la rotación
+      for (let personIndex = 0; personIndex < sortedPeople.length; personIndex++) {
+        const person = sortedPeople[personIndex];
+        const turnoIndex = (personIndex + weeksDiff) % 5;
+        const turno = turnos[turnoIndex];
+
+        shifts.push({
+          personnel_id: person.id,
+          name: person.name,
+          area: person.area,
+          shift_start: turno.start,
+          shift_end: turno.end,
+          week_number: currentWeek,
+          original_shift: turno.label,
+          turno_descripcion: `${turno.id} - ${turno.description}`
+        });
+
+        console.log(`      ✅ ${person.name} → ${turno.id} ${turno.label} (${turno.description})`);
+      }
+
+      return; // Salir para que no use la lógica de patrones
+    }
+
+    // 📺 LÓGICA ESPECIAL PARA ÁREAS CON 6 PERSONAS (plantilla de relevos)
+    if (people.length === 6) {
+      console.log(`📺 ${area}: Plantilla de 6 turnos con relevos automáticos`);
+
+      // Plantilla de 6 turnos que rotan semanalmente
+      const turnos = [
+        { id: 'T1', start: '05:00:00', end: '09:00:00', label: '05:00', description: 'Apertura' },
+        { id: 'T2', start: '09:00:00', end: '13:00:00', label: '09:00', description: 'Mañana' },
+        { id: 'T3', start: '11:00:00', end: '15:00:00', label: '11:00', description: 'Refuerzo Mediodía' },
+        { id: 'T4', start: '13:00:00', end: '17:00:00', label: '13:00', description: 'Tarde' },
+        { id: 'T5', start: '15:00:00', end: '19:00:00', label: '15:00', description: 'Cierre Másters' },
+        { id: 'T6', start: '18:00:00', end: '22:00:00', label: '18:00', description: 'Cierre Total' }
+      ];
+
+      // Ordenar personas por nombre para mantener consistencia
+      const sortedPeople = people.slice().sort((a, b) => a.name.localeCompare(b.name));
+
+      console.log(`   Semana ${currentWeek}, weeksDiff: ${weeksDiff}`);
+      console.log(`   Rotación: Cada persona avanza un turno cada semana`);
+
+      // Asignar cada persona a su turno correspondiente según la rotación
+      for (let personIndex = 0; personIndex < sortedPeople.length; personIndex++) {
+        const person = sortedPeople[personIndex];
+        const turnoIndex = (personIndex + weeksDiff) % 6;
+        const turno = turnos[turnoIndex];
+
+        shifts.push({
+          personnel_id: person.id,
+          name: person.name,
+          area: person.area,
+          shift_start: turno.start,
+          shift_end: turno.end,
+          week_number: currentWeek,
+          original_shift: turno.label,
+          turno_descripcion: `${turno.id} - ${turno.description}`
+        });
+
+        console.log(`      ✅ ${person.name} → ${turno.id} ${turno.label} (${turno.description})`);
+      }
+
+      return; // Salir para que no use la lógica de patrones
+    }
+
+    // 🆕 LÓGICA ESPECIAL PARA REPORTERÍA: Usar sistema de grupos fijos con ROTACIÓN SEMANAL
+    if (area === 'CAMARÓGRAFOS DE REPORTERÍA' || area === 'ASISTENTES DE REPORTERÍA') {
+      console.log(`📹 ${area}: Usando sistema de grupos fijos con rotación semanal`);
+
+      // Determinar si debemos alternar los grupos esta semana
+      // Si weeksDiff es par: GRUPO_A → AM, GRUPO_B → PM
+      // Si weeksDiff es impar: GRUPO_A → PM, GRUPO_B → AM (rotación)
+      const debeRotar = weeksDiff % 2 === 1;
+
+      console.log(`   📅 Semana ${currentWeek}, weeksDiff: ${weeksDiff}, Rotar: ${debeRotar ? 'SÍ' : 'NO'}`);
+
+      people.forEach(person => {
+        // Verificar el grupo al que pertenece la persona
+        const grupoOriginal = person.grupo_reporteria;
+
+        // Aplicar rotación si corresponde
+        let turnoActual;
+        if (debeRotar) {
+          // Alternar: GRUPO_A trabaja PM, GRUPO_B trabaja AM
+          turnoActual = grupoOriginal === 'GRUPO_A' ? 'PM' : 'AM';
+        } else {
+          // Normal: GRUPO_A trabaja AM, GRUPO_B trabaja PM
+          turnoActual = grupoOriginal === 'GRUPO_A' ? 'AM' : 'PM';
+        }
+
+        if (turnoActual === 'AM') {
+          // Turno mañana 08:00-13:00
+          shifts.push({
+            personnel_id: person.id,
+            name: person.name,
+            area: person.area,
+            shift_start: '08:00:00',
+            shift_end: '13:00:00',
+            week_number: currentWeek,
+            original_shift: grupoOriginal,
+            grupo_reporteria: grupoOriginal,
+            turno_rotado: turnoActual
+          });
+        } else {
+          // Turno tarde 13:00-20:00
+          shifts.push({
+            personnel_id: person.id,
+            name: person.name,
+            area: person.area,
+            shift_start: '13:00:00',
+            shift_end: '20:00:00',
+            week_number: currentWeek,
+            original_shift: grupoOriginal,
+            grupo_reporteria: grupoOriginal,
+            turno_rotado: turnoActual
+          });
+        }
+      });
+
+      return; // Salir para que no use la lógica de patrones
+    }
+
+    // 🆕 LÓGICA ESPECIAL PARA CONTRIBUCIONES: Rotación semanal de 3 turnos
+    if (area === 'CONTRIBUCIONES') {
+      console.log(`📹 CONTRIBUCIONES: Usando sistema de rotación semanal de 3 turnos`);
+      console.log(`   📅 Semana ${currentWeek}, weeksDiff: ${weeksDiff}`);
+
+      // Definir los 3 turnos
+      const turnos = [
+        { start: '05:00:00', end: '11:00:00', label: '05:00-11:00' },
+        { start: '11:00:00', end: '17:00:00', label: '11:00-17:00' },
+        { start: '17:00:00', end: '22:00:00', label: '17:00-22:00' }
+      ];
+
+      // Asignar turnos rotativos a cada persona
+      people.forEach((person, personIndex) => {
+        // Calcular el turno para esta persona en esta semana
+        // Cada semana rota al siguiente turno
+        const turnoIndex = (personIndex + weeksDiff) % turnos.length;
+        const turno = turnos[turnoIndex];
+
+        shifts.push({
+          personnel_id: person.id,
+          name: person.name,
+          area: person.area,
+          shift_start: turno.start,
+          shift_end: turno.end,
+          week_number: currentWeek,
+          original_shift: turno.label
+        });
+
+        console.log(`   ✅ ${person.name} → ${turno.label}`);
+      });
+
+      return; // Salir para que no use la lógica de patrones
+    }
+
+    // 🔄 LÓGICA NORMAL PARA TODAS LAS DEMÁS ÁREAS (sin cambios)
+    // Si hay menos personas que patrones, necesitamos redistribuir equitativamente
+    if (people.length < patterns.length) {
+      console.log(`⚠️ ${area}: Solo ${people.length} personas disponibles para ${patterns.length} turnos - redistribuyendo equitativamente`);
+
+      // Asignar cada persona a múltiples turnos de manera equitativa
+      patterns.forEach((pattern, patternIndex) => {
+        // Calcular qué persona debe cubrir este turno usando rotación
+        const personIndex = (patternIndex + weeksDiff) % people.length;
+        const person = people[personIndex];
+
+        shifts.push({
+          personnel_id: person.id,
+          name: person.name,
+          area: person.area,
+          shift_start: pattern.shift_start,
+          shift_end: pattern.shift_end,
+          week_number: currentWeek,
+          original_shift: null,
+          is_covering: true // Indicador de que está cubriendo por falta de personal
+        });
+      });
+    } else {
+      // Lógica normal: hay suficiente personal
+      people.forEach((person, personIndex) => {
+        // Distribuir las personas entre los turnos disponibles
+        // Cada persona tiene un índice base (personIndex) que se rota cada semana
+        const baseShiftIndex = personIndex % patterns.length;
+
+        // Rotar el turno cada semana
+        const rotatedShiftIndex = (baseShiftIndex + weeksDiff) % patterns.length;
+        const pattern = patterns[rotatedShiftIndex];
+
+        if (pattern) {
+          shifts.push({
+            personnel_id: person.id,
+            name: person.name,
+            area: person.area,
+            shift_start: pattern.shift_start,
+            shift_end: pattern.shift_end,
+            week_number: currentWeek,
+            original_shift: null
+          });
+        }
+      });
+    }
+  });
+
+  return shifts;
+}
+
+// Obtener la semana de rotación actual
+router.get('/rotation-week', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT current_week, week_start_date FROM rotation_config ORDER BY id DESC LIMIT 1');
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error getting rotation week:', error);
+    res.status(500).json({ error: 'Error al obtener semana de rotación' });
+  }
+});
+
+// Actualizar la semana de rotación
+router.post('/rotation-week', async (req, res) => {
+  try {
+    const { current_week, week_start_date } = req.body;
+    await pool.query(
+      'UPDATE rotation_config SET current_week = $1, week_start_date = $2, updated_at = CURRENT_TIMESTAMP',
+      [current_week, week_start_date]
+    );
+    res.json({ message: 'Semana de rotación actualizada' });
+  } catch (error) {
+    console.error('Error updating rotation week:', error);
+    res.status(500).json({ error: 'Error al actualizar semana de rotación' });
+  }
+});
+
+// Obtener turnos automáticos para una fecha específica
+router.get('/auto-shifts/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    const shifts = await generateAutoShifts(date);
+    res.json(shifts);
+  } catch (error) {
+    console.error('Error getting auto shifts:', error);
+    res.status(500).json({ error: 'Error al obtener turnos automáticos' });
+  }
+});
+
+// DEPRECATED - Esta es la implementación anterior, ahora reemplazada por generateAutoShifts()
+router.get('/auto-shifts-old/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    // Agregar 'T12:00:00' para evitar problemas de zona horaria
+    const selectedDate = new Date(date + 'T12:00:00');
+
+    // Verificar si es fin de semana (sábado = 6, domingo = 0)
+    const dayOfWeek = selectedDate.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      // Sistema de rotación numerado para fin de semana
+      // Calcular el número de rotación basado en semanas desde fecha base
+      // Fecha base: sábado 13 de diciembre 2025 (Rotación 0)
+      const baseDate = new Date('2025-12-13T12:00:00');
+      const daysDiff = Math.floor((selectedDate - baseDate) / (1000 * 60 * 60 * 24));
+      const weekendCount = Math.floor(daysDiff / 7); // Cuántos fines de semana han pasado
+
+      console.log(`📅 Fecha: ${date} es fin de semana (día ${dayOfWeek}), Rotación #${weekendCount}`);
+
+      // Obtener todo el personal activo y disponible
+      const personnelResult = await pool.query(`
+        SELECT id, name, area FROM personnel
+        WHERE active = true
+        AND (
+          is_available = true
+          OR is_available IS NULL
+          OR (unavailability_start_date IS NOT NULL AND unavailability_end_date IS NOT NULL
+              AND NOT ($1::date BETWEEN unavailability_start_date AND unavailability_end_date))
+        )
+      `, [date]);
+
+      const personnelMap = {};
+      personnelResult.rows.forEach(person => {
+        personnelMap[person.name] = person;
+      });
+
+      const shifts = [];
+
+      // Procesar cada área
+      Object.keys(WEEKEND_PERSONNEL_NUMBERED).forEach(area => {
+        const areaPersonnel = WEEKEND_PERSONNEL_NUMBERED[area];
+
+        // 🆕 LÓGICA ESPECIAL PARA CONTRIBUCIONES EN FIN DE SEMANA
+        if (area === 'CONTRIBUCIONES') {
+          console.log(`📹 CONTRIBUCIONES (fin de semana): Usando sistema de rotación de 3 turnos`);
+
+          // Las 3 personas trabajan TODOS los fines de semana
+          // Cada persona rota su turno según la semana
+          const turnos = [
+            { start: '05:00:00', end: '11:00:00', label: '05:00-11:00' },
+            { start: '11:00:00', end: '17:00:00', label: '11:00-17:00' },
+            { start: '17:00:00', end: '22:00:00', label: '17:00-22:00' }
+          ];
+
+          areaPersonnel.forEach((personConfig, personIndex) => {
+            const person = personnelMap[personConfig.name];
+            if (person) {
+              // Calcular el turno para esta persona en este fin de semana
+              const turnoIndex = (personIndex + weekendCount) % turnos.length;
+              const turno = turnos[turnoIndex];
+
+              shifts.push({
+                personnel_id: person.id,
+                name: person.name,
+                area: person.area,
+                shift_start: turno.start,
+                shift_end: turno.end,
+                week_number: 0,
+                original_shift: turno.label,
+                is_weekend: true,
+                rotation_number: personConfig.number
+              });
+
+              console.log(`   ✅ #${personConfig.number} ${person.name} → ${turno.label}`);
+            }
+          });
+
+          return; // Salir para que no use la lógica estándar
+        }
+
+        // 🎥 LÓGICA ESPECIAL PARA CAMARÓGRAFOS DE ESTUDIO EN FIN DE SEMANA
+        // Rotación por GRUPOS de 4 personas que ALTERNAN entre AM y PM
+        // Ejemplo: Grupo A semana 0 en AM → semana 1 en PM → semana 2 en AM...
+        if (area === 'CAMARÓGRAFOS DE ESTUDIO') {
+          console.log(`📹 CAMARÓGRAFOS DE ESTUDIO (fin de semana): Rotación por grupos de 4 (alternando AM/PM)`);
+
+          // Todo el personal de camarógrafos (sin separar por turno preferido)
+          const allCameras = areaPersonnel;
+          console.log(`   Total personal: ${allCameras.length} personas`);
+          console.log(`   Rotación #${weekendCount}`);
+
+          // Dividir en grupos de 4
+          const numGroups = Math.ceil(allCameras.length / 4);
+          console.log(`   Total grupos: ${numGroups}`);
+
+          // Determinar qué 2 grupos trabajan esta semana
+          // Cada par de grupos trabaja juntos en una semana
+          const pairIndex = weekendCount % numGroups; // Qué par de grupos trabaja
+          const groupIndexA = (pairIndex * 2) % numGroups;
+          const groupIndexB = (pairIndex * 2 + 1) % numGroups;
+
+          console.log(`   Grupos trabajando: Grupo ${groupIndexA} y Grupo ${groupIndexB}`);
+
+          // Determinar si cada grupo trabaja AM o PM
+          // Contar cuántas veces ha trabajado cada grupo hasta ahora
+          const timesWorkedA = Math.floor(weekendCount / numGroups) * 2 + (pairIndex * 2 < numGroups * 2 ? 1 : 0);
+          const timesWorkedB = timesWorkedA; // Trabajan juntos siempre
+
+          // El primer grupo siempre AM, el segundo siempre PM ESTA SEMANA
+          // Pero alternan en la próxima vez que trabajen
+          const groupAShift = (timesWorkedA % 2 === 0) ? 'AM' : 'PM';
+          const groupBShift = (timesWorkedA % 2 === 0) ? 'PM' : 'AM';
+
+          console.log(`   Grupo ${groupIndexA} → ${groupAShift} (ciclo ${timesWorkedA})`);
+          console.log(`   Grupo ${groupIndexB} → ${groupBShift} (ciclo ${timesWorkedB})`);
+
+          // Asignar Grupo A
+          const startIdxA = groupIndexA * 4;
+          const shiftA = groupAShift === 'AM' ? { start: '08:00:00', end: '16:00:00', label: '08:00-16:00' } : { start: '14:00:00', end: '22:00:00', label: '14:00-22:00' };
+
+          for (let i = 0; i < 4 && (startIdxA + i) < allCameras.length; i++) {
+            const personConfig = allCameras[startIdxA + i];
+            const person = personnelMap[personConfig.name];
+
+            if (person) {
+              shifts.push({
+                personnel_id: person.id,
+                name: person.name,
+                area: person.area,
+                shift_start: shiftA.start,
+                shift_end: shiftA.end,
+                week_number: 0,
+                original_shift: shiftA.label,
+                is_weekend: true,
+                rotation_number: personConfig.number
+              });
+              console.log(`   ✅ Grupo ${groupIndexA} (${groupAShift}) #${personConfig.number} ${person.name} → ${shiftA.label}`);
+            }
+          }
+
+          // Asignar Grupo B
+          const startIdxB = groupIndexB * 4;
+          const shiftB = groupBShift === 'AM' ? { start: '08:00:00', end: '16:00:00', label: '08:00-16:00' } : { start: '14:00:00', end: '22:00:00', label: '14:00-22:00' };
+
+          for (let i = 0; i < 4 && (startIdxB + i) < allCameras.length; i++) {
+            const personConfig = allCameras[startIdxB + i];
+            const person = personnelMap[personConfig.name];
+
+            if (person) {
+              shifts.push({
+                personnel_id: person.id,
+                name: person.name,
+                area: person.area,
+                shift_start: shiftB.start,
+                shift_end: shiftB.end,
+                week_number: 0,
+                original_shift: shiftB.label,
+                is_weekend: true,
+                rotation_number: personConfig.number
+              });
+              console.log(`   ✅ Grupo ${groupIndexB} (${groupBShift}) #${personConfig.number} ${person.name} → ${shiftB.label}`);
+            }
+          }
+
+          return; // Salir para no usar la lógica estándar
+        }
+
+        // 🔧 LÓGICA ESPECIAL PARA REPORTERÍA EN FIN DE SEMANA CON ROTACIÓN
+        if (area === 'CAMARÓGRAFOS DE REPORTERÍA') {
+          console.log(`📹 ${area}: Asignando 4 AM + 4 PM con rotación #${weekendCount}`);
+
+          // Total: 18 personas, cada fin de semana rotan 8 (4 AM + 4 PM)
+          const totalPersonnel = areaPersonnel.length;
+          console.log(`   Total personal en pool: ${totalPersonnel}`);
+
+          // Calcular índice de inicio: avanza 8 posiciones cada fin de semana
+          const startIndex = (weekendCount * 8) % totalPersonnel;
+
+          console.log(`   Índice de inicio: ${startIndex}`);
+
+          // Tomar 8 personas consecutivas del pool
+          // Las primeras 4 siempre van a AM, las siguientes 4 siempre van a PM
+          const toAssign = [];
+          for (let i = 0; i < 8; i++) {
+            const idx = (startIndex + i) % totalPersonnel;
+            const personConfig = areaPersonnel[idx];
+
+            // Determinar turno fijo según posición en el bloque de 8
+            // Primeros 4 → AM, Siguientes 4 → PM (sin alternar)
+            const shift = i < 4 ? '08:00-14:00' : '14:00-20:00';
+
+            toAssign.push({
+              ...personConfig,
+              assignedShift: shift
+            });
+          }
+
+          let amAssigned = 0;
+          let pmAssigned = 0;
+
+          toAssign.forEach(personConfig => {
+            const person = personnelMap[personConfig.name];
+            if (person && personConfig.hasContract !== false) {
+              const [startTime, endTime] = personConfig.assignedShift.split('-');
+              shifts.push({
+                personnel_id: person.id,
+                name: person.name,
+                area: person.area,
+                shift_start: startTime + ':00',
+                shift_end: endTime + ':00',
+                week_number: 0,
+                original_shift: personConfig.assignedShift,
+                is_weekend: true,
+                rotation_number: personConfig.number
+              });
+              console.log(`   ✅ #${personConfig.number} ${person.name} → ${personConfig.assignedShift}`);
+
+              if (personConfig.assignedShift === '08:00-14:00') {
+                amAssigned++;
+              } else {
+                pmAssigned++;
+              }
+            } else if (!person) {
+              console.warn(`   ⚠️ Personal no encontrado: ${personConfig.name} (#${personConfig.number})`);
+            }
+          });
+
+          console.log(`   ✅ Total asignado REAL: ${amAssigned} AM + ${pmAssigned} PM = ${amAssigned + pmAssigned}`);
+
+          if (amAssigned < 4 || pmAssigned < 4) {
+            console.warn(`   ⚠️ FALTA PERSONAL: Se asignaron ${amAssigned}/4 AM y ${pmAssigned}/4 PM`);
+          }
+
+          return; // Salir del área
+        }
+
+        if (area === 'ASISTENTES DE REPORTERÍA') {
+          console.log(`📹 ${area}: Asignando 2 AM + 2 PM con rotación #${weekendCount}`);
+
+          // Total: 8 personas, cada fin de semana rotan 4 (2 AM + 2 PM)
+          const totalPersonnel = areaPersonnel.length;
+          console.log(`   Total personal en pool: ${totalPersonnel}`);
+
+          // Calcular índice de inicio: avanza 4 posiciones cada fin de semana
+          const startIndex = (weekendCount * 4) % totalPersonnel;
+
+          // Determinar si deben alternar turnos: cada 2 semanas cambian AM↔PM
+          // Dividir weekendCount por 2 (ciclos completos) para saber cuántas veces han rotado
+          const cycleNumber = Math.floor(weekendCount / 2);
+          const shouldSwap = cycleNumber % 2 === 1;
+
+          console.log(`   Índice de inicio: ${startIndex}, Ciclo: ${cycleNumber}, Alternar: ${shouldSwap}`);
+
+          // Tomar 4 personas consecutivas del pool
+          const toAssign = [];
+          for (let i = 0; i < 4; i++) {
+            const idx = (startIndex + i) % totalPersonnel;
+            const personConfig = areaPersonnel[idx];
+
+            // Determinar turno base: primeros 2 → AM, siguientes 2 → PM
+            let shift;
+            if (shouldSwap) {
+              // Intercambiar: primeros 2 → PM, siguientes 2 → AM
+              shift = i < 2 ? '14:00-20:00' : '08:00-14:00';
+            } else {
+              // Normal: primeros 2 → AM, siguientes 2 → PM
+              shift = i < 2 ? '08:00-14:00' : '14:00-20:00';
+            }
+
+            toAssign.push({
+              ...personConfig,
+              assignedShift: shift
+            });
+          }
+
+          let amAssigned = 0;
+          let pmAssigned = 0;
+
+          toAssign.forEach(personConfig => {
+            const person = personnelMap[personConfig.name];
+            if (person && personConfig.hasContract !== false) {
+              const [startTime, endTime] = personConfig.assignedShift.split('-');
+              shifts.push({
+                personnel_id: person.id,
+                name: person.name,
+                area: person.area,
+                shift_start: startTime + ':00',
+                shift_end: endTime + ':00',
+                week_number: 0,
+                original_shift: personConfig.assignedShift,
+                is_weekend: true,
+                rotation_number: personConfig.number
+              });
+              console.log(`   ✅ #${personConfig.number} ${person.name} → ${personConfig.assignedShift}`);
+
+              if (personConfig.assignedShift === '08:00-14:00') {
+                amAssigned++;
+              } else {
+                pmAssigned++;
+              }
+            } else if (!person) {
+              console.warn(`   ⚠️ Personal no encontrado: ${personConfig.name} (#${personConfig.number})`);
+            }
+          });
+
+          console.log(`   ✅ Total asignado REAL: ${amAssigned} AM + ${pmAssigned} PM = ${amAssigned + pmAssigned}`);
+
+          if (amAssigned < 2 || pmAssigned < 2) {
+            console.warn(`   ⚠️ FALTA PERSONAL: Se asignaron ${amAssigned}/2 AM y ${pmAssigned}/2 PM`);
+          }
+
+          return; // Salir del área
+        }
+
+        // Determinar cuántas personas necesitamos por área
+        let peopleNeeded = 2; // Por defecto 2 personas
+
+        // Para áreas con 2 personas: rotación consecutiva con turnos alternados
+        if (peopleNeeded === 2) {
+          // PRIMERO: Filtrar solo personas disponibles
+          const availablePersonnel = areaPersonnel.filter(pc => {
+            const person = personnelMap[pc.name];
+            return person && pc.hasContract !== false;
+          });
+
+          if (availablePersonnel.length < 2) {
+            console.warn(`⚠️ ${area}: Solo ${availablePersonnel.length} personas disponibles, se necesitan 2`);
+            return;
+          }
+
+          // Determinar si el área DISPONIBLE es PAR o IMPAR
+          const isEvenArea = availablePersonnel.length % 2 === 0;
+
+          // Calcular rotación sobre personas DISPONIBLES
+          let startIndex;
+          if (isEvenArea) {
+            // ÁREAS PARES: avanza 2 posiciones cada semana
+            startIndex = (weekendCount * 2) % availablePersonnel.length;
+          } else {
+            // ÁREAS IMPARES: patrón A+B, C+D, E+A, B+C, D+E
+            // Fórmula: (semana * 2) % total
+            startIndex = (weekendCount * 2) % availablePersonnel.length;
+          }
+
+          let assigned = 0;
+          let currentIndex = startIndex;
+          const attemptedIndices = new Set();
+
+          // Asignar 2 personas desde el array filtrado
+          for (let i = 0; i < 2; i++) {
+            const idx = (startIndex + i) % availablePersonnel.length;
+            const personConfig = availablePersonnel[idx];
+            const person = personnelMap[personConfig.name];
+
+            let shift;
+
+            if (isEvenArea) {
+              // ÁREAS PARES: calcular cuántas veces esta pareja ha trabajado
+              const pairWorkCount = Math.floor(weekendCount / (availablePersonnel.length / 2));
+              const shouldAlternate = pairWorkCount % 2 === 1;
+
+              // Usar el turno base de la configuración
+              const baseShift = personConfig.shift;
+
+              // Alternar si la pareja ya trabajó un ciclo completo
+              if (shouldAlternate) {
+                shift = baseShift === '08:00-16:00' ? '14:00-22:00' : '08:00-16:00';
+              } else {
+                shift = baseShift;
+              }
+            } else {
+              // ÁREAS IMPARES: calcular cuántas veces esta persona ha trabajado
+              let timesWorked = 0;
+              for (let w = 0; w < weekendCount; w++) {
+                const wStart = (w * 2) % availablePersonnel.length;
+                const wEnd = (w * 2 + 1) % availablePersonnel.length;
+                if (wStart === idx || wEnd === idx) {
+                  timesWorked++;
+                }
+              }
+
+              // Alternar turno cada vez que trabaja
+              const shouldAlternate = timesWorked % 2 === 1;
+
+              if (shouldAlternate) {
+                shift = i === 0 ? '14:00-22:00' : '08:00-16:00';
+              } else {
+                shift = i === 0 ? '08:00-16:00' : '14:00-22:00';
+              }
+            }
+
+            const [startTime, endTime] = shift.split('-');
+
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: startTime + ':00',
+              shift_end: endTime + ':00',
+              week_number: 0,
+              original_shift: shift,
+              is_weekend: true,
+              rotation_number: personConfig.number
+            });
+
+            console.log(`✅ ${area}: #${personConfig.number} ${person.name} → ${shift}`);
+          }
+        } else {
+          // Para áreas con 3 o 4 personas o más (reportería)
+          console.log(`📹 ${area}: Asignando ${peopleNeeded} personas en rotación #${weekendCount}`);
+
+          const startIndex = (weekendCount * peopleNeeded) % areaPersonnel.length;
+          let assigned = 0;
+          let currentIndex = startIndex;
+          const attemptedIndices = new Set();
+
+          while (assigned < peopleNeeded && attemptedIndices.size < areaPersonnel.length) {
+            attemptedIndices.add(currentIndex);
+            const personConfig = areaPersonnel[currentIndex];
+            const person = personnelMap[personConfig.name];
+
+            if (person && personConfig.hasContract !== false) {
+              const [startTime, endTime] = personConfig.shift.split('-');
+              shifts.push({
+                personnel_id: person.id,
+                name: person.name,
+                area: person.area,
+                shift_start: startTime + ':00',
+                shift_end: endTime + ':00',
+                week_number: 0,
+                original_shift: personConfig.shift,
+                is_weekend: true,
+                rotation_number: personConfig.number
+              });
+              console.log(`   ✅ #${personConfig.number} ${person.name} → ${personConfig.shift}`);
+              assigned++;
+            } else if (!person) {
+              console.warn(`   ⚠️ Personal no encontrado: ${personConfig.name} (#${personConfig.number}) en ${area}`);
+            } else if (personConfig.hasContract === false) {
+              console.log(`   ⏭️ Saltando ${personConfig.name} (#${personConfig.number}) - Sin contrato`);
+            }
+
+            currentIndex = (currentIndex + 1) % areaPersonnel.length;
+          }
+
+          if (assigned < peopleNeeded) {
+            console.warn(`   ⚠️ ${area}: Solo se pudieron asignar ${assigned} de ${peopleNeeded} personas necesarias`);
+          }
+
+          console.log(`   ✅ Total asignado para ${area}: ${assigned} personas`);
+        }
+      });
+
+      console.log(`✅ Asignados ${shifts.length} turnos de fin de semana (Rotación #${weekendCount})`);
+      return res.json(shifts);
+    }
+
+    // Calcular la semana de rotación basándose en el inicio de la semana (lunes)
+    // Encontrar el lunes de la semana actual
+    const dayOfWeekNum = selectedDate.getDay();
+    const daysFromMonday = dayOfWeekNum === 0 ? 6 : dayOfWeekNum - 1; // Si es domingo (0), son 6 días desde lunes
+    const mondayOfWeek = new Date(selectedDate);
+    mondayOfWeek.setDate(selectedDate.getDate() - daysFromMonday);
+
+    // Usar como base el lunes 11 de noviembre de 2025 = Semana 1
+    const baseMonday = new Date('2025-11-10T12:00:00'); // Lunes 10 de noviembre (corregido)
+    const daysDiff = Math.floor((mondayOfWeek - baseMonday) / (1000 * 60 * 60 * 24));
+    const weeksDiff = Math.floor(daysDiff / 7);
+    // Ciclo de 4 semanas: semana 1, 2, 3, 4, luego vuelve a 1
+    const currentWeek = ((weeksDiff % 4) + 4) % 4 + 1;
+
+    const mondayStr = `${mondayOfWeek.getFullYear()}-${String(mondayOfWeek.getMonth() + 1).padStart(2, '0')}-${String(mondayOfWeek.getDate()).padStart(2, '0')}`;
+    console.log(`📅 Fecha: ${date}, Lunes de esta semana: ${mondayStr}, Semana de rotación: ${currentWeek}`);
+    
+    // Obtener todo el personal disponible
+    // Filtra por: active=true Y (is_available=true O fecha fuera del rango de no disponibilidad)
+    const personnelResult = await pool.query(`
+      SELECT * FROM personnel
+      WHERE active = true
+      AND (
+        is_available = true
+        OR is_available IS NULL
+        OR (unavailability_start_date IS NOT NULL AND unavailability_end_date IS NOT NULL
+            AND NOT ($1::date BETWEEN unavailability_start_date AND unavailability_end_date))
+      )
+      ORDER BY area, name
+    `, [date]);
+    
+    // Obtener patrones de rotación para la semana calculada
+    const patternsResult = await pool.query(
+      'SELECT * FROM rotation_patterns WHERE week_number = $1 ORDER BY area, shift_start',
+      [currentWeek]
+    );
+    
+    // Agrupar patrones por área
+    const patternsByArea = {};
+    patternsResult.rows.forEach(pattern => {
+      if (!patternsByArea[pattern.area]) {
+        patternsByArea[pattern.area] = [];
+      }
+      patternsByArea[pattern.area].push(pattern);
+    });
+    
+    // Asignar turnos al personal
+    const shifts = [];
+    const personnelByArea = {};
+    
+    // Agrupar personal por área
+    personnelResult.rows.forEach(person => {
+      if (!personnelByArea[person.area]) {
+        personnelByArea[person.area] = [];
+      }
+      personnelByArea[person.area].push(person);
+    });
+    
+    // Asignar turnos según patrones con rotación y redistribución equitativa
+    Object.keys(personnelByArea).forEach(area => {
+      const patterns = patternsByArea[area] || [];
+      const people = personnelByArea[area];
+
+      if (patterns.length === 0) return;
+
+      // 📺 LÓGICA ESPECIAL PARA ÁREAS CON 5 PERSONAS (plantilla de relevos)
+      if (people.length === 5) {
+        console.log(`📺 ${area}: Plantilla de 5 turnos con relevos automáticos`);
+
+        // Plantilla de 5 turnos que rotan semanalmente
+        const turnos = [
+          { id: 'T1', start: '05:00:00', end: '09:00:00', label: '05:00', description: 'Apertura' },
+          { id: 'T2', start: '09:00:00', end: '13:00:00', label: '09:00', description: 'Mañana' },
+          { id: 'T3', start: '13:00:00', end: '17:00:00', label: '13:00', description: 'Tarde' },
+          { id: 'T4', start: '16:00:00', end: '20:00:00', label: '16:00', description: 'Cierre' },
+          { id: 'T5', start: '18:00:00', end: '22:00:00', label: '18:00', description: 'Cierre Total' }
+        ];
+
+        // Ordenar personas por nombre para mantener consistencia
+        const sortedPeople = people.slice().sort((a, b) => a.name.localeCompare(b.name));
+
+        console.log(`   Semana ${currentWeek}, weeksDiff: ${weeksDiff}`);
+        console.log(`   Rotación: Cada persona avanza un turno cada semana`);
+
+        // Asignar cada persona a su turno correspondiente según la rotación
+        for (let personIndex = 0; personIndex < sortedPeople.length; personIndex++) {
+          const person = sortedPeople[personIndex];
+          const turnoIndex = (personIndex + weeksDiff) % 5;
+          const turno = turnos[turnoIndex];
+
+          shifts.push({
+            personnel_id: person.id,
+            name: person.name,
+            area: person.area,
+            shift_start: turno.start,
+            shift_end: turno.end,
+            week_number: currentWeek,
+            original_shift: turno.label,
+            turno_descripcion: `${turno.id} - ${turno.description}`
+          });
+
+          console.log(`      ✅ ${person.name} → ${turno.id} ${turno.label} (${turno.description})`);
+        }
+
+        return; // Salir para que no use la lógica de patrones
+      }
+
+      // 📺 LÓGICA ESPECIAL PARA ÁREAS CON 6 PERSONAS (plantilla de relevos)
+      if (people.length === 6) {
+        console.log(`📺 ${area}: Plantilla de 6 turnos con relevos automáticos`);
+
+        // Plantilla de 6 turnos que rotan semanalmente
+        const turnos = [
+          { id: 'T1', start: '05:00:00', end: '09:00:00', label: '05:00', description: 'Apertura' },
+          { id: 'T2', start: '09:00:00', end: '13:00:00', label: '09:00', description: 'Mañana' },
+          { id: 'T3', start: '11:00:00', end: '15:00:00', label: '11:00', description: 'Refuerzo Mediodía' },
+          { id: 'T4', start: '13:00:00', end: '17:00:00', label: '13:00', description: 'Tarde' },
+          { id: 'T5', start: '15:00:00', end: '19:00:00', label: '15:00', description: 'Cierre Másters' },
+          { id: 'T6', start: '18:00:00', end: '22:00:00', label: '18:00', description: 'Cierre Total' }
+        ];
+
+        // Ordenar personas por nombre para mantener consistencia
+        const sortedPeople = people.slice().sort((a, b) => a.name.localeCompare(b.name));
+
+        console.log(`   Semana ${currentWeek}, weeksDiff: ${weeksDiff}`);
+        console.log(`   Rotación: Cada persona avanza un turno cada semana`);
+
+        // Asignar cada persona a su turno correspondiente según la rotación
+        for (let personIndex = 0; personIndex < sortedPeople.length; personIndex++) {
+          const person = sortedPeople[personIndex];
+          const turnoIndex = (personIndex + weeksDiff) % 6;
+          const turno = turnos[turnoIndex];
+
+          shifts.push({
+            personnel_id: person.id,
+            name: person.name,
+            area: person.area,
+            shift_start: turno.start,
+            shift_end: turno.end,
+            week_number: currentWeek,
+            original_shift: turno.label,
+            turno_descripcion: `${turno.id} - ${turno.description}`
+          });
+
+          console.log(`      ✅ ${person.name} → ${turno.id} ${turno.label} (${turno.description})`);
+        }
+
+        return; // Salir para que no use la lógica de patrones
+      }
+
+      // 🆕 LÓGICA ESPECIAL PARA REPORTERÍA: Usar sistema de grupos fijos con ROTACIÓN SEMANAL
+      if (area === 'CAMARÓGRAFOS DE REPORTERÍA' || area === 'ASISTENTES DE REPORTERÍA') {
+        console.log(`📹 ${area}: Usando sistema de grupos fijos con rotación semanal`);
+
+        // Determinar si debemos alternar los grupos esta semana
+        // Si weeksDiff es par: GRUPO_A → AM, GRUPO_B → PM
+        // Si weeksDiff es impar: GRUPO_A → PM, GRUPO_B → AM (rotación)
+        const debeRotar = weeksDiff % 2 === 1;
+
+        console.log(`   📅 Semana ${currentWeek}, weeksDiff: ${weeksDiff}, Rotar: ${debeRotar ? 'SÍ' : 'NO'}`);
+
+        people.forEach(person => {
+          // Verificar el grupo al que pertenece la persona
+          const grupoOriginal = person.grupo_reporteria;
+
+          // Aplicar rotación si corresponde
+          let turnoActual;
+          if (debeRotar) {
+            // Alternar: GRUPO_A trabaja PM, GRUPO_B trabaja AM
+            turnoActual = grupoOriginal === 'GRUPO_A' ? 'PM' : 'AM';
+          } else {
+            // Normal: GRUPO_A trabaja AM, GRUPO_B trabaja PM
+            turnoActual = grupoOriginal === 'GRUPO_A' ? 'AM' : 'PM';
+          }
+
+          if (turnoActual === 'AM') {
+            // Turno mañana 08:00-13:00
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: '08:00:00',
+              shift_end: '13:00:00',
+              week_number: currentWeek,
+              original_shift: grupoOriginal,
+              grupo_reporteria: grupoOriginal,
+              turno_rotado: turnoActual
+            });
+          } else {
+            // Turno tarde 13:00-20:00
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: '13:00:00',
+              shift_end: '20:00:00',
+              week_number: currentWeek,
+              original_shift: grupoOriginal,
+              grupo_reporteria: grupoOriginal,
+              turno_rotado: turnoActual
+            });
+          }
+        });
+
+        return; // Salir para que no use la lógica de patrones
+      }
+
+      // 🆕 LÓGICA ESPECIAL PARA CONTRIBUCIONES: Rotación semanal de 3 turnos
+      if (area === 'CONTRIBUCIONES') {
+        console.log(`📹 CONTRIBUCIONES: Usando sistema de rotación semanal de 3 turnos`);
+        console.log(`   📅 Semana ${currentWeek}, weeksDiff: ${weeksDiff}`);
+
+        // Definir los 3 turnos
+        const turnos = [
+          { start: '05:00:00', end: '11:00:00', label: '05:00-11:00' },
+          { start: '11:00:00', end: '17:00:00', label: '11:00-17:00' },
+          { start: '17:00:00', end: '22:00:00', label: '17:00-22:00' }
+        ];
+
+        // Asignar turnos rotativos a cada persona
+        people.forEach((person, personIndex) => {
+          // Calcular el turno para esta persona en esta semana
+          // Cada semana rota al siguiente turno
+          const turnoIndex = (personIndex + weeksDiff) % turnos.length;
+          const turno = turnos[turnoIndex];
+
+          shifts.push({
+            personnel_id: person.id,
+            name: person.name,
+            area: person.area,
+            shift_start: turno.start,
+            shift_end: turno.end,
+            week_number: currentWeek,
+            original_shift: turno.label
+          });
+
+          console.log(`   ✅ ${person.name} → ${turno.label}`);
+        });
+
+        return; // Salir para que no use la lógica de patrones
+      }
+
+      // 🔄 LÓGICA NORMAL PARA TODAS LAS DEMÁS ÁREAS (sin cambios)
+      // Si hay menos personas que patrones, necesitamos redistribuir equitativamente
+      if (people.length < patterns.length) {
+        console.log(`⚠️ ${area}: Solo ${people.length} personas disponibles para ${patterns.length} turnos - redistribuyendo equitativamente`);
+
+        // Asignar cada persona a múltiples turnos de manera equitativa
+        patterns.forEach((pattern, patternIndex) => {
+          // Calcular qué persona debe cubrir este turno usando rotación
+          const personIndex = (patternIndex + weeksDiff) % people.length;
+          const person = people[personIndex];
+
+          shifts.push({
+            personnel_id: person.id,
+            name: person.name,
+            area: person.area,
+            shift_start: pattern.shift_start,
+            shift_end: pattern.shift_end,
+            week_number: currentWeek,
+            original_shift: null,
+            is_covering: true // Indicador de que está cubriendo por falta de personal
+          });
+        });
+      } else {
+        // Lógica normal: hay suficiente personal
+        people.forEach((person, personIndex) => {
+          // Distribuir las personas entre los turnos disponibles
+          // Cada persona tiene un índice base (personIndex) que se rota cada semana
+          const baseShiftIndex = personIndex % patterns.length;
+
+          // Rotar el turno cada semana
+          const rotatedShiftIndex = (baseShiftIndex + weeksDiff) % patterns.length;
+          const pattern = patterns[rotatedShiftIndex];
+
+          if (pattern) {
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: pattern.shift_start,
+              shift_end: pattern.shift_end,
+              week_number: currentWeek,
+              original_shift: null
+            });
+          }
+        });
+      }
+    });
+    
+    res.json(shifts);
+  } catch (error) {
+    console.error('Error getting auto shifts:', error);
+    res.status(500).json({ error: 'Error al obtener turnos automáticos' });
+  }
+});
+
+// ⭐⭐⭐ NUEVO ENDPOINT: Obtener calendario completo con asignaciones y novedades ⭐⭐⭐
+router.get('/calendar', async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    
+    if (!start_date || !end_date) {
+      return res.status(400).json({ error: 'Se requieren start_date y end_date' });
+    }
+
+    console.log(`📅 Obteniendo calendario desde ${start_date} hasta ${end_date}`);
+
+    // 1. Obtener horarios (schedules)
+    let assignments = [];
+    try {
+      const schedulesResult = await pool.query(
+        `SELECT s.*, p.name as personnel_name, p.area, p.role
+         FROM schedules s
+         LEFT JOIN personnel p ON s.personnel_id = p.id
+         WHERE s.date >= $1 AND s.date <= $2
+         ORDER BY s.date, p.name`,
+        [start_date, end_date]
+      );
+      assignments = schedulesResult.rows;
+      console.log(`✅ Encontrados ${assignments.length} horarios para el período solicitado`);
+    } catch (err) {
+      console.log('ℹ️  Error obteniendo schedules:', err.message);
+    }
+
+    // 2. ⭐ Obtener novedades (ESTO ES LO IMPORTANTE)
+    // Buscar novedades que tengan un rango de fechas que se solape con el período solicitado
+    const noveltiesResult = await pool.query(
+      `SELECT
+         n.id,
+         n.personnel_id,
+         n.date,
+         n.start_date,
+         n.end_date,
+         n.type,
+         n.description,
+         n.created_at,
+         p.name as personnel_name,
+         p.area as personnel_area,
+         p.role as personnel_role
+       FROM novelties n
+       LEFT JOIN personnel p ON n.personnel_id = p.id
+       WHERE (
+         (n.start_date IS NOT NULL AND n.start_date <= $2 AND n.end_date >= $1)
+         OR
+         (n.start_date IS NULL AND n.date >= $1 AND n.date <= $2)
+       )
+       ORDER BY n.start_date, n.date, p.name`,
+      [start_date, end_date]
+    );
+
+    const novelties = noveltiesResult.rows;
+
+    console.log(`✅ Encontradas ${novelties.length} novedades para el período solicitado`);
+
+    // 3. Organizar los datos por fecha
+    const calendar = {};
+
+    // Procesar asignaciones
+    assignments.forEach(assignment => {
+      const dateStr = assignment.date.toISOString().split('T')[0];
+      if (!calendar[dateStr]) {
+        calendar[dateStr] = { assignments: [], novelties: [] };
+      }
+      calendar[dateStr].assignments.push(assignment);
+    });
+
+    // Procesar novedades - expandir rangos de fechas a días individuales
+    novelties.forEach(novelty => {
+      // Si tiene start_date y end_date, expandir a todos los días del rango
+      if (novelty.start_date && novelty.end_date) {
+        // Convertir las fechas a formato YYYY-MM-DD directamente desde la base de datos
+        const startDateStr = novelty.start_date.toISOString().split('T')[0];
+        const endDateStr = novelty.end_date.toISOString().split('T')[0];
+
+        // Crear fechas con hora del mediodía para evitar problemas de zona horaria
+        const startDate = new Date(startDateStr + 'T12:00:00');
+        const endDate = new Date(endDateStr + 'T12:00:00');
+
+        // Iterar sobre cada día en el rango
+        const currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+          const dateStr = currentDate.toISOString().split('T')[0];
+          if (!calendar[dateStr]) {
+            calendar[dateStr] = { assignments: [], novelties: [] };
+          }
+          calendar[dateStr].novelties.push({
+            id: novelty.id,
+            personnel_id: novelty.personnel_id,
+            personnel_name: novelty.personnel_name || 'Personal no encontrado',
+            personnel_area: novelty.personnel_area,
+            personnel_role: novelty.personnel_role,
+            type: novelty.type,
+            description: novelty.description,
+            start_date: novelty.start_date,
+            end_date: novelty.end_date,
+            created_at: novelty.created_at
+          });
+          // Avanzar al siguiente día
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      } else if (novelty.date) {
+        // Formato antiguo: solo date
+        const dateStr = novelty.date.toISOString().split('T')[0];
+        if (!calendar[dateStr]) {
+          calendar[dateStr] = { assignments: [], novelties: [] };
+        }
+        calendar[dateStr].novelties.push({
+          id: novelty.id,
+          personnel_id: novelty.personnel_id,
+          personnel_name: novelty.personnel_name || 'Personal no encontrado',
+          personnel_area: novelty.personnel_area,
+          personnel_role: novelty.personnel_role,
+          type: novelty.type,
+          description: novelty.description,
+          created_at: novelty.created_at
+        });
+      }
+    });
+
+    // Log de resumen
+    const datesWithNovelties = Object.keys(calendar).filter(date => calendar[date].novelties.length > 0);
+    if (datesWithNovelties.length > 0) {
+      console.log(`📋 Fechas con novedades: ${datesWithNovelties.join(', ')}`);
+    }
+
+    res.json(calendar);
+
+  } catch (error) {
+    console.error('❌ Error obteniendo calendario:', error);
+    res.status(500).json({ 
+      error: 'Error al obtener calendario',
+      details: error.message 
+    });
+  }
+});
+
+// ⭐ GUARDAR PROGRAMACIÓN DIARIA (Grid completo)
+router.post('/daily/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    const { assignments, callTimes, programs, shifts } = req.body;
+
+    console.log(`💾 Guardando programación para ${date}`);
+    console.log(`   📋 Programas: ${programs?.length || 0}`);
+    console.log(`   ✅ Asignaciones: ${Object.keys(assignments || {}).length}`);
+    console.log(`   ⏰ CallTimes: ${Object.keys(callTimes || {}).length}`);
+    console.log(`   🔧 Turnos: ${shifts?.length || 0}`);
+
+    // Guardar en daily_schedules usando UPSERT
+    await pool.query(
+      `INSERT INTO daily_schedules (date, assignments_data, programs_data, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+       ON CONFLICT (date)
+       DO UPDATE SET
+         assignments_data = $2,
+         programs_data = $3,
+         updated_at = CURRENT_TIMESTAMP`,
+      [date, JSON.stringify(assignments), JSON.stringify({ programs, shifts, callTimes })]
+    );
+
+    console.log(`✅ Programación guardada exitosamente para ${date}`);
+
+    // 🔄 ESPEJO SEMANAL PARA REPORTERÍA
+    const fechaObj = new Date(date + 'T12:00:00');
+    const diaSemana = fechaObj.getDay(); // 0=domingo, 1=lunes, ..., 5=viernes
+
+    // Si es lunes (1), copiar a martes-viernes
+    if (diaSemana === 1) {
+      console.log(`📅 Es lunes - Iniciando espejo semanal de reportería...`);
+
+      // Obtener personal de reportería
+      const reporteriaPersonnel = await pool.query(`
+        SELECT id FROM personnel
+        WHERE area IN ('CAMARÓGRAFOS DE REPORTERÍA', 'ASISTENTES DE REPORTERÍA')
+          AND active = true
+      `);
+
+      const reporteriaIds = reporteriaPersonnel.rows.map(p => p.id.toString());
+
+      // Copiar a martes (2), miércoles (3), jueves (4), viernes (5)
+      for (let dia = 2; dia <= 5; dia++) {
+        const targetDate = new Date(fechaObj);
+        targetDate.setDate(targetDate.getDate() + (dia - 1));
+        const targetDateStr = targetDate.toISOString().split('T')[0];
+
+        // COPIAR TODAS las asignaciones de reportería SIN FILTRAR
+        // La estructura de programas es FIJA por día de la semana
+        // Solo rota el personal, NO los programas
+        const reporteriaAssignments = {};
+
+        Object.keys(assignments).forEach(key => {
+          const [personnelId] = key.split('_');
+
+          if (reporteriaIds.includes(personnelId)) {
+            reporteriaAssignments[key] = assignments[key];
+          }
+        });
+
+        // Obtener programación existente del día destino
+        const existingResult = await pool.query(
+          'SELECT * FROM daily_schedules WHERE date = $1',
+          [targetDateStr]
+        );
+
+        let mergedAssignments = {};
+        if (existingResult.rows.length > 0) {
+          // Merge: mantener asignaciones no-reportería, reemplazar reportería
+          const existingAssignments = existingResult.rows[0].assignments_data || {};
+          Object.keys(existingAssignments).forEach(key => {
+            const personnelId = key.split('_')[0];
+            if (!reporteriaIds.includes(personnelId)) {
+              mergedAssignments[key] = existingAssignments[key];
+            }
+          });
+        }
+
+        // Agregar TODAS las asignaciones de reportería (sin filtrar)
+        Object.assign(mergedAssignments, reporteriaAssignments);
+
+        // Guardar
+        await pool.query(
+          `INSERT INTO daily_schedules (date, assignments_data, programs_data, updated_at)
+           VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+           ON CONFLICT (date)
+           DO UPDATE SET
+             assignments_data = $2,
+             updated_at = CURRENT_TIMESTAMP`,
+          [targetDateStr, JSON.stringify(mergedAssignments), JSON.stringify({ programs, shifts, callTimes })]
+        );
+
+        console.log(`   ✅ Espejado a ${targetDateStr}: ${Object.keys(reporteriaAssignments).length} asignaciones`);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Programación del ${date} guardada exitosamente`,
+      date,
+      assignmentsCount: Object.keys(assignments || {}).length
+    });
+
+  } catch (error) {
+    console.error('❌ Error guardando programación diaria:', error);
+    res.status(500).json({
+      error: 'Error al guardar programación diaria',
+      details: error.message
+    });
+  }
+});
+
+// ⭐ OBTENER PROGRAMACIÓN DIARIA (Grid completo)
+router.get('/daily/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+
+    console.log(`📂 Obteniendo programación para ${date}`);
+
+    // Consultar programación diaria guardada
+    const result = await pool.query(
+      'SELECT * FROM daily_schedules WHERE date = $1',
+      [date]
+    );
+
+    // Consultar llamados de reportería de la tabla schedules
+    const reporteriaResult = await pool.query(
+      `SELECT id, program, shift_time, location, notes
+       FROM schedules
+       WHERE date = $1
+       AND program LIKE '%Reportería%'
+       ORDER BY shift_time`,
+      [date]
+    );
+
+    console.log(`📋 Encontrados ${reporteriaResult.rows.length} llamados de reportería para ${date}`);
+
+    // Función para convertir hora AM/PM a formato 24h
+    const convertTo24Hour = (time12h) => {
+      const [time, period] = time12h.trim().split(' ');
+      let [hours, minutes] = time.split(':');
+      hours = parseInt(hours);
+
+      if (period === 'PM' && hours !== 12) {
+        hours += 12;
+      } else if (period === 'AM' && hours === 12) {
+        hours = 0;
+      }
+
+      return `${String(hours).padStart(2, '0')}:${minutes}`;
+    };
+
+    if (result.rows.length === 0) {
+      console.log(`📄 No hay programación guardada para ${date}`);
+
+      // 📅 HERENCIA SEMANAL DE REPORTERÍA: Buscar el LUNES de esta semana
+      const fechaObj = new Date(date + 'T12:00:00');
+      const diaSemana = fechaObj.getDay(); // 0=domingo, 1=lunes, ..., 6=sábado
+
+      // Calcular el lunes de esta semana
+      const diasHastaLunes = diaSemana === 0 ? -6 : 1 - diaSemana; // Si es domingo, retroceder 6 días
+      const lunesDate = new Date(fechaObj);
+      lunesDate.setDate(lunesDate.getDate() + diasHastaLunes);
+      const lunesStr = lunesDate.toISOString().split('T')[0];
+
+      console.log(`   📋 Buscando programación del LUNES ${lunesStr} para heredar reportería...`);
+
+      const lunesResult = await pool.query(
+        'SELECT * FROM daily_schedules WHERE date = $1',
+        [lunesStr]
+      );
+
+      let assignmentsFromMonday = {};
+
+      if (lunesResult.rows.length > 0) {
+        const lunesAssignments = lunesResult.rows[0].assignments_data || {};
+
+        // Obtener personal de reportería
+        const reporteriaPersonnel = await pool.query(`
+          SELECT id FROM personnel
+          WHERE area IN ('CAMARÓGRAFOS DE REPORTERÍA', 'ASISTENTES DE REPORTERÍA')
+            AND active = true
+        `);
+
+        const reporteriaIds = reporteriaPersonnel.rows.map(p => p.id.toString());
+
+        // Copiar solo asignaciones de reportería del LUNES
+        Object.keys(lunesAssignments).forEach(key => {
+          const personnelId = key.split('_')[0];
+          if (reporteriaIds.includes(personnelId)) {
+            assignmentsFromMonday[key] = lunesAssignments[key];
+          }
+        });
+
+        console.log(`   ✅ Heredadas ${Object.keys(assignmentsFromMonday).length} asignaciones de reportería del lunes ${lunesStr}`);
+      }
+
+      // Si hay llamados de reportería, incluirlos como programs
+      const reporteriaPrograms = reporteriaResult.rows.map(call => {
+        const startTime = call.shift_time.split(' - ')[0];
+        const time24h = convertTo24Hour(startTime);
+
+        return {
+          id: `reporteria_${call.id}`,
+          name: call.program,
+          defaultTime: time24h,
+          time: call.shift_time,
+          color: call.program.includes('Camarógrafos') ? '#9C27B0' : '#3F51B5',
+          location: call.location,
+          notes: call.notes,
+          isReporteria: true
+        };
+      });
+
+      return res.json({
+        found: false,
+        date,
+        assignments: assignmentsFromMonday,
+        programs: reporteriaPrograms,
+        shifts: [],
+        reporteriaCalls: reporteriaResult.rows,
+        inheritedFromMonday: lunesStr
+      });
+    }
+
+    const schedule = result.rows[0];
+    const programsData = schedule.programs_data || {};
+
+    // Agregar llamados de reportería a los programas existentes
+    const reporteriaPrograms = reporteriaResult.rows.map(call => {
+      const startTime = call.shift_time.split(' - ')[0];
+      const time24h = convertTo24Hour(startTime);
+
+      return {
+        id: `reporteria_${call.id}`,
+        name: call.program,
+        defaultTime: time24h,
+        time: call.shift_time,
+        color: call.program.includes('Camarógrafos') ? '#9C27B0' : '#3F51B5',
+        location: call.location,
+        notes: call.notes,
+        isReporteria: true
+      };
+    });
+
+    const allPrograms = [...(programsData.programs || []), ...reporteriaPrograms];
+
+    // 🔧 HERENCIA SEMANAL: Si NO es lunes, heredar asignaciones de reportería del lunes
+    let finalAssignments = { ...(schedule.assignments_data || {}) };
+
+    const fechaObj = new Date(date + 'T12:00:00');
+    const diaSemana = fechaObj.getDay();
+
+    if (diaSemana !== 1 && diaSemana !== 0 && diaSemana !== 6) { // Mar-Vie
+      const diasHastaLunes = 1 - diaSemana;
+      const lunesDate = new Date(fechaObj);
+      lunesDate.setDate(lunesDate.getDate() + diasHastaLunes);
+      const lunesStr = lunesDate.toISOString().split('T')[0];
+
+      console.log(`   📋 Heredando reportería del LUNES ${lunesStr}...`);
+
+      const lunesResult = await pool.query(
+        'SELECT * FROM daily_schedules WHERE date = $1',
+        [lunesStr]
+      );
+
+      if (lunesResult.rows.length > 0) {
+        const lunesAssignments = lunesResult.rows[0].assignments_data || {};
+
+        // Obtener IDs de reportería
+        const reporteriaPersonnel = await pool.query(`
+          SELECT id FROM personnel
+          WHERE area IN ('CAMARÓGRAFOS DE REPORTERÍA', 'ASISTENTES DE REPORTERÍA')
+            AND active = true
+        `);
+
+        const reporteriaIds = reporteriaPersonnel.rows.map(p => p.id.toString());
+
+        // Eliminar asignaciones actuales de reportería
+        Object.keys(finalAssignments).forEach(key => {
+          const personnelId = key.split('_')[0];
+          if (reporteriaIds.includes(personnelId)) {
+            delete finalAssignments[key];
+          }
+        });
+
+        // COPIAR TODAS las asignaciones del lunes SIN FILTRAR
+        // Herencia total: la estructura de programas es FIJA por día de semana
+        let asignacionesCopiadas = 0;
+
+        Object.keys(lunesAssignments).forEach(key => {
+          const [personnelId] = key.split('_');
+
+          if (reporteriaIds.includes(personnelId)) {
+            finalAssignments[key] = lunesAssignments[key];
+            if (lunesAssignments[key] === true) {
+              asignacionesCopiadas++;
+            }
+          }
+        });
+
+        console.log(`   ✅ Reportería heredada del lunes: ${asignacionesCopiadas} asignaciones copiadas`);
+      }
+    }
+
+    // 🔧 CORRECCIÓN: Reemplazar callTimes de reportería con ROTACIÓN SEMANAL (SOLO ENTRE SEMANA)
+    const callTimes = { ...(programsData.callTimes || {}) };
+
+    // Solo corregir callTimes de reportería en días de semana (NO en fin de semana)
+    if (diaSemana !== 0 && diaSemana !== 6) {
+      console.log('🔄 Corrigiendo callTimes de reportería con rotación semanal (entre semana)...');
+
+      // Importar función de rotación
+      const { getTurnoActual } = require('../utils/reporteriaRotation');
+
+      // Obtener personal de reportería con sus grupos
+      const reporteriaPersonnel = await pool.query(`
+        SELECT id, name, area, grupo_reporteria
+        FROM personnel
+        WHERE area IN ('CAMARÓGRAFOS DE REPORTERÍA', 'ASISTENTES DE REPORTERÍA')
+          AND active = true
+          AND grupo_reporteria IS NOT NULL
+      `);
+
+      let callTimesCorregidos = 0;
+      reporteriaPersonnel.rows.forEach(person => {
+        const personId = person.id.toString();
+
+        // Calcular turno actual con rotación semanal
+        const turnoInfo = getTurnoActual(person.grupo_reporteria, date);
+        const nuevoCallTime = turnoInfo.callTime;
+
+        // Solo corregir si esta persona tiene un callTime guardado
+        if (callTimes[personId]) {
+          if (callTimes[personId] !== nuevoCallTime) {
+            console.log(`   ✏️ ${person.name}: ${callTimes[personId]} → ${nuevoCallTime} (${person.grupo_reporteria} → ${turnoInfo.turno})`);
+            callTimes[personId] = nuevoCallTime;
+            callTimesCorregidos++;
+          }
+        }
+      });
+
+      if (callTimesCorregidos > 0) {
+        console.log(`   ✅ ${callTimesCorregidos} callTimes de reportería corregidos con rotación semanal`);
+      }
+    } else {
+      console.log('📅 Fin de semana: Manteniendo callTimes de reportería del sistema de rotación numerada');
+    }
+
+    // 🔧 CORRECCIÓN: Calcular callTimes para CONTRIBUCIONES con rotación semanal
+    console.log('🔄 Calculando callTimes de CONTRIBUCIONES con rotación semanal...');
+
+    // Obtener personal de CONTRIBUCIONES
+    const contribucionesPersonnel = await pool.query(`
+      SELECT id, name
+      FROM personnel
+      WHERE area = 'CONTRIBUCIONES'
+        AND active = true
+      ORDER BY name
+    `);
+
+    if (contribucionesPersonnel.rows.length > 0) {
+      // Calcular la semana/rotación
+      const selectedDate = new Date(date + 'T12:00:00');
+      const dayOfWeekNum = selectedDate.getDay();
+
+      let rotationNumber;
+
+      // Verificar si es fin de semana
+      if (dayOfWeekNum === 0 || dayOfWeekNum === 6) {
+        // FIN DE SEMANA: usar weekendCount
+        const baseDate = new Date('2025-12-13T12:00:00');
+        const daysDiff = Math.floor((selectedDate - baseDate) / (1000 * 60 * 60 * 24));
+        rotationNumber = Math.floor(daysDiff / 7);
+        console.log(`   📅 Fin de semana - usando weekendCount: ${rotationNumber}`);
+      } else {
+        // DÍA DE SEMANA: usar weeksDiff
+        const daysFromMonday = dayOfWeekNum === 0 ? 6 : dayOfWeekNum - 1;
+        const mondayOfWeek = new Date(selectedDate);
+        mondayOfWeek.setDate(selectedDate.getDate() - daysFromMonday);
+        const baseMonday = new Date('2025-11-10T12:00:00');
+        const daysDiff = Math.floor((mondayOfWeek - baseMonday) / (1000 * 60 * 60 * 24));
+        rotationNumber = Math.floor(daysDiff / 7);
+        console.log(`   📅 Día de semana - usando weeksDiff: ${rotationNumber}`);
+      }
+
+      // Definir los 3 turnos (igual que en auto-shifts)
+      const turnos = [
+        { start: '05:00', label: '05:00-11:00' },
+        { start: '11:00', label: '11:00-17:00' },
+        { start: '17:00', label: '17:00-22:00' }
+      ];
+
+      contribucionesPersonnel.rows.forEach((person, personIndex) => {
+        const personId = person.id.toString();
+        const turnoIndex = (personIndex + rotationNumber) % turnos.length;
+        const turno = turnos[turnoIndex];
+
+        callTimes[personId] = turno.start;
+        console.log(`   ✅ CONTRIBUCIONES ${person.name}: ${turno.start} (${turno.label})`);
+      });
+    }
+
+    // 🎥 Calcular callTimes para CAMARÓGRAFOS DE ESTUDIO en FIN DE SEMANA
+    const selectedDate = new Date(date + 'T12:00:00');
+    const dayOfWeekNum = selectedDate.getDay();
+
+    if (dayOfWeekNum === 0 || dayOfWeekNum === 6) {
+      console.log('🎥 Calculando callTimes de CAMARÓGRAFOS DE ESTUDIO (fin de semana)...');
+
+      // Calcular weekendCount
+      const baseDate = new Date('2025-12-13T12:00:00');
+      const daysDiff = Math.floor((selectedDate - baseDate) / (1000 * 60 * 60 * 24));
+      const weekendCount = Math.floor(daysDiff / 7);
+
+      // Obtener personal de camarógrafos de estudio
+      const camarasPersonnel = await pool.query(`
+        SELECT id, name
+        FROM personnel
+        WHERE area = 'CAMARÓGRAFOS DE ESTUDIO'
+          AND active = true
+        ORDER BY name
+      `);
+
+      // Obtener shifts generados para este fin de semana
+      const shiftsData = programsData.shifts || [];
+      const camarasShifts = shiftsData.filter(s => s.area === 'CAMARÓGRAFOS DE ESTUDIO');
+
+      if (camarasShifts.length > 0) {
+        camarasShifts.forEach(shift => {
+          const personId = shift.personnel_id.toString();
+          const callTime = shift.shift_start.substring(0, 5); // "08:00:00" → "08:00"
+          callTimes[personId] = callTime;
+          console.log(`   ✅ ${shift.name}: ${callTime} (${shift.original_shift})`);
+        });
+      } else {
+        console.log(`   ⚠️ No se encontraron shifts de camarógrafos de estudio para este fin de semana`);
+      }
+    }
+
+    // 🔧 Calcular callTimes para TODAS las áreas basándose en los shifts generados
+    if (programsData.shifts && programsData.shifts.length > 0) {
+      programsData.shifts.forEach(shift => {
+        const personId = shift.personnel_id.toString();
+        const callTime = shift.shift_start.substring(0, 5); // "08:00:00" → "08:00"
+        callTimes[personId] = callTime;
+      });
+    }
+
+    console.log(`✅ Programación encontrada para ${date}`);
+    console.log(`   📊 Asignaciones: ${Object.keys(finalAssignments).length}`);
+    console.log(`   ⏰ CallTimes: ${Object.keys(callTimes).length}`);
+    console.log(`   📺 Programas: ${allPrograms.length} (${reporteriaPrograms.length} de reportería)`);
+    console.log(`   🕐 Guardado en: ${schedule.updated_at}`);
+
+    // 🔧 GENERAR TURNOS AUTOMÁTICOS para mostrar todo el personal asignado
+    console.log(`🔄 Generando turnos automáticos directamente para ${date}...`);
+
+    // 🆕 LLAMADA DIRECTA a la función (sin HTTP)
+    const autoShifts = await generateAutoShifts(date);
+
+    console.log(`   ✅ Turnos automáticos generados: ${autoShifts.length}`);
+
+    res.json({
+      found: true,
+      date,
+      assignments: finalAssignments, // 🔧 USAR finalAssignments en lugar de schedule.assignments_data
+      callTimes: callTimes,
+      programs: allPrograms,
+      shifts: autoShifts, // 🔧 SIEMPRE incluir turnos automáticos
+      savedAt: schedule.updated_at,
+      reporteriaCalls: reporteriaResult.rows
+    });
+
+  } catch (error) {
+    console.error('❌ Error obteniendo programación diaria:', error);
+    res.status(500).json({
+      error: 'Error al obtener programación diaria',
+      details: error.message
+    });
+  }
+});
+
+module.exports = router;
