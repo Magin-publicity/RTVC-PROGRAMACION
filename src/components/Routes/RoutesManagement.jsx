@@ -19,6 +19,7 @@ import {
   Car,
   Navigation
 } from 'lucide-react';
+import { analyticsService } from '../../services/analyticsService';
 
 const API_URL = 'http://localhost:3000/api';
 
@@ -401,6 +402,26 @@ export const RoutesManagement = () => {
       if (!response.ok) throw new Error('Error al asignar vehículo');
 
       const result = await response.json();
+
+      // 📊 INTEGRACIÓN ANALYTICS: Registrar despacho de vehículo
+      try {
+        await analyticsService.recordVehicleDispatch({
+          date: selectedDate,
+          shift: shiftType,
+          vehicleId: vehicleData.vehicle_id,
+          vehiclePlate: vehicleData.vehicle_plate,
+          driverName: vehicleData.driver_name,
+          routeNumber: assignVehicleModal.routeNumber,
+          zone: assignVehicleModal.zone,
+          passengersCount: result.passengersCount || 0,
+          program: programTitle
+        });
+        console.log('✅ [Analytics] Despacho registrado en Analytics');
+      } catch (analyticsError) {
+        console.error('⚠️ [Analytics] Error registrando en Analytics:', analyticsError);
+        // No interrumpir el flujo principal si falla Analytics
+      }
+
       alert(result.message);
       setAssignVehicleModal(null);
       await loadOptimizedRoutes();

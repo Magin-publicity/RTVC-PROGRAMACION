@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Coffee, Utensils, Moon, Plus, X, Download, MessageCircle, RefreshCw, Upload, Check, Users } from 'lucide-react';
+import { analyticsService } from '../../services/analyticsService';
 
 const API_URL = 'http://localhost:3000/api';
 
@@ -168,6 +169,22 @@ export default function MealManagement() {
       });
 
       if (response.ok) {
+        // 📊 INTEGRACIÓN ANALYTICS: Registrar comida
+        try {
+          await analyticsService.recordMeal({
+            date: selectedDate,
+            mealType: selectedService, // Desayuno, Almuerzo, Cena
+            personnelName: newRequest.personnel_name,
+            cargo: newRequest.cargo,
+            isGuest: newRequest.is_guest,
+            status: newRequest.status
+          });
+          console.log('✅ [Analytics] Comida registrada en Analytics');
+        } catch (analyticsError) {
+          console.error('⚠️ [Analytics] Error registrando en Analytics:', analyticsError);
+          // No interrumpir el flujo principal si falla Analytics
+        }
+
         setShowAddModal(false);
         setNewRequest({ personnel_name: '', cargo: '', is_guest: false, status: 'POR_CONFIRMAR' });
         loadRequests();
