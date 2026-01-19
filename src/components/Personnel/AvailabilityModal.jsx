@@ -23,7 +23,7 @@ export const AvailabilityModal = ({ person, onClose, onSave }) => {
 
   useEffect(() => {
     // Cargar disponibilidad actual del empleado
-    fetch(`http://localhost:3000/api/availability/${person.id}`)
+    fetch(`/api/availability/${person.id}`)
       .then(res => res.json())
       .then(data => {
         if (data.is_available !== null) {
@@ -44,8 +44,8 @@ export const AvailabilityModal = ({ person, onClose, onSave }) => {
 
     try {
       const endpoint = formData.is_available
-        ? `http://localhost:3000/api/availability/${person.id}/available`
-        : `http://localhost:3000/api/availability/${person.id}/unavailable`;
+        ? `/api/availability/${person.id}/available`
+        : `/api/availability/${person.id}/unavailable`;
 
       const body = formData.is_available
         ? {}

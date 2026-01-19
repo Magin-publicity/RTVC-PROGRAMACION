@@ -29,12 +29,12 @@ export const Header = ({ currentUser, onLogout, notifications = [], unreadCount 
       <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4 gap-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
-            <div className="bg-blue-600 p-2 rounded-lg flex-shrink-0">
-              <Calendar className="text-white" size={24} />
+            <div className="bg-blue-600 p-1.5 sm:p-2 rounded-lg flex-shrink-0">
+              <Calendar className="text-white" size={20} />
             </div>
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 truncate">RTVC</h1>
-              <p className="text-xs sm:text-sm text-gray-600 truncate">Sistema de Programación</p>
+              <h1 className="text-base sm:text-xl lg:text-2xl font-bold text-gray-900 truncate">RTVC</h1>
+              <p className="text-xs text-gray-600 truncate hidden sm:block">Sistema de Programación</p>
             </div>
           </div>
 

@@ -4,7 +4,7 @@
   "description": "Frontend para sistema de programación RTVC",
   "main": "src/main.jsx",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
@@ -44,7 +44,8 @@
     "nodemon": "^3.1.10",
     "supertest": "^6.3.3",
     "tailwindcss": "^3.4.18",
-    "vite": "^4.5.14"
+    "vite": "^4.5.14",
+    "vite-plugin-pwa": "^1.2.0"
   },
   "engines": {
     "node": ">=18.0.0",

@@ -1,0 +1,691 @@
+/* PWA Estilos Responsive y mejoras táctiles */
+
+/* Asegurar que los botones sean fáciles de tocar en móviles */
+@media (max-width: 768px) {
+  button, a.button, .btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 16px;
+    font-size: 16px;
+  }
+
+  /* Hacer que los inputs sean más grandes en móviles */
+  input, select, textarea {
+    min-height: 44px;
+    font-size: 16px; /* Prevenir zoom en iOS */
+    padding: 10px 12px;
+  }
+
+  /* Mejorar espaciado en tarjetas */
+  .card, .route-card {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  /* Ocultar textos largos y mostrar solo íconos en móvil */
+  .hide-text-mobile {
+    display: none;
+  }
+
+  /* Hacer que las tablas sean scrolleables horizontalmente */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    display: block;
+  }
+
+  /* Estilos para todas las tablas en móviles */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    min-width: 100%;
+  }
+
+  /* Asegurar que las tablas grandes tengan scroll */
+  .overflow-x-auto {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    display: block;
+  }
+
+  /* Contenedores de grid deben ser columnas en móviles */
+  .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Mejorar navegación en móviles */
+  .nav-mobile {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    padding: 8px 0;
+  }
+
+  /* Hacer que los modales ocupen toda la pantalla en móvil */
+  .modal {
+    margin: 0;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  /* Mejorar el espaciado de los flex containers */
+  .flex-col-mobile {
+    flex-direction: column !important;
+  }
+
+  .gap-mobile {
+    gap: 12px !important;
+  }
+}
+
+/* Animación para el prompt de instalación */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+/* Mejorar el área táctil de los checkboxes */
+input[type="checkbox"] {
+  min-width: 20px;
+  min-height: 20px;
+  cursor: pointer;
+}
+
+/* Indicador de carga para cuando está offline */
+.offline-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #f59e0b;
+  color: white;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 14px;
+  z-index: 9999;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Mejorar contraste para botones en modo claro */
+.btn-primary {
+  background-color: #1e40af;
+  color: white;
+  font-weight: 500;
+}
+
+.btn-success {
+  background-color: #059669;
+  color: white;
+  font-weight: 500;
+}
+
+/* Hacer que el scroll sea suave */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Mejorar el tap highlight en iOS */
+* {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Prevenir zoom no deseado en inputs en iOS */
+@supports (-webkit-touch-callout: none) {
+  input[type="text"],
+  input[type="email"],
+  input[type="number"],
+  input[type="tel"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Mejorar la visualización en pantallas pequeñas */
+@media (max-width: 640px) {
+  /* Hacer que los headers sean más compactos */
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+  }
+
+  /* Reducir padding en contenedores principales */
+  .container {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  /* Hacer que los botones de acción sean más visibles */
+  .action-buttons {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    padding: 12px;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+    z-index: 50;
+  }
+}
+
+/* Soporte para modo standalone (PWA instalada) */
+@media all and (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Agregar padding extra para el notch de iOS */
+  .header-pwa {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+}
+
+/* Loading spinner responsive */
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #1e40af;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Toast notifications para feedback en móvil */
+.toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 9999;
+  animation: fade-in-up 0.3s ease-out;
+  max-width: 90%;
+  text-align: center;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Mejorar los botones de WhatsApp */
+.whatsapp-button {
+  background: #25D366 !important;
+  color: white !important;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3);
+  transition: all 0.2s ease;
+}
+
+.whatsapp-button:hover {
+  background: #128C7E !important;
+  box-shadow: 0 6px 16px rgba(37, 211, 102, 0.4);
+  transform: translateY(-2px);
+}
+
+.whatsapp-button:active {
+  transform: translateY(0);
+}
+
+/* Badge para modo offline */
+.badge-offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f59e0b;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Mejorar accesibilidad */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #1e40af;
+  outline-offset: 2px;
+}
+
+/* Dark mode support (opcional) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #1f2937;
+    --bg-secondary: #111827;
+    --text-primary: #f3f4f6;
+    --text-secondary: #9ca3af;
+  }
+}
+
+/* ===== ESTILOS ESPECÍFICOS PARA RESPONSIVE ===== */
+
+/* Ajustar el header en móviles para dar espacio al botón hamburguesa */
+@media (max-width: 768px) {
+  header {
+    padding-left: 64px !important;
+  }
+
+  /* Dashboard cards en columna única */
+  .dashboard-grid,
+  .stats-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+
+  /* Modales ocupan toda la pantalla */
+  .modal-detail-container {
+    padding: 16px !important;
+    overflow-y: auto !important;
+    max-height: calc(85vh - 160px) !important;
+  }
+
+  .modal-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Hacer que los dropdowns/selects sean más grandes */
+  select, .select-input {
+    min-height: 44px !important;
+    font-size: 16px !important;
+  }
+
+  /* Ajustar padding de cards */
+  .bg-white.rounded-lg.shadow-md {
+    padding: 16px !important;
+  }
+
+  /* Botones de acción sticky en la parte inferior */
+  .action-bar {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    padding: 12px;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+    z-index: 40;
+  }
+}
+
+/* Mejorar tablas de programación y schedule */
+@media (max-width: 1024px) {
+  .schedule-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .schedule-table {
+    min-width: 800px;
+  }
+}
+
+/* Cards responsivos para dashboard */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* Ajustes para tablets */
+@media (min-width: 641px) and (max-width: 768px) {
+  .grid-cols-3,
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ===== RESPONSIVE PARA TÍTULOS Y HEADERS ===== */
+
+/* Ajustar título principal que choca con hamburguesa */
+@media (max-width: 768px) {
+  /* Título de coordinación más pequeño en móviles */
+  .bg-blue-900 h2 {
+    font-size: 0.875rem !important; /* 14px */
+    line-height: 1.25rem !important;
+    padding-top: 8px !important;
+    margin-top: 0 !important;
+  }
+
+  /* Ajustar header de programación */
+  .bg-blue-900 .flex {
+    flex-direction: column !important;
+    gap: 8px !important;
+    align-items: stretch !important;
+  }
+
+  /* Botones del header más compactos */
+  .bg-blue-900 button {
+    font-size: 0.75rem !important;
+    padding: 8px 12px !important;
+  }
+
+  /* Ocultar texto de botones, solo mostrar iconos */
+  .bg-blue-900 button span:not(.text-xs) {
+    display: none;
+  }
+}
+
+/* ===== RESPONSIVE PARA SELECTS Y FORMULARIOS ===== */
+
+@media (max-width: 768px) {
+  /* Selects ocupan 100% del ancho */
+  select,
+  .select-wrapper,
+  .form-select {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Secciones de recursos y master en columna */
+  .resource-section,
+  .master-section,
+  .program-mapping-section {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+
+  .resource-section > div,
+  .master-section > div {
+    width: 100% !important;
+  }
+
+  /* Labels más visibles */
+  label {
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
+    display: block !important;
+  }
+}
+
+/* ===== CARDS PARA TABLA DE PROGRAMACIÓN EN MÓVILES ===== */
+
+@media (max-width: 768px) {
+  /* Ocultar tabla tradicional en móviles */
+  .schedule-table-container table {
+    display: none !important;
+  }
+
+  /* Mostrar vista de cards */
+  .schedule-mobile-view {
+    display: block !important;
+  }
+
+  /* Estilos para cards de personal */
+  .personnel-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-left: 4px solid #1e40af;
+  }
+
+  .personnel-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #e5e7eb;
+  }
+
+  .personnel-name {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 4px;
+  }
+
+  .personnel-role {
+    font-size: 0.875rem;
+    color: #6b7280;
+    font-weight: 500;
+  }
+
+  .call-time-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  /* Programas asignados */
+  .assigned-programs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .program-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f3f4f6;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border-left: 3px solid currentColor;
+  }
+
+  .program-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .program-name {
+    font-weight: 600;
+    font-size: 0.9375rem;
+  }
+
+  .program-time {
+    font-size: 0.8125rem;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .program-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .program-action-btn {
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 6px;
+    min-width: 36px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+    transition: all 0.2s;
+  }
+
+  .program-action-btn:active {
+    background: #f3f4f6;
+    transform: scale(0.95);
+  }
+
+  /* Separador de áreas */
+  .area-separator {
+    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+    color: white;
+    padding: 12px 16px;
+    margin: 24px 0 16px 0;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(30, 64, 175, 0.3);
+  }
+
+  /* Estado sin asignaciones */
+  .no-assignments {
+    text-align: center;
+    padding: 20px;
+    color: #9ca3af;
+    font-size: 0.875rem;
+  }
+}
+
+/* Ocultar vista de cards en desktop */
+@media (min-width: 769px) {
+  .schedule-mobile-view {
+    display: none !important;
+  }
+}
+
+/* ===== RESPONSIVE PARA TABLA DE MAPEO DE PROGRAMAS ===== */
+
+@media (max-width: 768px) {
+  /* Hacer tabla de mapeo scrolleable */
+  .overflow-x-auto table {
+    min-width: 100%;
+  }
+
+  /* Ajustar padding de celdas */
+  .overflow-x-auto td,
+  .overflow-x-auto th {
+    padding: 8px 12px !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* Botones de acción más compactos */
+  .overflow-x-auto td button {
+    font-size: 0.75rem !important;
+    padding: 6px 10px !important;
+  }
+
+  /* Ocultar columnas menos importantes en móviles */
+  .overflow-x-auto th:nth-child(3),
+  .overflow-x-auto td:nth-child(3) {
+    display: none;
+  }
+}
+
+/* ===== MEJORAS PARA DASHBOARD EN MÓVIL ===== */
+
+@media (max-width: 768px) {
+  /* Tarjetas del dashboard más redondeadas y mejor espaciadas */
+  .bg-white.rounded-xl {
+    border-radius: 16px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+  }
+
+  /* Iconos más grandes en tarjetas de disponibilidad */
+  .bg-white.rounded-xl .p-3 {
+    padding: 12px !important;
+  }
+
+  /* Números de disponibilidad más grandes y centrados */
+  .bg-white.rounded-xl .text-3xl {
+    font-size: 2.5rem !important;
+    text-align: center !important;
+  }
+
+  /* Centrar contenido de tarjetas en móvil */
+  .bg-white.rounded-xl > div {
+    justify-content: center !important;
+    text-align: center !important;
+  }
+
+  /* Hacer que los clicks en las tarjetas sean más evidentes */
+  .bg-white.rounded-xl.cursor-pointer:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+
+  /* Mejorar badges de estado */
+  .rounded-full {
+    padding: 6px 12px !important;
+    font-size: 0.75rem !important;
+  }
+}
+
+/* ===== TOUCH-FRIENDLY BUTTONS GLOBALES ===== */
+
+/* Asegurar que TODOS los botones sean touch-friendly */
+@media (max-width: 768px) {
+  button:not(.no-mobile-style) {
+    min-height: 44px !important;
+    min-width: 44px !important;
+    touch-action: manipulation;
+  }
+
+  /* Links que parecen botones también */
+  a[class*="btn"],
+  a[class*="button"] {
+    min-height: 44px !important;
+    min-width: 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    touch-action: manipulation;
+  }
+
+  /* Feedback visual en tap */
+  button:active:not(:disabled),
+  a[class*="btn"]:active {
+    opacity: 0.7;
+    transform: scale(0.97);
+  }
+
+  /* Botones deshabilitados */
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}

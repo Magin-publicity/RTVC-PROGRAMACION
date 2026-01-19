@@ -36,24 +36,24 @@ export const PersonnelCard = ({ person, onEdit, onDelete, onManageAvailability }
         <div className="flex gap-1">
           <button
             onClick={() => onManageAvailability(person)}
-            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+            className="p-2 md:p-2 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center justify-center"
             title="Gestionar Disponibilidad"
           >
-            <Calendar size={16} />
+            <Calendar size={20} />
           </button>
           <button
             onClick={() => onEdit(person)}
-            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            className="p-2 md:p-2 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center"
             title="Editar"
           >
-            <Edit2 size={16} />
+            <Edit2 size={20} />
           </button>
           <button
             onClick={handleDelete}
-            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            className="p-2 md:p-2 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center"
             title="Eliminar"
           >
-            <Trash2 size={16} />
+            <Trash2 size={20} />
           </button>
         </div>
       </div>

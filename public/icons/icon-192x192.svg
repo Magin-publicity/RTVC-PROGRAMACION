@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Fondo azul redondeado -->
+  <rect width="192" height="192" rx="29" fill="#1e40af"/>
+
+  <!-- Texto RTVC -->
+  <text
+    x="50%"
+    y="48%"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="67"
+    font-weight="bold"
+    fill="white"
+    text-anchor="middle"
+    dominant-baseline="middle"
+  >RTVC</text>
+
+  <!-- Subtítulo -->
+  <text
+    x="50%"
+    y="75%"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="15"
+    font-weight="normal"
+    fill="rgba(255, 255, 255, 0.85)"
+    text-anchor="middle"
+    dominant-baseline="middle"
+  >Programación</text>
+</svg>

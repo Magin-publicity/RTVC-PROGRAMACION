@@ -25,7 +25,7 @@ export const AsignacionReporteria = ({ currentDate }) => {
     const fetchPersonalConTurnos = async () => {
       try {
         // Obtener shifts automáticos del día (incluye rotación de grupos)
-        const response = await fetch(`http://localhost:3000/api/schedule/auto-shifts/${fecha}`);
+        const response = await fetch(`/api/schedule/auto-shifts/${fecha}`);
         const shifts = await response.json();
 
         // Filtrar solo personal de reportería que tiene turno HOY
@@ -73,7 +73,7 @@ export const AsignacionReporteria = ({ currentDate }) => {
   useEffect(() => {
     const fetchDisponibilidad = async () => {
       try {
-        const response = await fetch(`http://localhost:3000/api/reporteria-espacios/disponibilidad/${fecha}`);
+        const response = await fetch(`/api/reporteria-espacios/disponibilidad/${fecha}`);
         const data = await response.json();
         setDisponibilidad(data);
       } catch (error) {
@@ -91,7 +91,7 @@ export const AsignacionReporteria = ({ currentDate }) => {
   useEffect(() => {
     const fetchDespachos = async () => {
       try {
-        const response = await fetch(`http://localhost:3000/api/fleet/dispatches/${fecha}`);
+        const response = await fetch(`/api/fleet/dispatches/${fecha}`);
         const data = await response.json();
         // Filtrar solo despachos activos (PROGRAMADO o EN_RUTA) con personal de reportería
         const despachosActivos = data.filter(d =>

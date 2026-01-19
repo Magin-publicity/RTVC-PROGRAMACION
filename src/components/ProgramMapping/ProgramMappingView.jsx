@@ -399,7 +399,7 @@ export const ProgramMappingView = () => {
 
       // 4. Intentar eliminar del backend si está disponible
       try {
-        const response = await fetch(`http://localhost:3000/api/schedule/remove-program/${programId}`, {
+        const response = await fetch(`/api/schedule/remove-program/${programId}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json'
@@ -477,7 +477,7 @@ export const ProgramMappingView = () => {
 
       // 4. Intentar eliminar del backend si está disponible
       try {
-        const response = await fetch(`http://localhost:3000/api/schedule/remove-program/${program.id}`, {
+        const response = await fetch(`/api/schedule/remove-program/${program.id}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json'
@@ -841,33 +841,39 @@ export const ProgramMappingView = () => {
                       {getDatesText(currentDates)}
                     </button>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      value={mapping.studioResource || ''}
-                      onChange={(e) => handleResourceChange(program.id, 'studioResource', e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    >
-                      <option value="">Sin asignar</option>
-                      <option value="1">Estudio 1</option>
-                      <option value="2">Estudio 2</option>
-                      <option value="3">Estudio 3</option>
-                      <option value="4">Estudio 4</option>
-                      <option value="5">Estudio 5</option>
-                    </select>
+                  <td className="px-6 py-4 whitespace-nowrap resource-section">
+                    <div className="w-full">
+                      <label className="block md:hidden text-xs font-semibold text-gray-700 mb-1">Estudio</label>
+                      <select
+                        value={mapping.studioResource || ''}
+                        onChange={(e) => handleResourceChange(program.id, 'studioResource', e.target.value)}
+                        className="form-select block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      >
+                        <option value="">Sin asignar</option>
+                        <option value="1">Estudio 1</option>
+                        <option value="2">Estudio 2</option>
+                        <option value="3">Estudio 3</option>
+                        <option value="4">Estudio 4</option>
+                        <option value="5">Estudio 5</option>
+                      </select>
+                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      value={mapping.masterResource || ''}
-                      onChange={(e) => handleResourceChange(program.id, 'masterResource', e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    >
-                      <option value="">Sin asignar</option>
-                      <option value="1">Master 1</option>
-                      <option value="2">Master 2</option>
-                      <option value="3">Master 3</option>
-                      <option value="4">Master 4</option>
-                      <option value="5">Master 5</option>
-                    </select>
+                  <td className="px-6 py-4 whitespace-nowrap master-section">
+                    <div className="w-full">
+                      <label className="block md:hidden text-xs font-semibold text-gray-700 mb-1">Master</label>
+                      <select
+                        value={mapping.masterResource || ''}
+                        onChange={(e) => handleResourceChange(program.id, 'masterResource', e.target.value)}
+                        className="form-select block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      >
+                        <option value="">Sin asignar</option>
+                        <option value="1">Master 1</option>
+                        <option value="2">Master 2</option>
+                        <option value="3">Master 3</option>
+                        <option value="4">Master 4</option>
+                        <option value="5">Master 5</option>
+                      </select>
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex items-center gap-3">

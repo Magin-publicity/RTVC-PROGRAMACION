@@ -17,17 +17,18 @@ export const MainLayout = ({ children, activeView, onViewChange, currentUser, on
         onRemoveNotification={onRemoveNotification}
         onViewAllNovelties={onViewAllNovelties}
       />
-      
+
       <div className="flex flex-1">
         <Sidebar activeView={activeView} onViewChange={onViewChange} />
 
-        <main className="flex-1 p-4 sm:p-6 ml-64">
-          <div className="w-full">
+        {/* Main content - responsive: sin margen en móviles, con margen en desktop */}
+        <main className="flex-1 p-4 sm:p-6 ml-0 md:ml-64 w-full transition-all duration-300">
+          <div className="w-full overflow-x-hidden">
             {children}
           </div>
         </main>
       </div>
-      
+
       <Footer />
     </div>
   );

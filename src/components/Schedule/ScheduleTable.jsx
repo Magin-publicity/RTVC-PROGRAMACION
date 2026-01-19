@@ -9,7 +9,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useContractValidation } from '../../hooks/useContractValidation';
 import { WeekSelector } from '../Calendar/WeekSelector';
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = '/api';
 
 // Programas de lunes a viernes - IDs deben coincidir con programs.js
 const WEEKDAY_PROGRAMS = [

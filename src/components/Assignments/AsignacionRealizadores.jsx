@@ -36,7 +36,7 @@ export const AsignacionRealizadores = ({ currentDate }) => {
   useEffect(() => {
     const fetchPersonal = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/personnel');
+        const response = await fetch('/api/personnel');
         const data = await response.json();
         // Filtrar solo realizadores, sin importar el turno
         const realizadores = data.filter(p => p.area === 'REALIZADORES');
@@ -52,7 +52,7 @@ export const AsignacionRealizadores = ({ currentDate }) => {
   useEffect(() => {
     const fetchDisponibilidad = async () => {
       try {
-        const response = await fetch(`http://localhost:3000/api/asignaciones-realizadores/disponibilidad/${fecha}`);
+        const response = await fetch(`/api/asignaciones-realizadores/disponibilidad/${fecha}`);
         const data = await response.json();
         setDisponibilidad(data);
       } catch (error) {
@@ -70,7 +70,7 @@ export const AsignacionRealizadores = ({ currentDate }) => {
   useEffect(() => {
     const fetchDespachos = async () => {
       try {
-        const response = await fetch(`http://localhost:3000/api/fleet/dispatches/${fecha}`);
+        const response = await fetch(`/api/fleet/dispatches/${fecha}`);
         const data = await response.json();
         // Filtrar solo despachos activos (PROGRAMADO o EN_RUTA) con realizador
         const despachosActivos = data.filter(d =>

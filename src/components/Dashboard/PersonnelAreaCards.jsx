@@ -145,7 +145,7 @@ export const PersonnelAreaCards = ({ currentDate }) => {
 
         console.log('📊 Cargando datos de personal por área para:', fecha);
 
-        const response = await fetch(`http://localhost:3000/api/schedule/personnel-by-area/${fecha}`, {
+        const response = await fetch(`/api/schedule/personnel-by-area/${fecha}`, {
           cache: 'no-cache',
           headers: {
             'Cache-Control': 'no-cache',
@@ -178,7 +178,7 @@ export const PersonnelAreaCards = ({ currentDate }) => {
     try {
       const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
 
-      const response = await fetch(`http://localhost:3000/api/schedule/area-personnel-details/${fecha}/${encodeURIComponent(areaName)}`, {
+      const response = await fetch(`/api/schedule/area-personnel-details/${fecha}/${encodeURIComponent(areaName)}`, {
         cache: 'no-cache',
         headers: {
           'Cache-Control': 'no-cache',

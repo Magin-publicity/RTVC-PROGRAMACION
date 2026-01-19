@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export default function FleetManagement() {
   const [activeTab, setActiveTab] = useState('vehicles'); // vehicles, availability, dispatches

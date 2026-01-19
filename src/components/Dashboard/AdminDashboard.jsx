@@ -39,7 +39,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
       // NUEVO: Cargar disponibilidad de reportería con datos separados por área
       try {
         console.log('🔍 Solicitando disponibilidad para fecha:', fecha);
-        const response = await fetch(`http://localhost:3000/api/reporteria-espacios/disponibilidad/${fecha}?allDay=true`, {
+        const response = await fetch(`/api/reporteria-espacios/disponibilidad/${fecha}?allDay=true`, {
           cache: 'no-cache',
           headers: {
             'Cache-Control': 'no-cache',
@@ -89,7 +89,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         console.log('🚐 Consultando flota para fecha:', fecha);
 
         // Obtener vehículos disponibles
-        const availabilityResponse = await fetch(`http://localhost:3000/api/fleet/availability/${fecha}?t=${Date.now()}`, {
+        const availabilityResponse = await fetch(`/api/fleet/availability/${fecha}?t=${Date.now()}`, {
           cache: 'no-cache',
           headers: {
             'Cache-Control': 'no-cache',
@@ -100,7 +100,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         console.log('📋 Availability data:', availabilityData);
 
         // Obtener despachos del día
-        const dispatchesResponse = await fetch(`http://localhost:3000/api/fleet/dispatches/${fecha}?t=${Date.now()}`, {
+        const dispatchesResponse = await fetch(`/api/fleet/dispatches/${fecha}?t=${Date.now()}`, {
           cache: 'no-cache',
           headers: {
             'Cache-Control': 'no-cache',
@@ -134,7 +134,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
       try {
         console.log('📡 Consultando equipos LiveU...');
         const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-        const liveuResponse = await fetch(`http://localhost:3000/api/logistics/liveu/stats?date=${fecha}&t=${Date.now()}`, {
+        const liveuResponse = await fetch(`/api/logistics/liveu/stats?date=${fecha}&t=${Date.now()}`, {
           cache: 'no-cache',
           headers: {
             'Cache-Control': 'no-cache',
@@ -157,7 +157,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
       // Cargar todos los equipos LiveU para el modal (con información de despachos)
       try {
         const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-        const allLiveuResponse = await fetch(`http://localhost:3000/api/logistics/liveu/detalle/${fecha}?t=${Date.now()}`, {
+        const allLiveuResponse = await fetch(`/api/logistics/liveu/detalle/${fecha}?t=${Date.now()}`, {
           cache: 'no-cache',
           headers: {
             'Cache-Control': 'no-cache',
@@ -182,11 +182,11 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   const reloadLiveuData = async () => {
     try {
       const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-      const allLiveuResponse = await fetch(`http://localhost:3000/api/logistics/liveu/detalle/${fecha}?t=${Date.now()}`);
+      const allLiveuResponse = await fetch(`/api/logistics/liveu/detalle/${fecha}?t=${Date.now()}`);
       const allLiveuData = await allLiveuResponse.json();
       setLiveuEquipment(allLiveuData);
 
-      const liveuStatsResponse = await fetch(`http://localhost:3000/api/logistics/liveu/stats?date=${fecha}&t=${Date.now()}`);
+      const liveuStatsResponse = await fetch(`/api/logistics/liveu/stats?date=${fecha}&t=${Date.now()}`);
       const liveuStatsData = await liveuStatsResponse.json();
       setLiveuStats(liveuStatsData);
     } catch (error) {
@@ -197,7 +197,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   // Función para actualizar estado de LiveU
   const handleUpdateLiveuStatus = async (liveuId, newStatus, notes = '') => {
     try {
-      const response = await fetch(`http://localhost:3000/api/logistics/liveu/${liveuId}`, {
+      const response = await fetch(`/api/logistics/liveu/${liveuId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -220,7 +220,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   // Función para agregar nuevo equipo LiveU
   const handleAddLiveu = async (equipmentCode, serialNumber) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/logistics/liveu`, {
+      const response = await fetch(`/api/logistics/liveu`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -249,7 +249,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   // Función para editar equipo LiveU
   const handleEditLiveu = async (liveuId, equipmentCode, serialNumber) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/logistics/liveu/${liveuId}`, {
+      const response = await fetch(`/api/logistics/liveu/${liveuId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -280,7 +280,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
     }
 
     try {
-      const response = await fetch(`http://localhost:3000/api/logistics/liveu/${liveuId}`, {
+      const response = await fetch(`/api/logistics/liveu/${liveuId}`, {
         method: 'DELETE',
       });
 
@@ -301,7 +301,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   const loadCamarografosDetalle = async () => {
     try {
       const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-      const response = await fetch(`http://localhost:3000/api/reporteria-espacios/detalle/camarografos/${fecha}?t=${Date.now()}`, {
+      const response = await fetch(`/api/reporteria-espacios/detalle/camarografos/${fecha}?t=${Date.now()}`, {
         cache: 'no-cache',
         headers: {
           'Cache-Control': 'no-cache',
@@ -321,7 +321,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   const loadRealizadoresDetalle = async () => {
     try {
       const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-      const response = await fetch(`http://localhost:3000/api/asignaciones-realizadores/detalle/${fecha}?t=${Date.now()}`, {
+      const response = await fetch(`/api/asignaciones-realizadores/detalle/${fecha}?t=${Date.now()}`, {
         cache: 'no-cache',
         headers: {
           'Cache-Control': 'no-cache',
@@ -341,7 +341,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   const loadAsistentesDetalle = async () => {
     try {
       const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-      const response = await fetch(`http://localhost:3000/api/reporteria-espacios/detalle/asistentes/${fecha}?t=${Date.now()}`, {
+      const response = await fetch(`/api/reporteria-espacios/detalle/asistentes/${fecha}?t=${Date.now()}`, {
         cache: 'no-cache',
         headers: {
           'Cache-Control': 'no-cache',
@@ -361,7 +361,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   const loadFlotaDetalle = async () => {
     try {
       const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-      const response = await fetch(`http://localhost:3000/api/fleet/detalle/${fecha}?t=${Date.now()}`, {
+      const response = await fetch(`/api/fleet/detalle/${fecha}?t=${Date.now()}`, {
         cache: 'no-cache',
         headers: {
           'Cache-Control': 'no-cache',
@@ -381,7 +381,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   const loadLiveuDetalle = async () => {
     try {
       const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
-      const response = await fetch(`http://localhost:3000/api/logistics/liveu/detalle/${fecha}?t=${Date.now()}`, {
+      const response = await fetch(`/api/logistics/liveu/detalle/${fecha}?t=${Date.now()}`, {
         cache: 'no-cache',
         headers: {
           'Cache-Control': 'no-cache',
@@ -457,10 +457,10 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
 
       {/* Tarjetas de estadísticas */}
       {/* PRIMERA FILA: DISPONIBILIDAD TÉCNICA (CRÍTICO) */}
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         {/* 1. Disponibilidad Camarógrafos */}
         <div
-          className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg hover:border-2 hover:border-green-400 transition-all"
+          className="bg-white rounded-xl shadow-md p-4 sm:p-6 cursor-pointer hover:shadow-lg hover:border-2 hover:border-green-400 transition-all"
           onClick={loadCamarografosDetalle}
           title="Click para ver detalle de camarógrafos"
         >
@@ -512,7 +512,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
 
         {/* 2. Disponibilidad Realizadores */}
         <div
-          className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg hover:border-2 hover:border-purple-400 transition-all"
+          className="bg-white rounded-xl shadow-md p-4 sm:p-6 cursor-pointer hover:shadow-lg hover:border-2 hover:border-purple-400 transition-all"
           onClick={loadRealizadoresDetalle}
           title="Click para ver detalle de realizadores"
         >
@@ -555,7 +555,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
 
         {/* 3. Disponibilidad Asistentes */}
         <div
-          className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg hover:border-2 hover:border-cyan-400 transition-all"
+          className="bg-white rounded-xl shadow-md p-4 sm:p-6 cursor-pointer hover:shadow-lg hover:border-2 hover:border-cyan-400 transition-all"
           onClick={loadAsistentesDetalle}
           title="Click para ver detalle de asistentes"
         >
@@ -607,7 +607,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
 
         {/* 4. Equipos LiveU */}
         <div
-          className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg hover:border-2 hover:border-blue-400 transition-all"
+          className="bg-white rounded-xl shadow-md p-4 sm:p-6 cursor-pointer hover:shadow-lg hover:border-2 hover:border-blue-400 transition-all"
           onClick={() => setShowLiveuModal(true)}
           title="Click para gestionar equipos LiveU"
         >
@@ -652,10 +652,10 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
       </div>
 
       {/* SEGUNDA FILA: LOGÍSTICA Y NOVEDADES (SOPORTE) */}
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         {/* 5. Flota en Canal */}
         <div
-          className="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg hover:border-2 hover:border-indigo-400 transition-all"
+          className="bg-white rounded-xl shadow-md p-4 sm:p-6 cursor-pointer hover:shadow-lg hover:border-2 hover:border-indigo-400 transition-all"
           onClick={loadFlotaDetalle}
           title="Click para ver detalle de vehículos"
         >
@@ -697,7 +697,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         </div>
 
         {/* 6. Novedades Hoy */}
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Novedades Hoy</p>
@@ -711,7 +711,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         </div>
 
         {/* 7. Áreas */}
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Áreas</p>
@@ -725,7 +725,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         </div>
 
         {/* 8. Personal Total */}
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Personal Total</p>
@@ -740,9 +740,9 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
       </div>
 
       {/* TERCERA FILA: INFORMACIÓN ADICIONAL */}
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         {/* 9. Programación - Fecha Actual */}
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Programación</p>

@@ -6,7 +6,7 @@ import { Input } from '../UI/Input';
 import { Select } from '../UI/Select';
 import { Plus, Search, Edit2, Trash2, Mail, Phone, MapPin, Download } from 'lucide-react';
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = '/api';
 
 // Áreas logísticas disponibles
 const LOGISTICS_AREAS = [

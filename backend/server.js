@@ -84,9 +84,14 @@ app.use('/api/logistics', logisticsRoutes);
 
 // Puerto
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+const HOST = process.env.HOST || '0.0.0.0'; // Escuchar en todas las interfaces
+
+server.listen(PORT, HOST, () => {
   console.log(`✅ Servidor HTTP corriendo en puerto ${PORT}`);
-  console.log(`🔌 WebSocket servidor listo en ws://localhost:${PORT}`);
+  console.log(`🌐 Accesible en:`);
+  console.log(`   - Local:   http://localhost:${PORT}`);
+  console.log(`   - Network: http://[TU_IP]:${PORT}`);
+  console.log(`🔌 WebSocket servidor listo`);
 });
 
 module.exports = { app, io, server };

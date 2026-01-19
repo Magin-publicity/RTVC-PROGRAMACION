@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Iconos PWA - RTVC</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            background: #f3f4f6;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1e40af;
+            margin-bottom: 20px;
+        }
+        .upload-section {
+            background: #dbeafe;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #1e40af;
+        }
+        .preview-section {
+            display: flex;
+            gap: 30px;
+            margin: 30px 0;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .icon-item {
+            text-align: center;
+        }
+        canvas {
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            display: block;
+            margin: 10px auto;
+            background: white;
+        }
+        button {
+            background: #1e40af;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1e3a8a;
+        }
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        input[type="file"] {
+            padding: 10px;
+            border: 2px dashed #1e40af;
+            border-radius: 8px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .instructions {
+            background: #fef3c7;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+            border-left: 4px solid #f59e0b;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #92400e;
+        }
+        .success {
+            background: #d1fae5;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #10b981;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Generador de Iconos PWA para RTVC</h1>
+
+        <div class="upload-section">
+            <h3>Paso 1: Sube el logo de RTVC</h3>
+            <p>Sube la imagen con los logos oficiales de RTVC (la que enviaste con todos los canales)</p>
+            <input type="file" id="logoInput" accept="image/*">
+        </div>
+
+        <div class="preview-section" id="previewSection" style="display: none;">
+            <div class="icon-item">
+                <h3>192x192 px</h3>
+                <canvas id="icon192" width="192" height="192"></canvas>
+                <button onclick="downloadIcon('icon192', '192')" id="btn192" disabled>Descargar 192x192</button>
+            </div>
+            <div class="icon-item">
+                <h3>512x512 px</h3>
+                <canvas id="icon512" width="512" height="512"></canvas>
+                <button onclick="downloadIcon('icon512', '512')" id="btn512" disabled>Descargar 512x512</button>
+            </div>
+        </div>
+
+        <div class="success" id="successMessage">
+            <strong>✅ Iconos generados correctamente!</strong>
+            <p>Ahora descarga ambos iconos y guárdalos en: <code>public/icons/</code></p>
+        </div>
+
+        <div class="instructions">
+            <h3>📝 Instrucciones:</h3>
+            <ol>
+                <li>Haz clic en el botón de arriba y selecciona la imagen del logo RTVC</li>
+                <li>Espera a que se generen los iconos (se verán en pantalla)</li>
+                <li>Haz clic en "Descargar 192x192" y guárdalo como <code>icon-192x192.png</code></li>
+                <li>Haz clic en "Descargar 512x512" y guárdalo como <code>icon-512x512.png</code></li>
+                <li>Mueve ambos archivos a la carpeta: <code>public/icons/</code></li>
+                <li>Reinicia Vite: <code>npm run dev</code></li>
+                <li>Recarga la app en el celular: <code>http://192.168.1.26:5173</code></li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        let uploadedImage = null;
+
+        // Manejar la carga de la imagen
+        document.getElementById('logoInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                uploadedImage = new Image();
+                uploadedImage.onload = function() {
+                    generateIcons();
+                    document.getElementById('previewSection').style.display = 'flex';
+                    document.getElementById('btn192').disabled = false;
+                    document.getElementById('btn512').disabled = false;
+                    document.getElementById('successMessage').style.display = 'block';
+                };
+                uploadedImage.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Función para generar los iconos
+        function generateIcons() {
+            drawIcon(document.getElementById('icon192'), 192);
+            drawIcon(document.getElementById('icon512'), 512);
+        }
+
+        // Función para dibujar el icono en el canvas
+        function drawIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+
+            // Limpiar canvas
+            ctx.clearRect(0, 0, size, size);
+
+            // Fondo azul RTVC
+            ctx.fillStyle = '#1e40af';
+            ctx.fillRect(0, 0, size, size);
+
+            // Dibujar el logo centrado
+            if (uploadedImage) {
+                const logoSize = size * 0.9; // 90% del tamaño del canvas
+                const x = (size - logoSize) / 2;
+                const y = (size - logoSize) / 2;
+
+                // Calcular dimensiones manteniendo aspecto
+                const imgAspect = uploadedImage.width / uploadedImage.height;
+                let drawWidth = logoSize;
+                let drawHeight = logoSize;
+
+                if (imgAspect > 1) {
+                    // Imagen horizontal
+                    drawHeight = logoSize / imgAspect;
+                } else {
+                    // Imagen vertical
+                    drawWidth = logoSize * imgAspect;
+                }
+
+                const drawX = (size - drawWidth) / 2;
+                const drawY = (size - drawHeight) / 2;
+
+                ctx.drawImage(uploadedImage, drawX, drawY, drawWidth, drawHeight);
+            }
+        }
+
+        // Función para descargar el icono
+        function downloadIcon(canvasId, size) {
+            const canvas = document.getElementById(canvasId);
+            const dataURL = canvas.toDataURL('image/png', 1.0);
+            const link = document.createElement('a');
+            link.download = `icon-${size}x${size}.png`;
+            link.href = dataURL;
+            link.click();
+
+            alert(`✅ Icono ${size}x${size} descargado!\n\nGuárdalo en: public/icons/icon-${size}x${size}.png`);
+        }
+    </script>
+</body>
+</html>

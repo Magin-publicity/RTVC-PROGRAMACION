@@ -20,8 +20,10 @@ import {
   Navigation
 } from 'lucide-react';
 import { analyticsService } from '../../services/analyticsService';
+import { generateVehicleDispatchMessage, shareViaWhatsApp } from '../../utils/whatsappShare';
+import { MessageCircle } from 'lucide-react';
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = '/api';
 
 export const RoutesManagement = () => {
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
@@ -1116,8 +1118,8 @@ const RoutesTab = ({ routes, selectedDate, shiftType, programTitle, onAssignVehi
           {/* Información del Vehículo */}
           {route.vehicle_plate ? (
             <div className="bg-green-50 p-4 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
                   <div className="flex items-center gap-2">
                     <Truck size={18} className="text-green-600" />
                     <div>
@@ -1138,13 +1140,47 @@ const RoutesTab = ({ routes, selectedDate, shiftType, programTitle, onAssignVehi
                     </div>
                   )}
                 </div>
-                <Button
-                  onClick={() => onUnassignVehicle(route.route_id)}
-                  variant="danger"
-                  size="sm"
-                >
-                  Quitar Vehículo
-                </Button>
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    onClick={() => {
+                      const destinations = route.passengers?.filter(p => p.name).map(p => ({
+                        address: p.direccion,
+                        neighborhood: p.barrio,
+                        passengerName: p.name
+                      })) || [];
+
+                      const message = generateVehicleDispatchMessage({
+                        date: selectedDate,
+                        shift: shiftType,
+                        vehiclePlate: route.vehicle_plate,
+                        driverName: route.driver_name,
+                        routeNumber: route.route_number,
+                        zone: route.zone,
+                        passengersCount: route.total_passengers,
+                        program: programTitle,
+                        destinations
+                      });
+
+                      shareViaWhatsApp(message);
+                    }}
+                    variant="success"
+                    size="sm"
+                    icon={<MessageCircle size={16} />}
+                    className="min-h-[44px] text-base md:text-sm"
+                  >
+                    <span className="hidden sm:inline">Compartir WhatsApp</span>
+                    <span className="sm:hidden">WhatsApp</span>
+                  </Button>
+                  <Button
+                    onClick={() => onUnassignVehicle(route.route_id)}
+                    variant="danger"
+                    size="sm"
+                    className="min-h-[44px]"
+                  >
+                    <span className="hidden sm:inline">Quitar Vehículo</span>
+                    <span className="sm:hidden">Quitar</span>
+                  </Button>
+                </div>
               </div>
             </div>
           ) : (

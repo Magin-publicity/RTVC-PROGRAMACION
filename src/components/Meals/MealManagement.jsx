@@ -2,10 +2,11 @@
 // Módulo de Gestión de Alimentación (Desayunos, Almuerzos, Cenas)
 
 import React, { useState, useEffect } from 'react';
-import { Coffee, Utensils, Moon, Plus, X, Download, MessageCircle, RefreshCw, Upload, Check, Users } from 'lucide-react';
+import { Coffee, Utensils, Moon, Plus, X, Download, MessageCircle, RefreshCw, Upload, Check, Users, Send } from 'lucide-react';
 import { analyticsService } from '../../services/analyticsService';
+import { generateMealRequestMessage, shareViaWhatsApp } from '../../utils/whatsappShare';
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = '/api';
 
 // Lista fija de cargos/posiciones disponibles (basada en áreas reales + Excel)
 const CARGOS_DISPONIBLES = [
@@ -622,27 +623,55 @@ export default function MealManagement() {
           </button>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={handleGeneratePDF}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition min-h-[44px]"
           >
             <Download size={18} />
-            PDF
+            <span className="hidden sm:inline">PDF</span>
           </button>
           <button
             onClick={handleGenerateWhatsApp}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition min-h-[44px]"
           >
             <MessageCircle size={18} />
-            WhatsApp
+            <span className="hidden sm:inline">WhatsApp</span>
+          </button>
+          <button
+            onClick={() => {
+              // Compartir resumen completo por WhatsApp
+              const confirmedRequests = requests.filter(r => r.status === 'CONFIRMADO');
+              if (confirmedRequests.length === 0) {
+                alert('No hay solicitudes confirmadas para compartir');
+                return;
+              }
+
+              const totalMessage = `🍽️ *RESUMEN ${selectedService.toUpperCase()}*\n\n` +
+                `📅 Fecha: ${new Date(selectedDate).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n` +
+                `📺 Programa: ${programName || 'RTVC'}\n\n` +
+                `✅ *Total Confirmados: ${confirmedRequests.length}*\n\n` +
+                `👥 *Lista de Personal:*\n` +
+                confirmedRequests.map((req, idx) =>
+                  `${idx + 1}. ${req.personnel_name} - ${req.cargo}${req.is_guest ? ' (INVITADO)' : ''}`
+                ).join('\n') +
+                `\n\n⏱️ ${new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}\n` +
+                `_Enviado desde RTVC Programación_`;
+
+              shareViaWhatsApp(totalMessage);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition min-h-[44px]"
+          >
+            <Send size={18} />
+            <span className="hidden sm:inline">Compartir Resumen</span>
+            <span className="sm:hidden">Compartir</span>
           </button>
           <button
             onClick={handleReset}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition min-h-[44px]"
           >
             <RefreshCw size={18} />
-            Reset
+            <span className="hidden sm:inline">Reset</span>
           </button>
         </div>
       </div>

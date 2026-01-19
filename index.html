@@ -3,11 +3,81 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
     <meta name="description" content="Sistema de Programación RTVC - Gestión de personal y horarios" />
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#1e40af" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="RTVC" />
+
+    <!-- Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-192x192.png" />
+
     <title>RTVC - Sistema de Programación</title>
+
     <!-- html2pdf.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Service Worker Registration - Versión Estable -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js', {
+            scope: '/',
+            updateViaCache: 'none'
+          })
+            .then((registration) => {
+              console.log('✅ Service Worker registrado correctamente');
+              console.log('   Scope:', registration.scope);
+              console.log('   Estado:', registration.active ? 'Activo' : 'Instalando...');
+
+              // Verificar actualizaciones cada 30 segundos (solo en desarrollo)
+              // En producción, usar 5-10 minutos
+              if (registration.active) {
+                setInterval(() => {
+                  registration.update().catch(err => {
+                    console.log('[SW] Error al actualizar (normal):', err.message);
+                  });
+                }, 30 * 1000);
+              }
+
+              // Manejar nuevas versiones del SW
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                console.log('🔄 Nueva versión del Service Worker disponible');
+
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('✅ Nueva versión lista. Recarga la página para actualizar.');
+                    // Opcional: mostrar notificación al usuario
+                  }
+                });
+              });
+            })
+            .catch((error) => {
+              console.error('❌ Error registrando Service Worker:', error);
+              console.error('   Detalles:', error.message);
+            });
+
+          // Detectar cuando un nuevo SW toma control
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            console.log('🔄 Service Worker actualizado, recargando página...');
+            window.location.reload();
+          });
+        });
+      } else {
+        console.warn('⚠️ Service Workers no soportados en este navegador');
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

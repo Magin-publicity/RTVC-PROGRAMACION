@@ -20,15 +20,15 @@ export const StudioManagement = () => {
     setError(null);
     try {
       if (activeTab === 'studios') {
-        const response = await fetch('http://localhost:3000/api/studios');
+        const response = await fetch('/api/studios');
         const data = await response.json();
         setStudios(data);
       } else if (activeTab === 'masters') {
-        const response = await fetch('http://localhost:3000/api/masters');
+        const response = await fetch('/api/masters');
         const data = await response.json();
         setMasters(data);
       } else if (activeTab === 'programs') {
-        const response = await fetch('http://localhost:3000/api/programs');
+        const response = await fetch('/api/programs');
         const data = await response.json();
         setPrograms(data);
       }
@@ -44,7 +44,7 @@ export const StudioManagement = () => {
 
     try {
       const endpoint = type === 'studios' ? 'studios' : type === 'masters' ? 'masters' : 'programs';
-      const response = await fetch(`http://localhost:3000/api/${endpoint}/${id}`, {
+      const response = await fetch(`/api/${endpoint}/${id}`, {
         method: 'DELETE'
       });
 

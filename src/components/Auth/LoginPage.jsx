@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { LogIn, AlertCircle } from 'lucide-react';
+import { apiFetch } from '../../config/api';
 
 export const LoginPage = ({ onLogin }) => {
   const [credentials, setCredentials] = useState({
@@ -15,19 +16,16 @@ export const LoginPage = ({ onLogin }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:3000/api/auth/login', {
+      console.log('[Login] Intentando iniciar sesión...');
+
+      // Usar apiFetch que automáticamente usa rutas relativas
+      const response = await apiFetch('/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(credentials)
       });
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Error al iniciar sesión');
-      }
+      console.log('[Login] Login exitoso:', data.user);
 
       // Guardar token y datos del usuario en localStorage
       localStorage.setItem('token', data.token);
@@ -37,7 +35,8 @@ export const LoginPage = ({ onLogin }) => {
       onLogin(data.user, data.token);
 
     } catch (err) {
-      setError(err.message);
+      console.error('[Login] Error:', err);
+      setError(err.message || 'Error al conectar con el servidor. Verifica que el backend esté corriendo.');
     } finally {
       setLoading(false);
     }

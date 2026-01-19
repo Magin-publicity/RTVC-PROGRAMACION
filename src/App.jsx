@@ -21,6 +21,7 @@ import { PersonalLogistico } from './components/Personnel/PersonalLogistico';
 import { RoutesManagement } from './components/Routes/RoutesManagement';
 import FleetManagement from './components/Fleet/FleetManagement';
 import MealManagement from './components/Meals/MealManagement';
+import { InstallPrompt } from './components/PWA/InstallPrompt';
 import { usePersonnel } from './hooks/usePersonnel';
 import { useSchedule } from './hooks/useSchedule';
 import { useNovelties } from './hooks/useNovelties';
@@ -28,6 +29,7 @@ import { useWeekNavigation } from './hooks/useWeekNavigation';
 import { useNotifications } from './hooks/useNotifications';
 import { getProgramsByDayType } from './data/programs';
 import { isWeekend } from './utils/dateUtils';
+import './styles/pwa.css';
 import { Zap, Calendar, Users, AlertCircle, FileText, Clock } from 'lucide-react';
 
 function App() {
@@ -68,15 +70,19 @@ function App() {
     setShowNoveltiesModal(true);
   };
 
-  const handleLogout = () => {
-    // Llamar al endpoint de logout
+  const handleLogout = async () => {
+    // Llamar al endpoint de logout usando ruta relativa
     if (token) {
-      fetch('http://localhost:3000/api/auth/logout', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      }).catch(err => console.error('Error al cerrar sesión:', err));
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } catch (err) {
+        console.error('Error al cerrar sesión:', err);
+      }
     }
 
     // Limpiar localStorage y estado
@@ -273,6 +279,9 @@ function App() {
         novelties={novelties}
         personnel={personnel}
       />
+
+      {/* PWA Install Prompt */}
+      <InstallPrompt />
     </>
   );
 }
