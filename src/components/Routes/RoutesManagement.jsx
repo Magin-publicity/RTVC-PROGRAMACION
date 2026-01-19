@@ -294,11 +294,11 @@ export const RoutesManagement = () => {
 
     // Configurar opciones del PDF optimizado para 2 rutas por página
     const opt = {
-      margin: [6, 8, 6, 8],
+      margin: [8, 10, 8, 10],
       filename: `Rutas_RTVC_${formattedDate}_Llamado_${shiftType}.pdf`,
       image: { type: 'jpeg', quality: 0.95 },
       html2canvas: {
-        scale: 1.65,
+        scale: 1.55,
         useCORS: true,
         logging: false,
         letterRendering: true,

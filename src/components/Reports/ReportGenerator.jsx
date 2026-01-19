@@ -4,16 +4,20 @@ import { Button } from '../UI/Button';
 import { Select } from '../UI/Select';
 import { DatePicker } from '../Calendar/DatePicker';
 import { ReportPreview } from './ReportPreview';
-import { Download, FileText, Calendar as CalendarIcon } from 'lucide-react';
+import { ReportDashboard } from '../Analytics/ReportDashboard';
+import { Download, FileText, Calendar as CalendarIcon, BarChart3 } from 'lucide-react';
 import { exportToExcel } from '../../utils/exportToExcel';
 import { generatePDF } from '../../utils/exportToPDF';
 import { getWeekDates } from '../../utils/dateUtils';
+import { getSampleWeekData } from '../../utils/sampleAnalyticsData';
 
 export const ReportGenerator = ({ schedule, personnel, novelties }) => {
   const [reportType, setReportType] = useState('weekly');
   const [startDate, setStartDate] = useState(new Date());
   const [selectedArea, setSelectedArea] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState(null);
   
   const reportTypes = [
     { value: 'weekly', label: 'Reporte Semanal' },
@@ -39,6 +43,25 @@ export const ReportGenerator = ({ schedule, personnel, novelties }) => {
       endDate: weekDates[6],
       includeNovelties: true
     });
+  };
+
+  const handleShowAnalytics = async () => {
+    // Calcular rango de fechas para la semana
+    const weekDates = getWeekDates(startDate);
+    const start = weekDates[0].toISOString().split('T')[0];
+    const end = weekDates[6].toISOString().split('T')[0];
+
+    // Usar datos de muestra para demostración
+    // TODO: Reemplaza esto con llamadas a tus servicios reales
+    const weekData = getSampleWeekData(start, end);
+
+    setAnalyticsData({
+      weekData,
+      startDate: start,
+      endDate: end
+    });
+
+    setShowAnalytics(true);
   };
   
   return (
@@ -77,7 +100,7 @@ export const ReportGenerator = ({ schedule, personnel, novelties }) => {
           >
             Generar Vista Previa
           </Button>
-          
+
           <Button
             onClick={handleExportExcel}
             variant="success"
@@ -85,13 +108,35 @@ export const ReportGenerator = ({ schedule, personnel, novelties }) => {
           >
             Exportar Excel
           </Button>
-          
+
           <Button
             onClick={handleExportPDF}
             variant="secondary"
             icon={<Download size={20} />}
           >
             Exportar PDF
+          </Button>
+        </div>
+      </div>
+
+      {/* Nuevo: Reporte Inteligente con KPIs */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow-md p-6 border-2 border-blue-200">
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <BarChart3 className="text-blue-600" size={24} />
+              Reporte Inteligente (KPIs)
+            </h3>
+            <p className="text-gray-600 mt-1 text-sm">
+              Visualice métricas consolidadas y KPIs de rendimiento. Incluye cierre de mes automático.
+            </p>
+          </div>
+          <Button
+            onClick={handleShowAnalytics}
+            variant="primary"
+            icon={<BarChart3 size={20} />}
+          >
+            Ver Dashboard
           </Button>
         </div>
       </div>
@@ -102,6 +147,16 @@ export const ReportGenerator = ({ schedule, personnel, novelties }) => {
           startDate={startDate}
           reportType={reportType}
           onClose={() => setShowPreview(false)}
+        />
+      )}
+
+      {/* Modal de Analytics Dashboard */}
+      {showAnalytics && analyticsData && (
+        <ReportDashboard
+          weekData={analyticsData.weekData}
+          startDate={analyticsData.startDate}
+          endDate={analyticsData.endDate}
+          onClose={() => setShowAnalytics(false)}
         />
       )}
     </div>

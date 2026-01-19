@@ -1463,11 +1463,59 @@ router.get('/daily/:date', async (req, res) => {
     // NO deben sobrescribir callTimes ya guardados con cambios manuales
     console.log('✅ NO sobrescribiendo callTimes con shifts - usando callTimes guardados directamente');
 
-    // 🔧 NO GENERAR ASIGNACIONES AUTOMÁTICAS - Usar solo las guardadas en BD
-    console.log('✅ Usando asignaciones guardadas de la BD (sin generar automáticas)');
+    // 🔧 GENERAR ASIGNACIONES AUTOMÁTICAS basadas en solapamiento de horarios
+    console.log('🔄 Generando asignaciones automáticas basadas en solapamiento de horarios...');
+
+    // Obtener los shifts para esta fecha
+    const shiftsData = programsData.shifts || [];
+
+    // Generar asignaciones automáticas para TODO el personal
+    const autoAssignments = {};
+
+    // Para cada programa, asignar personal cuyo turno solape con el horario del programa
+    allPrograms.forEach(program => {
+      if (!program.defaultTime) return; // Saltar programas sin hora
+
+      // Parsear hora del programa
+      const [programHour, programMin] = program.defaultTime.split(':').map(Number);
+      const programStartMinutes = programHour * 60 + programMin;
+
+      // Estimar duración del programa (1 hora por defecto)
+      const programEndMinutes = programStartMinutes + 60;
+
+      // Para cada shift, verificar solapamiento
+      shiftsData.forEach(shift => {
+        // Parsear horario del turno
+        const shiftStart = shift.shift_start; // "13:00:00"
+        const shiftEnd = shift.shift_end;     // "19:00:00"
+
+        const [shiftStartHour, shiftStartMin] = shiftStart.split(':').map(Number);
+        const [shiftEndHour, shiftEndMin] = shiftEnd.split(':').map(Number);
+
+        const shiftStartMinutes = shiftStartHour * 60 + shiftStartMin;
+        const shiftEndMinutes = shiftEndHour * 60 + shiftEndMin;
+
+        // Verificar solapamiento: el programa debe empezar antes de que termine el turno
+        // y terminar después de que empiece el turno
+        const haySolapamiento = programStartMinutes < shiftEndMinutes && programEndMinutes > shiftStartMinutes;
+
+        if (haySolapamiento) {
+          const key = `${shift.personnel_id}_${program.id}`;
+          autoAssignments[key] = true;
+        }
+      });
+    });
+
+    console.log(`   ✅ Generadas ${Object.keys(autoAssignments).length} asignaciones automáticas por solapamiento`);
+
+    // Mezclar asignaciones guardadas + automáticas (las guardadas tienen prioridad)
+    const mergedAssignments = {
+      ...autoAssignments,      // Primero las automáticas
+      ...finalAssignments      // Luego las guardadas (sobrescriben si hay conflicto)
+    };
 
     console.log(`✅ Programación encontrada para ${date}`);
-    console.log(`   📊 Asignaciones: ${Object.keys(finalAssignments).length}`);
+    console.log(`   📊 Asignaciones totales: ${Object.keys(mergedAssignments).length} (${Object.keys(finalAssignments).length} guardadas + ${Object.keys(autoAssignments).length} automáticas)`);
     console.log(`   ⏰ CallTimes: ${Object.keys(callTimes).length}`);
     console.log(`   📺 Programas: ${allPrograms.length} (${reporteriaPrograms.length} de reportería)`);
     console.log(`   🕐 Guardado en: ${schedule.updated_at}`);
@@ -1475,7 +1523,7 @@ router.get('/daily/:date', async (req, res) => {
     res.json({
       found: true,
       date,
-      assignments: finalAssignments, // 🔧 USAR finalAssignments en lugar de schedule.assignments_data
+      assignments: mergedAssignments, // 🔧 Mezcla de guardadas + automáticas
       callTimes: callTimes,
       programs: allPrograms,
       savedAt: schedule.updated_at,
@@ -1549,7 +1597,7 @@ router.delete('/remove-program/:programId', async (req, res) => {
   }
 });
 
-// POST - Regenerar turnos eliminando datos guardados (incluyendo asignaciones de reportería)
+// POST - Regenerar SOLO turnos preservando programas y asignaciones
 router.post('/regenerar-turnos', async (req, res) => {
   try {
     const { mes, anio } = req.body;
@@ -1566,39 +1614,101 @@ router.post('/regenerar-turnos', async (req, res) => {
     const ultimoDia = new Date(anio, mes, 0).getDate();
     const ultimoDiaStr = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
 
-    console.log(`🔄 Regenerando turnos y asignaciones para ${primerDia} a ${ultimoDiaStr}...`);
+    console.log(`🔄 Regenerando SOLO turnos (preservando programas) para ${primerDia} a ${ultimoDiaStr}...`);
 
-    // 1. Eliminar espacios de salida de reportería del período
-    const espaciosResult = await pool.query(
-      `DELETE FROM reporteria_espacios_salida
-       WHERE fecha >= $1 AND fecha <= $2`,
-      [primerDia, ultimoDiaStr]
-    );
-    console.log(`   ✅ Eliminados ${espaciosResult.rowCount} espacios de reportería`);
+    let diasActualizados = 0;
 
-    // 2. Eliminar todos los registros de turnos del mes
-    const turnosResult = await pool.query(
-      `DELETE FROM daily_schedules
-       WHERE date >= $1 AND date <= $2`,
-      [primerDia, ultimoDiaStr]
-    );
-    console.log(`   ✅ Eliminados ${turnosResult.rowCount} días de programación`);
+    // Procesar cada día del mes
+    for (let dia = 1; dia <= ultimoDia; dia++) {
+      const fecha = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
 
-    console.log(`✅ REGENERACIÓN COMPLETA: Los turnos y asignaciones se regenerarán automáticamente al cargar cada día.`);
+      // Verificar si existe registro para este día
+      const existingResult = await pool.query(
+        'SELECT date, assignments_data, programs_data FROM daily_schedules WHERE date = $1',
+        [fecha]
+      );
+
+      if (existingResult.rows.length > 0) {
+        // YA EXISTE - Regenerar SOLO shifts y callTimes, mantener programs y assignments
+        const existingData = existingResult.rows[0];
+        const existingAssignments = existingData.assignments_data || {};
+        const existingPrograms = existingData.programs_data || {};
+
+        console.log(`   🔄 ${fecha}: Regenerando turnos (${Object.keys(existingPrograms.programs || []).length} programas preservados)...`);
+
+        // Generar nuevos turnos llamando internamente al endpoint auto-shifts
+        // Simular la llamada HTTP usando el mismo código
+        const selectedDate = new Date(fecha + 'T12:00:00');
+        const dayOfWeek = selectedDate.getDay();
+
+        let newShifts = [];
+
+        // Llamar a la lógica de auto-shifts (reutilizando el código existente)
+        try {
+          // Hacer una llamada interna al endpoint
+          const http = require('http');
+          const shiftsData = await new Promise((resolve, reject) => {
+            http.get(`http://localhost:3000/api/schedule/auto-shifts/${fecha}`, (res) => {
+              let data = '';
+              res.on('data', chunk => data += chunk);
+              res.on('end', () => {
+                try {
+                  resolve(JSON.parse(data));
+                } catch (e) {
+                  resolve([]);
+                }
+              });
+            }).on('error', reject);
+          });
+          newShifts = shiftsData || [];
+        } catch (error) {
+          console.warn(`   ⚠️ No se pudieron generar turnos automáticos para ${fecha}: ${error.message}`);
+          continue;
+        }
+
+        // Generar callTimes desde los nuevos turnos
+        const newCallTimes = {};
+        newShifts.forEach(shift => {
+          newCallTimes[shift.personnel_id] = shift.shift_start.substring(0, 5);
+        });
+
+        // Crear programs_data actualizado: MANTENER programs, ACTUALIZAR shifts y callTimes
+        const updatedProgramsData = {
+          programs: existingPrograms.programs || [], // ✅ PRESERVAR programas existentes
+          shifts: newShifts, // 🔄 NUEVOS turnos
+          callTimes: newCallTimes // 🔄 NUEVOS llamados
+        };
+
+        // Actualizar SOLO programs_data, MANTENER assignments_data sin cambios
+        await pool.query(
+          `UPDATE daily_schedules
+           SET programs_data = $1, updated_at = CURRENT_TIMESTAMP
+           WHERE date = $2`,
+          [JSON.stringify(updatedProgramsData), fecha]
+        );
+
+        diasActualizados++;
+        console.log(`   ✅ ${fecha}: ${newShifts.length} turnos regenerados, ${(existingPrograms.programs || []).length} programas preservados`);
+      } else {
+        // NO EXISTE - Se generará automáticamente al cargar el día
+        console.log(`   ⏭️  ${fecha}: No existe registro, se generará al cargar`);
+      }
+    }
+
+    console.log(`✅ REGENERACIÓN COMPLETA: ${diasActualizados} días actualizados con nuevos turnos (programas preservados).`);
 
     res.json({
       success: true,
-      message: `Turnos y asignaciones regenerados para ${mes}/${anio}`,
-      diasEliminados: turnosResult.rowCount,
-      espaciosEliminados: espaciosResult.rowCount,
+      message: `Turnos regenerados para ${mes}/${anio}`,
+      diasActualizados: diasActualizados,
       periodo: `${primerDia} a ${ultimoDiaStr}`,
-      nota: 'Al cargar cada día, se regenerarán automáticamente tanto los turnos como las asignaciones de reportería sincronizadas'
+      nota: 'Los turnos fueron actualizados según el nuevo personal. Tus programas y asignaciones se mantuvieron intactos.'
     });
 
   } catch (error) {
-    console.error('❌ Error regenerando turnos y asignaciones:', error);
+    console.error('❌ Error regenerando turnos:', error);
     res.status(500).json({
-      error: 'Error al regenerar turnos y asignaciones',
+      error: 'Error al regenerar turnos',
       details: error.message
     });
   }

@@ -287,8 +287,8 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
         // PASO 5: Assignments Y CallTimes - de BD o automáticos
         if (savedData.found && savedData.assignments && Object.keys(savedData.assignments).length > 0) {
-          // Usar SOLO las asignaciones guardadas en BD, sin mezclar con automáticas
-          const finalAssignments = savedData.assignments;
+          // Usar las asignaciones guardadas en BD como base
+          const finalAssignments = { ...savedData.assignments };
 
           console.log('✅ [ScheduleTable] Asignaciones cargadas desde BD:', Object.keys(finalAssignments).length, 'assignments');
           console.log('🔑 [ScheduleTable] Primeras 10 keys:', Object.keys(finalAssignments).slice(0, 10));
@@ -296,6 +296,42 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
           // USAR SIEMPRE los callTimes guardados en BD - NO generarlos desde shifts
           // Los callTimes guardados son la verdad absoluta con cambios manuales del usuario
           const finalCallTimes = savedData.callTimes || {};
+
+          // COMPLEMENTAR asignaciones faltantes basándose en callTimes y rangos de programas
+          console.log('🔄 [Auto-completar] Verificando asignaciones faltantes según callTimes...');
+          let assignmentsAdded = 0;
+
+          personnel.forEach(person => {
+            const personCallTime = finalCallTimes[person.id];
+            if (!personCallTime || personCallTime === '--:--' || personCallTime === '') return;
+
+            const callMinutes = timeToMinutes(personCallTime);
+            const endMinutes = callMinutes + (8 * 60); // 8 horas de turno
+
+            sortedPrograms.forEach(program => {
+              const key = `${person.id}_${program.id}`;
+
+              // Si ya existe la asignación, no hacer nada
+              if (finalAssignments[key]) return;
+
+              // Obtener hora de inicio del programa
+              const programTime = program.defaultTime || program.time || '';
+              const programStartTime = programTime.split('-')[0].trim();
+              const programMinutes = timeToMinutes(programStartTime);
+
+              // Si el programa está dentro del rango del turno, auto-asignar
+              if (programMinutes !== -1 && callMinutes !== -1 &&
+                  programMinutes >= callMinutes && programMinutes < endMinutes) {
+                finalAssignments[key] = true;
+                assignmentsAdded++;
+                console.log(`  ✅ Auto-agregando ${person.name} → ${program.name} (${programStartTime})`);
+              }
+            });
+          });
+
+          if (assignmentsAdded > 0) {
+            console.log(`🎯 [Auto-completar] ${assignmentsAdded} asignaciones agregadas automáticamente`);
+          }
 
           if (!isCancelled) {
             setCallTimes(finalCallTimes);
@@ -486,7 +522,20 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
   };
 
   const handleRegenerarTurnos = async () => {
-    if (!window.confirm('¿Regenerar todos los turnos del mes actual? Esto eliminará las programaciones guardadas y las recalculará según el personal activo.')) {
+    if (!window.confirm(
+      '🔄 ¿Regenerar turnos del mes?\n\n' +
+      'Esta función actualiza SOLO los turnos y llamados según el personal actual.\n\n' +
+      '✅ SE PRESERVAN:\n' +
+      '• Todos tus programas (incluyendo eliminados)\n' +
+      '• Todas las asignaciones manuales\n' +
+      '• Todos tus cambios personalizados\n\n' +
+      '🔄 SE ACTUALIZAN:\n' +
+      '• Turnos reorganizados según nuevo personal\n' +
+      '• Llamados ajustados a las nuevas rotaciones\n\n' +
+      '💡 Úsalo cuando agregues nuevo personal para que el sistema\n' +
+      'redistribuya automáticamente los turnos.\n\n' +
+      '¿Continuar?'
+    )) {
       return;
     }
 
@@ -504,7 +553,12 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       const result = await response.json();
 
       if (response.ok) {
-        alert(`✅ ${result.message}\nDías regenerados: ${result.diasEliminados}`);
+        alert(
+          `✅ ${result.message}\n\n` +
+          `Días actualizados: ${result.diasActualizados}\n` +
+          `Período: ${result.periodo}\n\n` +
+          `${result.nota}`
+        );
         window.location.reload();
       } else {
         alert(`❌ Error: ${result.error}`);
@@ -947,10 +1001,9 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                             bgColor = '#EF4444'; // Rojo para novedades
                             textColor = '#FFFFFF';
                           }
-                        } else if (isAssigned && shouldShow) {
-                          // IMPORTANTE: Solo mostrar la asignación si shouldShow es true
-                          // shouldShow valida que el programa está dentro del rango de callTime
-                          // o que es una asignación manual (excepción)
+                        } else if (isAssigned) {
+                          // IMPORTANTE: Si hay una asignación guardada, SIEMPRE mostrarla
+                          // Las asignaciones guardadas en BD son la verdad absoluta
 
                           // Si hay nota personalizada, usarla
                           if (assignmentNotes[key]) {

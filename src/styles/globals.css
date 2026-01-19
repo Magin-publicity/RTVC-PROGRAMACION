@@ -47,10 +47,19 @@ body {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
-  
+
   .no-print {
     display: none !important;
   }
+
+  .print-only {
+    display: block !important;
+  }
+}
+
+/* Normal view - hide print-only elements */
+.print-only {
+  display: none;
 }
 
 /* Animation Classes */
@@ -186,6 +195,104 @@ body {
 .page-break-after {
   page-break-after: always !important;
   break-after: page !important;
+}
+
+/* PDF Analytics - Compacto para una sola página */
+.pdf-generating-analytics #root {
+  font-size: 11px !important;
+}
+
+.pdf-generating-analytics .efficiency-card {
+  padding: 12px !important;
+  margin-bottom: 8px !important;
+}
+
+.pdf-generating-analytics .efficiency-card h3 {
+  font-size: 14px !important;
+  margin-bottom: 2px !important;
+}
+
+.pdf-generating-analytics .efficiency-card p {
+  font-size: 10px !important;
+}
+
+.pdf-generating-analytics .efficiency-card .text-4xl {
+  font-size: 28px !important;
+}
+
+.pdf-generating-analytics .kpi-card {
+  padding: 10px !important;
+  margin-bottom: 8px !important;
+  page-break-inside: avoid !important;
+}
+
+.pdf-generating-analytics .kpi-card h3 {
+  font-size: 13px !important;
+  margin-bottom: 6px !important;
+}
+
+.pdf-generating-analytics .kpi-card .text-sm {
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+}
+
+.pdf-generating-analytics .kpi-card .text-lg,
+.pdf-generating-analytics .kpi-card .text-xl {
+  font-size: 14px !important;
+}
+
+.pdf-generating-analytics .kpi-card .text-2xl {
+  font-size: 18px !important;
+}
+
+.pdf-generating-analytics .kpi-card .text-xs {
+  font-size: 9px !important;
+}
+
+.pdf-generating-analytics .service-breakdown {
+  padding: 8px !important;
+  margin-top: 8px !important;
+}
+
+.pdf-generating-analytics .service-breakdown h4 {
+  font-size: 12px !important;
+  margin-bottom: 6px !important;
+}
+
+.pdf-generating-analytics .service-breakdown .text-2xl {
+  font-size: 16px !important;
+}
+
+.pdf-generating-analytics .grid {
+  gap: 8px !important;
+}
+
+.pdf-generating-analytics .space-y-3 > * + * {
+  margin-top: 6px !important;
+}
+
+.pdf-generating-analytics .mb-6 {
+  margin-bottom: 8px !important;
+}
+
+.pdf-generating-analytics .p-6 {
+  padding: 8px !important;
+}
+
+.pdf-generating-analytics .p-5 {
+  padding: 8px !important;
+}
+
+.pdf-generating-analytics .p-4 {
+  padding: 6px !important;
+}
+
+.pdf-generating-analytics .p-3 {
+  padding: 5px !important;
+}
+
+.pdf-generating-analytics .p-2 {
+  padding: 4px !important;
 }
 
 /* PDF Generation Styles - Meal Management */
