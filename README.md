@@ -1,288 +1,308 @@
-# Sistema de Programación RTVC
+# 📺 RTVC - Sistema de Coordinación y Programación
 
-Sistema automatizado para la gestión de programación de personal de RTVC.
-
-## 📚 Documentación
-
-- **[Guía Rápida](docs/GUIA-RAPIDA.md)** - ¡Empieza aquí! 5 minutos para entender todo
-- **[Arquitectura del Sistema](docs/ARQUITECTURA.md)** - Documentación completa de la arquitectura
-- **[Diagramas Visuales](docs/DIAGRAMAS.md)** - Diagramas de flujo y estructura
-- **[API Reference](docs/API.md)** - Documentación de la API REST
-- **[Guía de Despliegue](docs/DEPLOYMENT.md)** - Instrucciones para producción
-
-## ✨ Características
-
-- 📅 Gestión de programación semanal
-- 👥 Administración de personal por áreas
-- 🔔 Gestión de novedades (viajes, incapacidades, permisos, etc.)
-- 🔄 Rotación automática de turnos (ciclo de 4 semanas)
-- 📊 Generación de reportes en Excel y PDF
-- 📱 Interfaz responsive y moderna
-- 🌐 Sistema de turnos diferenciados para fin de semana
-
-## Tecnologías
-
-### Frontend
-- React 18
-- Vite
-- Tailwind CSS
-- Lucide React (iconos)
-
-### Backend
-- Node.js
-- Express
-- PostgreSQL
-- pg (node-postgres)
-
-## Instalación
-
-### Prerrequisitos
-- Node.js 18+ 
-- PostgreSQL 14+
-- npm o yarn
-
-### Backend
-
-1. Navegar a la carpeta backend:
-```bash
-cd backend
-```
-
-2. Instalar dependencias:
-```bash
-npm install
-```
-
-3. Configurar variables de entorno:
-```bash
-cp .env.example .env
-# Editar .env con tus configuraciones
-```
-
-4. Crear la base de datos:
-```bash
-psql -U postgres -c "CREATE DATABASE rtvc_scheduling;"
-```
-
-5. Ejecutar migraciones:
-```bash
-npm run db:setup
-npm run db:seed
-```
-
-6. Iniciar servidor:
-```bash
-npm run dev
-```
-
-### Frontend
-
-1. Instalar dependencias:
-```bash
-npm install
-```
-
-2. Configurar variables de entorno:
-```bash
-cp .env.example .env
-# Editar .env con la URL del backend
-```
-
-3. Iniciar aplicación:
-```bash
-npm run dev
-```
-
-4. Abrir en el navegador:
-```
-http://localhost:5173
-```
-
-## Estructura del Proyecto
-```
-APP-PROGRAMACION-RTVC/
-├── backend/
-│   ├── config/           # Configuraciones
-│   ├── controllers/      # Controladores
-│   ├── database/         # Migraciones y seeds
-│   ├── models/           # Modelos de datos
-│   ├── routes/           # Rutas API
-│   ├── utils/            # Utilidades
-│   └── server.js         # Servidor principal
-├── src/
-│   ├── components/       # Componentes React
-│   ├── data/             # Datos estáticos
-│   ├── hooks/            # Custom hooks
-│   ├── services/         # Servicios API
-│   ├── styles/           # Estilos globales
-│   ├── utils/            # Utilidades
-│   └── App.jsx           # Componente principal
-└── public/               # Archivos estáticos
-```
-
-## Uso
-
-### Gestión de Personal
-
-1. Ir a la sección "Personal"
-2. Hacer clic en "Agregar Personal"
-3. Completar formulario con:
-   - Nombre completo
-   - Área de trabajo
-   - Rol
-   - Turno actual
-   - Datos de contacto
-
-### Crear Programación
-
-1. Ir a "Programación"
-2. Seleccionar semana
-3. Hacer clic en "Generar Programación"
-4. El sistema asigna automáticamente:
-   - Turnos rotativos
-   - Personal por área
-   - Horarios según programas
-
-### Agregar Novedades
-
-1. Ir a "Novedades"
-2. Hacer clic en "Agregar Novedad"
-3. Seleccionar:
-   - Personal
-   - Fecha
-   - Tipo de novedad
-   - Descripción
-
-### Generar Reportes
-
-1. Ir a "Reportes"
-2. Seleccionar:
-   - Tipo de reporte
-   - Rango de fechas
-3. Hacer clic en "Generar"
-4. Exportar en formato deseado
-
-## Rotación de Turnos
-
-El sistema maneja 5 turnos principales que rotan semanalmente:
-- 5:00 AM
-- 8:00 AM
-- 11:00 AM
-- 2:00 PM
-- 5:00 PM
-
-Cada semana, el personal avanza al siguiente turno en el ciclo.
-
-## Tipos de Novedades
-
-- ✈️ Viaje
-- 🏥 Incapacidad
-- 💔 Tragedia Familiar
-- 🏖️ Vacaciones
-- 📄 Sin Contrato
-- 📋 Permiso
-- ✅ Disponible
-- ✍️ Redacción
-- 🎬 Estudio 3
-- 🎛️ Master 3
-- 🔧 Taller
-- 👥 Dupla
-- 📡 Live U
-
-## Áreas de Personal
-
-1. **PRODUCCIÓN** - Productores y asistentes
-2. **DIRECTORES DE CÁMARA** - Directores técnicos
-3. **VTR** - Operadores de VTR
-4. **VMIX Y PANTALLAS** - Operadores técnicos
-5. **GENERADORES DE CARACTERES** - Diseñadores
-6. **OPERADORES DE AUDIO** - Técnicos de sonido
-7. **OPERADORES DE PROMPTER** - Operadores
-8. **CAMARÓGRAFOS DE ESTUDIO** - Camarógrafos y asistentes
-9. **COORDINADOR ESTUDIO** - Coordinación
-10. **ESCENOGRAFÍA** - Escenógrafos y asistentes
-11. **ASISTENTES DE LUCES** - Técnicos de iluminación
-12. **OPERADORES DE VIDEO** - Operadores
-13. **CONTRIBUCIONES** - Personal de enlaces
-14. **CAMARÓGRAFOS DE REPORTERÍA** - Reporteros y realizadores
-15. **VESTUARIO** - Vestuaristas
-16. **MAQUILLAJE** - Maquilladores
-
-## API Endpoints
-
-### Personal
-- GET `/api/personnel` - Obtener todo el personal
-- GET `/api/personnel/:id` - Obtener persona por ID
-- GET `/api/personnel/area/:area` - Obtener por área
-- POST `/api/personnel` - Crear persona
-- PUT `/api/personnel/:id` - Actualizar persona
-- PATCH `/api/personnel/:id/shift` - Actualizar turno
-- DELETE `/api/personnel/:id` - Eliminar persona
-
-### Programación
-- GET `/api/schedule/date/:date` - Obtener por fecha
-- GET `/api/schedule/week?startDate=&endDate=` - Obtener semana
-- POST `/api/schedule` - Crear programación
-- POST `/api/schedule/bulk` - Crear múltiples
-- DELETE `/api/schedule/:id` - Eliminar programación
-
-### Novedades
-- GET `/api/novelties` - Obtener todas
-- GET `/api/novelties/date/:date` - Obtener por fecha
-- GET `/api/novelties/personnel/:id` - Obtener por persona
-- GET `/api/novelties/range?startDate=&endDate=` - Obtener rango
-- POST `/api/novelties` - Crear novedad
-- PUT `/api/novelties/:id` - Actualizar novedad
-- DELETE `/api/novelties/:id` - Eliminar novedad
-
-## Desarrollo
-
-### Scripts disponibles
-```bash
-# Frontend
-npm run dev          # Iniciar desarrollo
-npm run build        # Compilar producción
-npm run preview      # Vista previa producción
-npm run lint         # Ejecutar linter
-
-# Backend
-npm start            # Iniciar producción
-npm run dev          # Iniciar desarrollo
-npm run db:setup     # Configurar base de datos
-npm run db:seed      # Insertar datos iniciales
-```
-
-### Agregar nuevo componente
-```bash
-# Crear archivo
-touch src/components/MiComponente/MiComponente.jsx
-
-# Importar y usar
-import { MiComponente } from './components/MiComponente/MiComponente';
-```
-
-## Contribución
-
-1. Fork el proyecto
-2. Crear rama feature (`git checkout -b feature/AmazingFeature`)
-3. Commit cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abrir Pull Request
-
-## Licencia
-
-Este proyecto es propiedad de RTVC.
-
-## Soporte
-
-Para soporte técnico, contactar a:
-- Email: soporte@rtvc.gov.co
-- Tel: +57 (1) 2200700
-
-## Autores
-
-- Juan Pablo Zorrilla - Productor Logistico 
+Sistema integral para la gestión de personal, coordinación de equipos técnicos, rutas, flota vehicular y alimentación del personal de RTVC (Radio Televisión Nacional de Colombia).
 
 ---
 
-Desarrollado con ❤️ para RTVC
+## 🚀 Inicio Rápido
+
+### Requisitos Previos
+- Node.js 18+ (recomendado: 20.x)
+- npm 9+
+- Base de datos PostgreSQL 14+
+
+### Instalación
+
+```bash
+# 1. Instalar dependencias del frontend
+npm install
+
+# 2. Instalar dependencias del backend
+cd backend
+npm install
+
+# 3. Configurar variables de entorno
+cp .env.example .env
+# Editar .env con tus credenciales de base de datos
+
+# 4. Inicializar base de datos
+npm run init-db
+```
+
+### Ejecutar en Desarrollo
+
+```bash
+# Opción 1: Script automático (Windows)
+.\start-dev.ps1
+
+# Opción 2: Manual
+# Terminal 1 - Backend
+cd backend
+npm run dev
+
+# Terminal 2 - Frontend
+npm run dev
+```
+
+**URLs:**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:3000
+
+---
+
+## 📱 PWA (Progressive Web App)
+
+La aplicación está configurada como PWA y puede instalarse en dispositivos móviles.
+
+### Instalación en Móvil
+
+1. **Desde el PC:** Asegúrate de que ambos servidores estén corriendo
+2. **Desde el celular:** Abre Chrome y ve a: `http://[TU_IP]:5173`
+3. **Instalar:** Menú ⋮ → "Agregar a pantalla principal"
+
+📚 **Documentación completa:** [docs/pwa/](docs/pwa/)
+
+---
+
+## 📂 Estructura del Proyecto
+
+```
+RTVC PROGRAMACION/
+├── backend/                    # API Node.js + Express
+│   ├── db/                     # Configuración de base de datos
+│   ├── routes/                 # Endpoints de la API
+│   └── server.js               # Servidor principal
+│
+├── src/                        # Frontend React
+│   ├── components/             # Componentes de React
+│   │   ├── Assignments/        # Asignaciones de personal
+│   │   ├── Auth/               # Autenticación
+│   │   ├── Dashboard/          # Dashboard administrativo
+│   │   ├── Fleet/              # Gestión de flota
+│   │   ├── Layout/             # Layouts y navegación
+│   │   ├── Logistics/          # Logística (LiveU, equipos)
+│   │   ├── Meals/              # Gestión de alimentación
+│   │   ├── Personnel/          # Gestión de personal
+│   │   ├── Routes/             # Gestión de rutas
+│   │   └── Schedule/           # Programación horaria
+│   │
+│   ├── config/                 # Configuración (API, constantes)
+│   ├── data/                   # Datos estáticos y constantes
+│   ├── hooks/                  # Custom React Hooks
+│   ├── services/               # Servicios de API
+│   ├── styles/                 # Estilos CSS globales
+│   └── utils/                  # Utilidades y helpers
+│
+├── public/                     # Archivos estáticos
+│   ├── icons/                  # Iconos PWA
+│   ├── sw.js                   # Service Worker
+│   └── manifest.json           # Manifest PWA
+│
+├── docs/                       # 📚 Documentación
+│   ├── pwa/                    # Documentación PWA
+│   ├── mobile/                 # Guías de acceso móvil
+│   ├── modules/                # Documentación de módulos
+│   └── setup/                  # Configuración y arquitectura
+│
+└── scripts/                    # Scripts de utilidad
+    └── create-icons-from-logo.html
+```
+
+---
+
+## 🎯 Funcionalidades Principales
+
+### 1. 👥 Gestión de Personal
+- Registro y administración de empleados
+- Asignación de roles (Camarógrafos, Realizadores, Asistentes, Conductores, etc.)
+- Control de turnos y disponibilidad
+- Gestión de contratos (alertas de vencimiento)
+
+### 2. 📅 Coordinación y Asignaciones
+- **Asignación de Realizadores:** Control de disponibilidad por fecha
+- **Reportería:** Coordinación de equipos técnicos (camarógrafos + asistentes)
+- Visualización en tiempo real de disponibilidad
+- Grupos de turnos (Mañana, Tarde, Noche)
+
+### 3. 🚗 Gestión de Flota
+- Registro de vehículos
+- Despachos de vehículos por fecha
+- Estados: Disponible, En Ruta, Mantenimiento
+- Asignación de conductores
+
+### 4. 📡 Logística
+- **Equipos LiveU:** Control de transmisión en vivo
+- Estados: Disponible, En Terreno, En Reparación
+- Asignación a despachos
+
+### 5. 🚌 Gestión de Rutas
+- Creación de rutas de transporte
+- Asignación de personal a rutas
+- Control de horarios de salida/llegada
+- Gestión de vehículos por ruta
+
+### 6. 🍽️ Gestión de Alimentación
+- Registro de consumo diario
+- Asignación por turno
+- Reportes de alimentación
+
+### 7. 📊 Dashboard Administrativo
+- Visualización en tiempo real de:
+  - Disponibilidad de personal técnico
+  - Estado de equipos LiveU
+  - Flota vehicular
+  - Novedades y alertas
+- Contratos próximos a vencer
+- Personal por área
+
+### 8. 📈 Analytics (Reporte Inteligente)
+- Generación de reportes PDF
+- Estadísticas de:
+  - Equipos más solicitados
+  - Rutas más frecuentes
+  - Camarógrafos más activos
+  - Alertas y recomendaciones inteligentes
+- Exportación de datos
+
+---
+
+## 📚 Documentación Detallada
+
+### PWA y Móvil
+- [Guía de Instalación PWA](docs/pwa/INSTALAR_PWA_BOTON.md)
+- [Configuración Completa PWA](docs/pwa/PWA_COMPLETE_GUIDE.md)
+- [Mejoras de UI Móvil](docs/mobile/MOBILE_UI_IMPROVEMENTS.md)
+- [Fix Login Móvil](docs/mobile/FIX_LOGIN_MOVIL.md)
+- [Fix Dashboard Móvil](docs/mobile/FIX_DASHBOARD_MOBILE.md)
+
+### Módulos
+- [Gestión de Rutas](docs/modules/GUIA_MODULO_RUTAS.md)
+- [Gestión de Flota](docs/modules/INSTRUCTIVO_GESTION_DE_FLOTA.md)
+- [Gestión de Alimentación](docs/modules/INSTRUCTIVO_GESTION_DE_ALIMENTACION.md)
+
+### Configuración
+- [Arquitectura de Red](docs/setup/NETWORK_ARCHITECTURE.md)
+- [Integración Analytics](docs/setup/INTEGRACION_ANALYTICS.md)
+- [URLs Corregidas](docs/setup/URLS_CORREGIDAS_RESUMEN.md)
+
+---
+
+## 🛠️ Tecnologías
+
+### Frontend
+- **React 18** - UI Framework
+- **Vite** - Build tool y dev server
+- **Tailwind CSS** - Estilos
+- **Lucide React** - Iconos
+- **Socket.io Client** - WebSockets en tiempo real
+- **html2pdf.js** - Generación de PDFs
+
+### Backend
+- **Node.js** - Runtime
+- **Express** - Framework web
+- **PostgreSQL** - Base de datos
+- **Socket.io** - WebSockets en tiempo real
+- **bcrypt** - Encriptación de contraseñas
+- **jsonwebtoken** - Autenticación JWT
+
+---
+
+## 🔐 Autenticación
+
+El sistema utiliza JWT (JSON Web Tokens) para autenticación:
+
+- **Login:** `/api/auth/login`
+- **Logout:** `/api/auth/logout`
+- Token almacenado en localStorage
+- Validación en cada petición
+
+**Usuarios por defecto:**
+- Admin: `admin` / `admin123`
+- Coordinador: `coord` / `coord123`
+
+---
+
+## 🌐 Acceso desde Red Local
+
+Para acceder desde dispositivos móviles en la misma red:
+
+1. **Obtener IP local:**
+   ```bash
+   ipconfig  # Windows
+   ifconfig  # Mac/Linux
+   ```
+
+2. **Configurar firewall:** Permitir puertos 3000 y 5173
+
+3. **Desde el celular:** `http://[TU_IP]:5173`
+
+📚 **Guía completa:** [docs/mobile/ACCESO_MOVIL_GUIA.md](docs/mobile/ACCESO_MOVIL_GUIA.md)
+
+---
+
+## 🐛 Troubleshooting
+
+### Frontend no se conecta al Backend
+- Verifica que ambos servidores estén corriendo
+- Revisa que no haya URLs hardcodeadas con `localhost:3000`
+- Todas las URLs deben ser relativas: `/api/...`
+
+### PWA no se instala en móvil
+- Verifica que existan: `public/icons/icon-192x192.png` y `icon-512x512.png`
+- Deben ser PNG reales (> 5 KB), no SVG
+- Limpia el cache del navegador móvil
+
+### Service Worker no actualiza
+- Elimina el SW: Chrome → `chrome://serviceworker-internals`
+- Limpia cache: DevTools → Application → Clear storage
+- Recarga con Ctrl+Shift+R
+
+---
+
+## 📝 Scripts Disponibles
+
+```bash
+# Frontend
+npm run dev          # Desarrollo con Vite
+npm run build        # Build para producción
+npm run preview      # Preview del build
+
+# Backend
+cd backend
+npm run dev          # Desarrollo con nodemon
+npm start            # Producción
+npm run init-db      # Inicializar BD
+```
+
+---
+
+## 🤝 Contribución
+
+1. Crea un branch: `git checkout -b feature/nueva-funcionalidad`
+2. Commit: `git commit -m "Agregar nueva funcionalidad"`
+3. Push: `git push origin feature/nueva-funcionalidad`
+4. Crea un Pull Request
+
+---
+
+## 📄 Licencia
+
+© 2026 RTVC - Radio Televisión Nacional de Colombia
+
+---
+
+## 📞 Soporte
+
+Para reportar problemas o sugerencias:
+- Email: soporte@rtvc.gov.co
+- Tel: +57 (1) 2200700
+
+---
+
+## ✍️ Autores
+
+- Juan Pablo Zorrilla - Productor Logístico
+
+---
+
+**Última actualización:** 2026-01-19
