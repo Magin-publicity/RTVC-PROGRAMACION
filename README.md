@@ -281,7 +281,7 @@ Para soporte técnico, contactar a:
 
 ## Autores
 
-- Equipo de Desarrollo RTVC
+- Juan Pablo Zorrilla - Productor Logistico 
 
 ---
 
