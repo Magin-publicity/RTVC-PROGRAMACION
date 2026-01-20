@@ -42,6 +42,10 @@ function App() {
 
   // Verificar si hay sesión guardada al cargar la app
   useEffect(() => {
+    // Limpiar filtros problemáticos del localStorage (fix temporal)
+    localStorage.removeItem('rtvc_disabled_programs');
+    localStorage.removeItem('rtvc_program_dates');
+
     const savedToken = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
 

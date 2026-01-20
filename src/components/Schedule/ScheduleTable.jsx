@@ -193,24 +193,8 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         return program.recordingDates.includes(dateStr);
       });
 
-      // Cargar programas deshabilitados y fechas específicas
-      const disabledPrograms = JSON.parse(localStorage.getItem('rtvc_disabled_programs') || '[]');
-      const programDates = JSON.parse(localStorage.getItem('rtvc_program_dates') || '{}');
-
-      // Filtrar programas predefinidos: quitar los deshabilitados y respetar fechas específicas
-      const filteredBasePrograms = basePrograms.filter(program => {
-        // Si está deshabilitado, no mostrarlo
-        if (disabledPrograms.includes(program.id)) return false;
-
-        // Si tiene fechas específicas, verificar que incluya la fecha actual
-        const specificDates = programDates[program.id];
-        if (specificDates && specificDates.length > 0) {
-          return specificDates.includes(dateStr);
-        }
-
-        // Si no tiene fechas específicas, mostrarlo siempre
-        return true;
-      });
+      // No filtrar programas - mostrar todos siempre
+      const filteredBasePrograms = basePrograms;
 
       const mappings = programMappingService.getAll();
       setProgramMappings(mappings);
@@ -250,32 +234,8 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         if (isCancelled) return;
         setAutoShifts(shiftsData);
 
-        // PASO 4: Si la BD tiene programs, USARLOS en lugar de los locales
-        if (savedData.found && savedData.programs && savedData.programs.length > 0) {
-          // Mezclar programs del backend con custom programs del frontend
-          const backendPrograms = savedData.programs;
-          const mergedPrograms = [...backendPrograms, ...filteredCustomPrograms];
-          const uniquePrograms = mergedPrograms.filter((program, index, self) =>
-            index === self.findIndex((p) => p.id === program.id)
-          );
-
-          // APLICAR horarios modificados de localStorage a los programs de BD
-          const storageKey = isWeekendDay ? 'rtvc_program_times_weekend' : 'rtvc_program_times';
-          const modifiedTimes = JSON.parse(localStorage.getItem(storageKey) || '{}');
-          console.log(`🔧 [BD Programs] Aplicando horarios modificados de ${storageKey}:`, modifiedTimes);
-
-          const programsWithModifiedTimes = uniquePrograms.map(program => ({
-            ...program,
-            defaultTime: modifiedTimes[program.id] || program.defaultTime || program.time
-          }));
-
-          const sortedMerged = programsWithModifiedTimes.sort((a, b) => {
-            const timeA = (a.defaultTime || a.time || '00:00').split(':')[0] + ':' + (a.defaultTime || a.time || '00:00').split(':')[1].substring(0, 2);
-            const timeB = (b.defaultTime || b.time || '00:00').split(':')[0] + ':' + (b.defaultTime || b.time || '00:00').split(':')[1].substring(0, 2);
-            return timeA.localeCompare(timeB);
-          });
-          setPrograms(sortedMerged);
-        }
+        // NO usar programas de BD - siempre usar programs.js
+        console.log('✅ [ScheduleTable] Usando programas de programs.js, NO de BD');
 
         // PASO 5: Assignments Y CallTimes - de BD o automáticos
         if (savedData.found && savedData.assignments && Object.keys(savedData.assignments).length > 0) {

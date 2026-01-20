@@ -85,14 +85,6 @@ export const WEEKEND_PROGRAMS = [
     color: '#2196F3'
   },
   {
-    id: 2,
-    name: 'Especial Cultura',
-    time: '12:00-12:30',
-    location: 'ESTUDIO 5',
-    type: 'cultural',
-    color: '#EC4899'
-  },
-  {
     id: 3,
     name: 'Emisión RTVC Noticias',
     time: '12:30-13:30',
@@ -101,28 +93,12 @@ export const WEEKEND_PROGRAMS = [
     color: '#FF9800'
   },
   {
-    id: 4,
-    name: 'Especial Cultura',
-    time: '15:00-15:30',
-    location: 'ESTUDIO 5',
-    type: 'cultural',
-    color: '#EC4899'
-  },
-  {
     id: 5,
     name: 'Avance Informativo',
     time: '13:30-13:35',
     location: 'REDACCIÓN',
     type: 'informative',
     color: '#2196F3'
-  },
-  {
-    id: 6,
-    name: 'Especial Cultural Conversatorio',
-    time: '18:00-19:00',
-    location: 'CINEMA PARAISO',
-    type: 'cultural',
-    color: '#EC4899'
   },
   {
     id: 7,
