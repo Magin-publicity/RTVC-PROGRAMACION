@@ -196,7 +196,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       // No filtrar programas - mostrar todos siempre
       const filteredBasePrograms = basePrograms;
 
-      const mappings = programMappingService.getAll();
+      const mappings = await programMappingService.getAll();
       setProgramMappings(mappings);
 
       const allPrograms = [...filteredBasePrograms, ...filteredCustomPrograms];

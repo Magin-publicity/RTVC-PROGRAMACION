@@ -1357,4 +1357,168 @@ router.post('/consolidate', async (req, res) => {
   }
 });
 
+// ============================================================================
+// PROGRAM MAPPINGS (Asignaciones de Estudio/Master a Programas)
+// ============================================================================
+
+/**
+ * POST /api/routes/program-mappings/setup
+ * Crea la tabla program_mappings (solo ejecutar una vez)
+ */
+router.post('/program-mappings/setup', async (req, res) => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS program_mappings (
+        program_id INTEGER PRIMARY KEY,
+        studio_resource INTEGER,
+        master_resource INTEGER,
+        updated_at TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_program_mappings_updated
+      ON program_mappings(updated_at DESC);
+    `);
+
+    res.json({ success: true, message: 'Tabla program_mappings creada exitosamente' });
+  } catch (error) {
+    console.error('Error creando tabla:', error);
+    res.status(500).json({ error: 'Error al crear tabla program_mappings' });
+  }
+});
+
+/**
+ * GET /api/routes/program-mappings
+ * Obtiene todas las asignaciones de programas
+ */
+router.get('/program-mappings', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM program_mappings ORDER BY program_id`
+    );
+
+    // Convertir array de filas a objeto { programId: { studioResource, masterResource } }
+    const mappings = {};
+    result.rows.forEach(row => {
+      mappings[row.program_id] = {
+        studioResource: row.studio_resource,
+        masterResource: row.master_resource,
+        updatedAt: row.updated_at
+      };
+    });
+
+    res.json(mappings);
+  } catch (error) {
+    console.error('Error obteniendo asignaciones de programas:', error);
+    res.status(500).json({ error: 'Error al obtener asignaciones de programas' });
+  }
+});
+
+/**
+ * POST /api/routes/program-mappings
+ * Guarda o actualiza la asignación de un programa
+ */
+router.post('/program-mappings', async (req, res) => {
+  try {
+    const { programId, studioResource, masterResource } = req.body;
+
+    if (!programId) {
+      return res.status(400).json({ error: 'programId es requerido' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO program_mappings (program_id, studio_resource, master_resource, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (program_id)
+       DO UPDATE SET
+         studio_resource = $2,
+         master_resource = $3,
+         updated_at = NOW()
+       RETURNING *`,
+      [programId, studioResource || null, masterResource || null]
+    );
+
+    res.json({
+      success: true,
+      mapping: {
+        studioResource: result.rows[0].studio_resource,
+        masterResource: result.rows[0].master_resource,
+        updatedAt: result.rows[0].updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Error guardando asignación de programa:', error);
+    res.status(500).json({ error: 'Error al guardar asignación de programa' });
+  }
+});
+
+/**
+ * DELETE /api/routes/program-mappings/:programId
+ * Elimina la asignación de un programa
+ */
+router.delete('/program-mappings/:programId', async (req, res) => {
+  try {
+    const { programId } = req.params;
+
+    await pool.query(
+      `DELETE FROM program_mappings WHERE program_id = $1`,
+      [programId]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error eliminando asignación de programa:', error);
+    res.status(500).json({ error: 'Error al eliminar asignación de programa' });
+  }
+});
+
+/**
+ * POST /api/routes/program-mappings/migrate
+ * Migra datos desde localStorage al servidor (solo para migración inicial)
+ */
+router.post('/program-mappings/migrate', async (req, res) => {
+  try {
+    const { mappings } = req.body;
+
+    if (!mappings || typeof mappings !== 'object') {
+      return res.status(400).json({ error: 'mappings debe ser un objeto' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      let migrated = 0;
+      for (const [programId, mapping] of Object.entries(mappings)) {
+        await client.query(
+          `INSERT INTO program_mappings (program_id, studio_resource, master_resource, updated_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (program_id)
+           DO UPDATE SET
+             studio_resource = $2,
+             master_resource = $3,
+             updated_at = NOW()`,
+          [parseInt(programId), mapping.studioResource || null, mapping.masterResource || null]
+        );
+        migrated++;
+      }
+
+      await client.query('COMMIT');
+
+      res.json({
+        success: true,
+        message: `${migrated} asignaciones migradas exitosamente`
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error migrando asignaciones:', error);
+    res.status(500).json({ error: 'Error al migrar asignaciones' });
+  }
+});
+
 module.exports = router;

@@ -148,11 +148,11 @@ export const ProgramMappingView = () => {
     console.log(`🔄 [useEffect] Horarios recargados para ${activeTab}:`, times);
   }, [activeTab]);
 
-  const loadData = () => {
+  const loadData = async () => {
     const loadedCustom = customProgramsService.getAll();
     setCustomPrograms(loadedCustom);
 
-    const loadedMappings = programMappingService.getAll();
+    const loadedMappings = await programMappingService.getAll();
     setMappings(loadedMappings);
 
     // Cargar programas deshabilitados desde localStorage
@@ -223,17 +223,24 @@ export const ProgramMappingView = () => {
     setHasChanges(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Guardar mapeos para TODOS los programas
-    allPrograms.forEach(program => {
+    const savePromises = allPrograms.map(program => {
       const mapping = mappings[program.id] || {};
-      programMappingService.save(program.id, {
+      return programMappingService.save(program.id, {
         studioResource: mapping.studioResource || null,
         masterResource: mapping.masterResource || null
       });
     });
-    setHasChanges(false);
-    alert('Mapeos guardados correctamente');
+
+    try {
+      await Promise.all(savePromises);
+      setHasChanges(false);
+      alert('✅ Mapeos guardados correctamente en la base de datos');
+    } catch (error) {
+      console.error('Error guardando mapeos:', error);
+      alert('❌ Error al guardar algunos mapeos. Revisa la consola.');
+    }
   };
 
   const handleReset = () => {
@@ -374,7 +381,7 @@ export const ProgramMappingView = () => {
       const newMappings = { ...mappings };
       delete newMappings[programId];
       setMappings(newMappings);
-      programMappingService.delete(programId);
+      await programMappingService.delete(programId);
 
       const newDates = { ...programDates };
       delete newDates[programId];
@@ -462,7 +469,7 @@ export const ProgramMappingView = () => {
       const newMappings = { ...mappings };
       delete newMappings[program.id];
       setMappings(newMappings);
-      programMappingService.delete(program.id);
+      await programMappingService.delete(program.id);
 
       const newDates = { ...programDates };
       delete newDates[program.id];
@@ -499,6 +506,38 @@ export const ProgramMappingView = () => {
     }
   };
 
+  const handleMigrateToDatabase = async () => {
+    if (!window.confirm(
+      '💾 ¿Migrar asignaciones a la base de datos?\n\n' +
+      'Esto copiará todas tus asignaciones actuales de Estudio/Master\n' +
+      'desde el navegador (localStorage) a la base de datos PostgreSQL.\n\n' +
+      '✅ Las asignaciones quedarán respaldadas permanentemente\n' +
+      '⚠️ Solo necesitas hacer esto UNA VEZ\n\n' +
+      '¿Continuar?'
+    )) {
+      return;
+    }
+
+    try {
+      const result = await programMappingService.migrateFromLocalStorage();
+
+      if (result.success) {
+        alert(
+          `✅ Migración exitosa!\n\n` +
+          `${result.message || 'Asignaciones migradas a la base de datos'}\n\n` +
+          `Ahora tus datos están respaldados en PostgreSQL y ya no dependen del navegador.`
+        );
+        // Recargar datos desde BD
+        await loadData();
+      } else {
+        alert(`❌ Error en la migración:\n\n${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error al migrar:', error);
+      alert(`❌ Error al migrar:\n\n${error.message}`);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -525,6 +564,14 @@ export const ProgramMappingView = () => {
             icon={<RefreshCw size={20} />}
           >
             Recargar
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={handleMigrateToDatabase}
+            icon={<Database size={20} />}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            Migrar a BD
           </Button>
           <Button
             onClick={handleSave}
