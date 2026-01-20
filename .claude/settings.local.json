@@ -31,7 +31,8 @@
       "Bash(xargs ls:*)",
       "Bash(xargs -I {} powershell -Command 'Stop-Process -Id {} -Force')",
       "Bash(start cmd /k \"npm start\")",
-      "Bash(start cmd /k \"npm run dev\")"
+      "Bash(start cmd /k \"npm run dev\")",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

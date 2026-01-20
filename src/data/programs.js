@@ -3,142 +3,134 @@
 export const WEEKDAY_PROGRAMS = [
   {
     id: 1,
-    name: 'EL CALENTAO',
-    time: '6:00-10:00',
+    name: 'Calentado',
+    time: '06:00-10:00',
     location: 'REDACCIÓN Y ESTUDIO 5 MÁSTER 5',
     type: 'regular',
-    color: '#F59E0B'
+    color: '#4CAF50'
   },
   {
     id: 2,
-    name: 'AVANCE INFORMATIVO',
+    name: 'Avance Informativo',
     time: '10:55-11:00',
     location: 'REDACCIÓN O ESTUDIO 5 - MÁSTER 5',
     type: 'informative',
-    color: '#3B82F6'
+    color: '#2196F3'
   },
   {
     id: 3,
-    name: 'EMISIÓN RTVC NOTICIAS',
+    name: 'Emisión RTVC Noticias',
     time: '12:00-14:00',
     location: 'MÁSTER 5 ESTUDIO 5',
     type: 'news',
-    color: '#EF4444'
+    color: '#FF9800'
   },
   {
     id: 4,
-    name: 'AVANCE INFORMATIVO',
-    time: '15:25-15:30',
+    name: 'Avance Informativo',
+    time: '14:55-15:00',
     location: 'REDACCIÓN O ESTUDIO 5 - MÁSTER 5',
     type: 'informative',
-    color: '#3B82F6'
+    color: '#2196F3'
   },
   {
     id: 5,
-    name: 'AVANCE INFORMATIVO',
+    name: 'Avance Informativo',
     time: '16:55-17:00',
     location: 'REDACCIÓN O ESTUDIO 5 - MÁSTER 5',
     type: 'informative',
-    color: '#3B82F6'
-  },
-  {
-    id: 6,
-    name: 'SEÑAL INVESTIGATIVA',
-    time: '17:00',
-    location: 'ESTUDIO 3 MASTER 3',
-    type: 'special',
-    color: '#8B5CF6'
+    color: '#2196F3'
   },
   {
     id: 7,
-    name: 'AVANCE INFORMATIVO',
+    name: 'Avance Informativo',
     time: '18:00-18:05',
     location: 'REDACCIÓN O ESTUDIO 5 - MÁSTER 5',
     type: 'informative',
-    color: '#3B82F6'
+    color: '#2196F3'
   },
   {
     id: 8,
-    name: 'EMISIÓN RTVC NOTICIAS',
+    name: 'Emisión Central',
     time: '19:00-20:00',
-    location: 'ESTUDIO 5',
+    location: 'ESTUDIO 5 MÁSTER 5',
     type: 'news',
-    color: '#EF4444'
+    color: '#FF9800'
   },
   {
     id: 9,
-    name: 'NOCHES DE OPINIÓN',
+    name: 'Noches de Opinión',
     time: '20:00-21:00',
     location: 'MÁSTER 5 ESTUDIO 5',
     type: 'opinion',
-    color: '#10B981'
+    color: '#9C27B0'
   },
   {
     id: 10,
-    name: 'EMISIÓN RTVC NOTICIAS',
+    name: 'Última Emisión',
     time: '21:30-22:00',
     location: 'ESTUDIO 5 MÁSTER 5',
     type: 'news',
-    color: '#EF4444'
+    color: '#FF9800'
   }
 ];
 
 export const WEEKEND_PROGRAMS = [
   {
     id: 1,
-    name: 'AVANCE INFORMATIVO',
-    time: '9:00-9:05',
+    name: 'Avance Informativo',
+    time: '09:00-09:05',
     location: 'REDACCIÓN',
     type: 'informative',
-    color: '#3B82F6'
+    color: '#2196F3'
   },
   {
     id: 2,
-    name: 'ESPECIAL CULTURA',
-    time: '12:00',
+    name: 'Especial Cultura',
+    time: '12:00-12:30',
     location: 'ESTUDIO 5',
     type: 'cultural',
     color: '#EC4899'
   },
   {
     id: 3,
-    name: 'EMISIÓN RTVC NOTICIAS',
+    name: 'Emisión RTVC Noticias',
     time: '12:30-13:30',
     location: 'ESTUDIO 5',
     type: 'news',
-    color: '#EF4444'
+    color: '#FF9800'
   },
   {
     id: 4,
-    name: 'ESPECIAL CULTURA',
-    time: '15:00',
+    name: 'Especial Cultura',
+    time: '15:00-15:30',
     location: 'ESTUDIO 5',
     type: 'cultural',
     color: '#EC4899'
   },
   {
     id: 5,
-    name: 'AVANCE INFORMATIVO',
-    time: '17:55-18:00',
+    name: 'Avance Informativo',
+    time: '13:30-13:35',
     location: 'REDACCIÓN',
     type: 'informative',
-    color: '#3B82F6'
+    color: '#2196F3'
   },
   {
     id: 6,
-    name: 'ESPECIAL CULTURAL CONVERSATORIO',
-    time: '18:00',
+    name: 'Especial Cultural Conversatorio',
+    time: '18:00-19:00',
     location: 'CINEMA PARAISO',
     type: 'cultural',
     color: '#EC4899'
   },
   {
     id: 7,
-    name: 'EMISIÓN RTVC NOTICIAS',
+    name: 'Emisión RTVC Noticias',
     time: '19:00-20:00',
     location: 'ESTUDIO 5',
     type: 'news',
-    color: '#EF4444'
+    color: '#FF9800'
   }
 ];
 

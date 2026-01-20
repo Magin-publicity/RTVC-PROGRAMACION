@@ -8,33 +8,25 @@ import { customProgramsService } from '../../services/customProgramsService';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useContractValidation } from '../../hooks/useContractValidation';
 import { WeekSelector } from '../Calendar/WeekSelector';
+import { WEEKDAY_PROGRAMS as WEEKDAY_PROGRAMS_SOURCE, WEEKEND_PROGRAMS as WEEKEND_PROGRAMS_SOURCE } from '../../data/programs';
 
 const API_URL = '/api';
 
-// Programas de lunes a viernes - IDs deben coincidir con programs.js
-const WEEKDAY_PROGRAMS = [
-  { id: 1, name: 'Calentado', defaultTime: '06:00', color: '#4CAF50' },
-  { id: 2, name: 'Avance Informativo', defaultTime: '11:00', color: '#2196F3' },
-  { id: 3, name: 'Emisión RTVC Noticias', defaultTime: '12:00', color: '#FF9800' },
-  { id: 4, name: 'Avance Informativo', defaultTime: '15:30', color: '#2196F3' },
-  { id: 5, name: 'Avance Informativo', defaultTime: '17:00', color: '#2196F3' },
-  { id: 6, name: 'Señal Investigativa', defaultTime: '17:00', color: '#8B5CF6' },
-  { id: 7, name: 'Avance Informativo', defaultTime: '18:00', color: '#2196F3' },
-  { id: 8, name: 'Emisión Central', defaultTime: '19:00', color: '#FF9800' },
-  { id: 9, name: 'Noches de Opinión', defaultTime: '20:00', color: '#9C27B0' },
-  { id: 10, name: 'Última Emisión', defaultTime: '21:30', color: '#FF9800' }
-];
+// Programas de lunes a viernes - Importados desde programs.js
+const WEEKDAY_PROGRAMS = WEEKDAY_PROGRAMS_SOURCE.map(p => ({
+  id: p.id,
+  name: p.name,
+  defaultTime: p.time.split('-')[0].trim(), // Extraer hora de inicio
+  color: p.color
+}));
 
-// Programas de fin de semana (sábado y domingo) - IDs deben coincidir con programs.js
-const WEEKEND_PROGRAMS = [
-  { id: 1, name: 'Avance Informativo', defaultTime: '12:00', color: '#2196F3' },
-  { id: 2, name: 'Especial Cultura', defaultTime: '12:00', color: '#EC4899' },
-  { id: 3, name: 'Emisión RTVC Noticias', defaultTime: '12:30', color: '#FF9800' },
-  { id: 4, name: 'Especial Cultura', defaultTime: '15:00', color: '#EC4899' },
-  { id: 5, name: 'Avance Informativo', defaultTime: '13:30', color: '#2196F3' },
-  { id: 6, name: 'Especial Cultural Conversatorio', defaultTime: '18:00', color: '#EC4899' },
-  { id: 7, name: 'Emisión RTVC Noticias', defaultTime: '19:00', color: '#FF9800' }
-];
+// Programas de fin de semana - Importados desde programs.js
+const WEEKEND_PROGRAMS = WEEKEND_PROGRAMS_SOURCE.map(p => ({
+  id: p.id,
+  name: p.name,
+  defaultTime: p.time.split('-')[0].trim(), // Extraer hora de inicio
+  color: p.color
+}));
 
 export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF, showWeekSelector, weekSelectorProps }) => {
   // Hook de validación de contratos
