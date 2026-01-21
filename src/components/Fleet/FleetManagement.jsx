@@ -663,22 +663,22 @@ function AvailabilityTab({ date, onDateChange, vehicles, availability, selectedV
 function DispatchesTab({ date, onDateChange, dispatches, onAdd, onEdit, onDelete }) {
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <div>
+      <div className="flex justify-between items-center mb-6 gap-2">
+        <div className="flex-shrink-0">
           <label className="block text-sm font-medium text-gray-700 mb-2">Fecha:</label>
           <input
             type="date"
             value={date}
             onChange={(e) => onDateChange(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg"
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
           />
         </div>
         <button
           onClick={onAdd}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-1 text-sm whitespace-nowrap min-w-[120px]"
         >
           <span>+</span>
-          <span>Nuevo Despacho</span>
+          <span className="dispatch-button-text">Nuevo Despacho</span>
         </button>
       </div>
 

@@ -126,24 +126,328 @@ body {
     transform: none !important;
     left: 0 !important;
     width: 100% !important;
-    margin-bottom: 1rem !important;
+    margin-bottom: 0.25rem !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+    padding: 0.4rem !important;
   }
 
+  /* Reducir tamaño de elementos dentro de la barra de fechas en móvil */
+  .week-selector-sticky > div:first-child {
+    margin-bottom: 0.25rem !important;
+  }
+
+  .week-selector-sticky .grid {
+    gap: 0.2rem !important;
+  }
+
+  .week-selector-sticky button {
+    padding: 0.4rem !important;
+    font-size: 0.7rem !important;
+  }
+
+  .week-selector-sticky .text-xs {
+    font-size: 0.6rem !important;
+  }
+
+  .week-selector-sticky .text-lg {
+    font-size: 0.9rem !important;
+  }
+
+  /* Asegurar que la tabla se muestre correctamente en móvil */
   .schedule-table-container {
     padding-top: 0 !important;
+    margin-top: 0 !important;
+    display: block !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  .schedule-table-container > div {
+    display: block !important;
+  }
+
+  .schedule-table-container .overflow-x-auto {
+    overflow-x: auto !important;
+    display: block !important;
+  }
+
+  .schedule-table-container table {
+    display: table !important;
+    font-size: 0.7rem !important;
+    min-width: 100% !important;
+  }
+
+  .schedule-table-container th,
+  .schedule-table-container td {
+    padding: 0.4rem !important;
+    font-size: 0.65rem !important;
+  }
+
+  .schedule-table-container .p-3,
+  .schedule-table-container .p-2 {
+    padding: 0.5rem !important;
+    font-size: 0.75rem !important;
   }
 
   /* Asegurar que el main content ocupe todo el ancho en móvil */
   main {
     margin-left: 0 !important;
     width: 100% !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  main > div {
+    overflow: visible !important;
+    display: block !important;
   }
 
   /* Permitir scroll completo en móvil */
   body {
     overflow-y: auto !important;
     height: auto !important;
+  }
+
+  #root {
+    overflow: visible !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .space-y-6 > * + * {
+    margin-top: 0.5rem !important;
+  }
+
+  /* Columna de nombre sticky con fondo sólido en móvil */
+  .schedule-table-container table th.sticky,
+  .schedule-table-container table td.sticky,
+  .schedule-table-container table th[class*="sticky left-0"],
+  .schedule-table-container table td[class*="sticky left-0"] {
+    background-color: #ffffff !important;
+    position: sticky !important;
+    left: 0 !important;
+    z-index: 10 !important;
+  }
+
+  /* Asegurar que los headers con color mantengan su color de fondo */
+  .schedule-table-container table th.sticky[style*="backgroundColor"],
+  .schedule-table-container table th[class*="sticky left-0"][style*="backgroundColor"] {
+    background-color: var(--bg-color) !important;
+  }
+
+  /* Fondo sólido para headers de área (bg-blue-700, bg-blue-800) */
+  .schedule-table-container table th.bg-blue-700,
+  .schedule-table-container table th.bg-blue-800 {
+    background-color: #1d4ed8 !important;
+  }
+
+  .schedule-table-container table tr.bg-blue-700 th,
+  .schedule-table-container table tr.bg-blue-800 td {
+    background-color: inherit !important;
+  }
+
+  /* Tabs responsivos en Fleet Management */
+  nav.flex.-mb-px {
+    display: flex !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    gap: 0.25rem !important;
+  }
+
+  nav.flex.-mb-px button {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    padding: 0.6rem 0.3rem !important;
+    font-size: 0.65rem !important;
+    line-height: 1.2 !important;
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    text-align: center !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: auto !important;
+    min-height: 3rem !important;
+  }
+
+  /* Botón "Nuevo Despacho" responsive */
+  .dispatch-button-text {
+    font-size: 0.7rem !important;
+    line-height: 1.2 !important;
+    text-align: center !important;
+  }
+
+  /* Ajustar fecha y botón despacho en móvil */
+  .flex.justify-between.items-center.mb-6 {
+    gap: 0.5rem !important;
+  }
+
+  .flex.justify-between.items-center.mb-6 input[type="date"] {
+    width: 140px !important;
+    padding: 0.5rem 0.4rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  .flex.justify-between.items-center.mb-6 button {
+    padding: 0.5rem 0.6rem !important;
+    font-size: 0.7rem !important;
+    min-width: 100px !important;
+    max-width: 140px !important;
+  }
+
+  /* ====================================================
+     GESTIÓN DE ALIMENTACIÓN - RESPONSIVE MÓVIL
+     ==================================================== */
+
+  /* Header de Gestión de Alimentación */
+  .space-y-6 > div.flex.justify-between.items-center > div:first-child h2 {
+    font-size: 1.25rem !important;
+    line-height: 1.3 !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  .space-y-6 > div.flex.justify-between.items-center > div:first-child p {
+    font-size: 0.75rem !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Contenedor de inputs (Nombre Programa + Fecha) */
+  .space-y-6 > div.flex.justify-between.items-center > div:last-child {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+    align-items: stretch !important;
+  }
+
+  .space-y-6 > div.flex.justify-between.items-center > div:last-child > div {
+    width: 100% !important;
+  }
+
+  .space-y-6 > div.flex.justify-between.items-center > div:last-child input {
+    width: 100% !important;
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  .space-y-6 > div.flex.justify-between.items-center > div:last-child label {
+    font-size: 0.75rem !important;
+  }
+
+  /* Ajustar layout principal en móvil */
+  .space-y-6 > div.flex.justify-between.items-center {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 1rem !important;
+  }
+
+  /* Botones de servicio (DESAYUNO, ALMUERZO, CENA) */
+  .space-y-6 > div.grid.grid-cols-3 {
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem !important;
+  }
+
+  .space-y-6 > div.grid.grid-cols-3 button {
+    padding: 0.75rem !important;
+  }
+
+  .space-y-6 > div.grid.grid-cols-3 button p {
+    font-size: 0.875rem !important;
+  }
+
+  .space-y-6 > div.grid.grid-cols-3 button p.text-sm {
+    font-size: 0.75rem !important;
+  }
+
+  /* Estadísticas (Total, Confirmados, Por Confirmar) */
+  .space-y-6 > div.grid.grid-cols-3.gap-4 {
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem !important;
+  }
+
+  .space-y-6 > div.grid.grid-cols-3.gap-4 > div {
+    padding: 0.75rem !important;
+  }
+
+  .space-y-6 > div.grid.grid-cols-3.gap-4 p.text-sm {
+    font-size: 0.75rem !important;
+  }
+
+  .space-y-6 > div.grid.grid-cols-3.gap-4 p.text-3xl {
+    font-size: 1.5rem !important;
+    margin-top: 0.25rem !important;
+  }
+
+  /* Botones de acción */
+  .bg-gray-50.p-4.rounded-lg.border .flex.flex-wrap {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+
+  .bg-gray-50.p-4.rounded-lg.border button {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 0.625rem 0.75rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ====================================================
+     GESTIÓN DE RUTAS - RESPONSIVE MÓVIL
+     ==================================================== */
+
+  /* Estadísticas de rutas (5 columnas en desktop -> 1 columna en móvil) */
+  .grid.grid-cols-2.md\\:grid-cols-5 {
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Tarjetas de estadísticas más compactas */
+  .grid.grid-cols-2.md\\:grid-cols-5 > div {
+    padding: 0.75rem !important;
+  }
+
+  .grid.grid-cols-2.md\\:grid-cols-5 svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  .grid.grid-cols-2.md\\:grid-cols-5 p {
+    font-size: 0.75rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .grid.grid-cols-2.md\\:grid-cols-5 .text-2xl,
+  .grid.grid-cols-2.md\\:grid-cols-5 .text-3xl {
+    font-size: 1.5rem !important;
+    margin-top: 0.25rem !important;
+  }
+
+  /* Tabs de navegación en rutas */
+  .bg-white.rounded-lg.shadow-md .flex.gap-4.p-4 {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    padding: 0.75rem !important;
+  }
+
+  .bg-white.rounded-lg.shadow-md .flex.gap-4.p-4 button {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    padding: 0.75rem !important;
+    font-size: 0.875rem !important;
+    border-radius: 0.5rem !important;
+  }
+
+  /* Hacer que los tabs activos se vean bien */
+  .bg-white.rounded-lg.shadow-md .flex.gap-4.p-4 button svg {
+    flex-shrink: 0 !important;
+  }
+
+  /* Ajustar grids de 3 y 4 columnas */
+  .grid.grid-cols-1.md\\:grid-cols-3,
+  .grid.grid-cols-1.md\\:grid-cols-4 {
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem !important;
   }
 }
 
