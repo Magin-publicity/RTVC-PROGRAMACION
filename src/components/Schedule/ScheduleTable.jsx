@@ -629,12 +629,14 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
   return (
     <>
-      {/* WeekSelector flotante */}
+      {/* WeekSelector sticky */}
       {showWeekSelector && weekSelectorProps && (
-        <WeekSelector {...weekSelectorProps} />
+        <div className="week-selector-sticky">
+          <WeekSelector {...weekSelectorProps} />
+        </div>
       )}
 
-      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+      <div className="schedule-table-container bg-white rounded-lg shadow-lg overflow-hidden">
         {/* Encabezado */}
         <div className="bg-blue-900 text-white p-3">
           <div className="flex justify-between items-center">

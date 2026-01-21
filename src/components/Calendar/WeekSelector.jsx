@@ -13,7 +13,7 @@ export const WeekSelector = ({ selectedDate, onDateSelect, onPrevWeek, onNextWee
   const weekDates = getWeekDates(selectedDate);
   
   return (
-    <div className="bg-white rounded-lg shadow-lg p-4 mb-6 sticky top-[72px] z-40 border-b-2 border-blue-200">
+    <div className="bg-white rounded-lg shadow-lg p-4">
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={onPrevWeek}

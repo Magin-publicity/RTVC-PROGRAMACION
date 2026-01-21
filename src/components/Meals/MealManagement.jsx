@@ -598,32 +598,33 @@ export default function MealManagement() {
       </div>
 
       {/* Acciones */}
-      <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg border">
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            <Plus size={18} />
-            Agregar Persona
-          </button>
-          <button
-            onClick={handleLoadFromSchedule}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-          >
-            <Upload size={18} />
-            Cargar desde Programación
-          </button>
-          <button
-            onClick={handleOpenLogisticModal}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
-          >
-            <Users size={18} />
-            Personal Logístico
-          </button>
-        </div>
+      <div className="bg-gray-50 p-4 rounded-lg border">
+        <div className="flex flex-wrap gap-3 items-center justify-between">
+          <div className="flex gap-3 flex-wrap">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              <Plus size={18} />
+              Agregar Persona
+            </button>
+            <button
+              onClick={handleLoadFromSchedule}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+            >
+              <Upload size={18} />
+              Cargar desde Programación
+            </button>
+            <button
+              onClick={handleOpenLogisticModal}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+            >
+              <Users size={18} />
+              Personal Logístico
+            </button>
+          </div>
 
-        <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
           <button
             onClick={handleGeneratePDF}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition min-h-[44px]"
@@ -673,6 +674,7 @@ export default function MealManagement() {
             <RefreshCw size={18} />
             <span className="hidden sm:inline">Reset</span>
           </button>
+          </div>
         </div>
       </div>
 

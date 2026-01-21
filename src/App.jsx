@@ -147,21 +147,6 @@ function App() {
       case 'schedule':
         return (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">Programación Semanal</h2>
-                <p className="text-gray-600 mt-1">Gestione la programación del personal</p>
-              </div>
-
-              <Button
-                onClick={handleGenerateSchedule}
-                icon={<Zap size={20} />}
-                variant="success"
-              >
-                Generar Programación
-              </Button>
-            </div>
-
             <ScheduleTable
               personnel={personnel}
               selectedDate={currentDate}

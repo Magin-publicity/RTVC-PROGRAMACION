@@ -27,17 +27,26 @@ export const Header = ({ currentUser, onLogout, notifications = [], unreadCount 
   return (
     <header className="bg-white shadow-md">
       <div className="w-full px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center py-4 gap-4">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
-            <div className="bg-blue-600 p-1.5 sm:p-2 rounded-lg flex-shrink-0">
-              <Calendar className="text-white" size={20} />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-base sm:text-xl lg:text-2xl font-bold text-gray-900 truncate">RTVC</h1>
-              <p className="text-xs text-gray-600 truncate hidden sm:block">Sistema de Programación</p>
+        <div className="flex items-center py-3 gap-4">
+          {/* Logo RTVC a la izquierda */}
+          <div className="flex items-center gap-3 flex-shrink-0 ml-0 md:ml-64">
+            <img
+              src="/rtvc-logo-oficial.png"
+              alt="RTVC Logo"
+              className="h-20 sm:h-24 w-auto object-contain"
+              style={{ maxHeight: '96px' }}
+            />
+          </div>
+
+          {/* Programación Semanal centrado */}
+          <div className="flex-1 flex justify-center items-center min-w-0 hidden sm:flex">
+            <div className="text-center">
+              <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Programación Semanal</h1>
+              <p className="text-xs sm:text-sm text-gray-600">Gestione la programación del personal</p>
             </div>
           </div>
 
+          {/* Botones a la derecha */}
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             <div className="relative">
               <button
