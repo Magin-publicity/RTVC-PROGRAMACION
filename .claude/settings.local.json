@@ -37,7 +37,8 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nCorrección sincronización Mapeo-Programación y limpieza programas\n\n- Fix: Programación ahora usa programs.js en lugar de BD obsoleta\n- Eliminado filtro rtvc_disabled_programs que ocultaba programas\n- Removidos programas Especial Cultura de fines de semana \\(solo 4 programas\\)\n- WEEKDAY_PROGRAMS: 9 programas correctos\n- WEEKEND_PROGRAMS: 4 programas \\(2 Avances + 2 Emisiones Noticias\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(PGPASSWORD=Padres2023 psql:*)",
       "Bash(\"/c/Program Files/PostgreSQL/17/bin/psql\" -U postgres -d rtvc_scheduling -c \"CREATE TABLE IF NOT EXISTS program_mappings \\(program_id INTEGER PRIMARY KEY, studio_resource INTEGER, master_resource INTEGER, updated_at TIMESTAMP DEFAULT NOW\\(\\), created_at TIMESTAMP DEFAULT NOW\\(\\)\\);\")",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(cmd //c \"taskkill /F /PID 22732\")"
     ],
     "deny": [],
     "ask": []

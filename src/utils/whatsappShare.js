@@ -134,6 +134,79 @@ export const shareViaWhatsApp = async (message, phoneNumber = null) => {
 };
 
 /**
+ * Genera mensaje formateado para despacho de flota (estilo nuevo)
+ */
+export const generateFleetDispatchMessage = (dispatch) => {
+  const {
+    destination,
+    journalist,
+    cameraman,
+    assistant,
+    director,
+    liveu_unit,
+    vehicle_plate,
+    driver_name,
+    departure_time,
+    program_name,
+    notes
+  } = dispatch;
+
+  let message = `🚀 *NUEVO DESPACHO RTVC*\n\n`;
+
+  // Destino
+  if (destination) {
+    message += `📍 *Destino:* ${destination}\n`;
+  }
+
+  // Equipo (solo agregar si existe)
+  const team = [];
+  if (journalist) team.push(`Periodista: ${journalist}`);
+  if (cameraman) team.push(`Camarógrafo: ${cameraman}`);
+  if (assistant) team.push(`Asistente: ${assistant}`);
+  if (director) team.push(`Realizador: ${director}`);
+
+  if (team.length > 0) {
+    message += `🎥 *Equipo:*\n`;
+    team.forEach(member => {
+      message += `   • ${member}\n`;
+    });
+  }
+
+  // Transmisión LiveU
+  if (liveu_unit !== undefined && liveu_unit !== null) {
+    const liveuStatus = liveu_unit ? `Sí - Unidad #${liveu_unit}` : 'No';
+    message += `📡 *Transmisión:* ${liveuStatus}\n`;
+  }
+
+  // Vehículo y conductor
+  if (vehicle_plate || driver_name) {
+    message += `🚗 *Vehículo:* `;
+    if (vehicle_plate) message += `${vehicle_plate}`;
+    if (driver_name) message += ` - Conductor: ${driver_name}`;
+    message += `\n`;
+  }
+
+  // Hora de salida
+  if (departure_time) {
+    message += `⏰ *Salida:* ${departure_time}\n`;
+  }
+
+  // Programa
+  if (program_name) {
+    message += `📺 *Programa:* ${program_name}\n`;
+  }
+
+  // Notas adicionales
+  if (notes) {
+    message += `\n📝 *Notas:* ${notes}\n`;
+  }
+
+  message += `\n_Enviado desde RTVC Programación_`;
+
+  return message;
+};
+
+/**
  * Copia el mensaje al portapapeles
  */
 export const copyToClipboard = async (text) => {

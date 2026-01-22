@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { generateFleetDispatchMessage, copyToClipboard, shareViaWhatsApp } from '../../utils/whatsappShare';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -661,6 +662,49 @@ function AvailabilityTab({ date, onDateChange, vehicles, availability, selectedV
 }
 
 function DispatchesTab({ date, onDateChange, dispatches, onAdd, onEdit, onDelete }) {
+  // Función para copiar mensaje de despacho
+  const handleCopyDispatchMessage = async (dispatch) => {
+    const message = generateFleetDispatchMessage({
+      destination: dispatch.destination,
+      journalist: dispatch.journalist_name,
+      cameraman: dispatch.cameraman_name,
+      assistant: dispatch.assistant_name,
+      director: dispatch.director_name,
+      liveu_unit: dispatch.liveu_code,
+      vehicle_plate: dispatch.vehicle_plate,
+      driver_name: dispatch.driver_name,
+      departure_time: dispatch.departure_time,
+      program_name: dispatch.program_name || 'RTVC',
+      notes: dispatch.notes
+    });
+
+    const success = await copyToClipboard(message);
+    if (success) {
+      alert('✅ Mensaje copiado al portapapeles');
+    } else {
+      alert('❌ Error al copiar. Por favor intente nuevamente.');
+    }
+  };
+
+  // Función para compartir por WhatsApp
+  const handleShareDispatchWhatsApp = (dispatch) => {
+    const message = generateFleetDispatchMessage({
+      destination: dispatch.destination,
+      journalist: dispatch.journalist_name,
+      cameraman: dispatch.cameraman_name,
+      assistant: dispatch.assistant_name,
+      director: dispatch.director_name,
+      liveu_unit: dispatch.liveu_code,
+      vehicle_plate: dispatch.vehicle_plate,
+      driver_name: dispatch.driver_name,
+      departure_time: dispatch.departure_time,
+      program_name: dispatch.program_name || 'RTVC',
+      notes: dispatch.notes
+    });
+
+    shareViaWhatsApp(message);
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6 gap-2">
@@ -745,18 +789,34 @@ function DispatchesTab({ date, onDateChange, dispatches, onAdd, onEdit, onDelete
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => onEdit(dispatch)}
-                      className="text-blue-600 hover:text-blue-900 mr-3"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => onDelete(dispatch.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      Eliminar
-                    </button>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => handleCopyDispatchMessage(dispatch)}
+                        className="text-green-600 hover:text-green-900"
+                        title="Copiar mensaje"
+                      >
+                        📋
+                      </button>
+                      <button
+                        onClick={() => handleShareDispatchWhatsApp(dispatch)}
+                        className="text-green-600 hover:text-green-900"
+                        title="Compartir por WhatsApp"
+                      >
+                        📱
+                      </button>
+                      <button
+                        onClick={() => onEdit(dispatch)}
+                        className="text-blue-600 hover:text-blue-900"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => onDelete(dispatch.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1118,12 +1178,22 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (!formData.vehicleId || !formData.journalistId || !formData.destination || !formData.departureTime) {
-      alert('Vehículo, periodista, destino y hora de salida son campos requeridos');
+    if (!formData.vehicleId || !formData.destination || !formData.departureTime) {
+      alert('Vehículo, destino y hora de salida son campos requeridos');
       return;
     }
 
-    onSave(formData);
+    // Convertir cadenas vacías a null para campos opcionales
+    const cleanedData = {
+      ...formData,
+      journalistId: formData.journalistId || null,
+      cameramanId: formData.cameramanId || null,
+      assistantId: formData.assistantId || null,
+      directorId: formData.directorId || null,
+      liveuId: formData.liveuId || null,
+    };
+
+    onSave(cleanedData);
   };
 
   return (
@@ -1173,15 +1243,14 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
             {/* Periodista */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Periodista <span className="text-red-500">*</span>
+                Periodista (Opcional)
               </label>
               <select
                 value={formData.journalistId}
                 onChange={(e) => handleJournalistChange(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
               >
-                <option value="">Seleccione un periodista</option>
+                <option value="">Sin periodista</option>
                 {journalistsCombined.onDutyAM.length > 0 && (
                   <optgroup label="🌅 EN TURNO AM (Prioridad)">
                     {journalistsCombined.onDutyAM.map((journalist) => (

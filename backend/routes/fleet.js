@@ -190,8 +190,8 @@ router.post('/dispatches', async (req, res) => {
       notes
     } = req.body;
 
-    if (!date || !vehicleId || !journalistName || !driverName || !vehiclePlate || !destination || !departureTime) {
-      return res.status(400).json({ error: 'Faltan parámetros requeridos' });
+    if (!date || !vehicleId || !driverName || !vehiclePlate || !destination || !departureTime) {
+      return res.status(400).json({ error: 'Faltan parámetros requeridos: fecha, vehículo, conductor, placa, destino y hora de salida' });
     }
 
     const result = await pool.query(`
