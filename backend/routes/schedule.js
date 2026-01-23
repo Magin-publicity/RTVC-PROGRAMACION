@@ -1102,15 +1102,17 @@ router.get('/calendar', async (req, res) => {
 router.post('/daily/:date', async (req, res) => {
   try {
     const { date } = req.params;
-    const { assignments, callTimes, programs, shifts } = req.body;
+    const { assignments, callTimes, manualCallTimes, manualAssignments, programs, shifts } = req.body;
 
     console.log(`💾 Guardando programación para ${date}`);
     console.log(`   📋 Programas: ${programs?.length || 0}`);
     console.log(`   ✅ Asignaciones: ${Object.keys(assignments || {}).length}`);
     console.log(`   ⏰ CallTimes: ${Object.keys(callTimes || {}).length}`);
+    console.log(`   🔒 CallTimes manuales: ${Object.keys(manualCallTimes || {}).length}`);
+    console.log(`   🔒 Asignaciones manuales: ${Object.keys(manualAssignments || {}).length}`);
     console.log(`   🔧 Turnos: ${shifts?.length || 0}`);
 
-    // Guardar en daily_schedules usando UPSERT
+    // Guardar en daily_schedules usando UPSERT (sin filtrar - respeta cambios manuales del usuario)
     await pool.query(
       `INSERT INTO daily_schedules (date, assignments_data, programs_data, updated_at)
        VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
@@ -1119,7 +1121,7 @@ router.post('/daily/:date', async (req, res) => {
          assignments_data = $2,
          programs_data = $3,
          updated_at = CURRENT_TIMESTAMP`,
-      [date, JSON.stringify(assignments), JSON.stringify({ programs, shifts, callTimes })]
+      [date, JSON.stringify(assignments), JSON.stringify({ programs, shifts, callTimes, manualCallTimes, manualAssignments })]
     );
 
     console.log(`✅ Programación guardada exitosamente para ${date}`);
@@ -1153,7 +1155,7 @@ router.post('/daily/:date', async (req, res) => {
 
         console.log(`   📋 ${targetDateStr} NO existe - Copiando del lunes...`);
 
-        // 🔥 COPIAR TODAS LAS ASIGNACIONES (no solo reportería)
+        // 🔥 COPIAR TODAS LAS ASIGNACIONES
         const allAssignments = { ...assignments };
 
         // Guardar SOLO si NO existe (INSERT sin conflicto)
@@ -1324,8 +1326,12 @@ router.get('/daily/:date', async (req, res) => {
 
     // 🔧 USAR DIRECTAMENTE LOS CALLTIMES GUARDADOS (sin corrección automática)
     const callTimes = { ...(programsData.callTimes || {}) };
+    const manualCallTimes = { ...(programsData.manualCallTimes || {}) }; // 🚨 PILAR 1: Cargar marcadores de manuales
+    const manualAssignments = { ...(programsData.manualAssignments || {}) }; // 🚨 PILAR 3: Cargar marcadores de asignaciones manuales
 
     console.log('✅ Usando callTimes guardados de la base de datos (sin corrección automática)');
+    console.log(`🔒 CallTimes manuales: ${Object.keys(manualCallTimes).length}`);
+    console.log(`🔒 Asignaciones manuales: ${Object.keys(manualAssignments).length}`);
 
     // 🎥 Calcular callTimes para CAMARÓGRAFOS DE ESTUDIO en FIN DE SEMANA
     const selectedDate = new Date(date + 'T12:00:00');
@@ -1355,6 +1361,13 @@ router.get('/daily/:date', async (req, res) => {
       if (camarasShifts.length > 0) {
         camarasShifts.forEach(shift => {
           const personId = shift.personnel_id.toString();
+
+          // 🚨 PILAR 1: SOLO calcular si NO es manual
+          if (manualCallTimes[personId]) {
+            console.log(`   🔒 ${shift.name}: ${callTimes[personId]} (MANUAL - protegido)`);
+            return; // No tocar callTimes manuales
+          }
+
           const callTime = shift.shift_start.substring(0, 5); // "08:00:00" → "08:00"
           callTimes[personId] = callTime;
           console.log(`   ✅ ${shift.name}: ${callTime} (${shift.original_shift})`);
@@ -1393,13 +1406,20 @@ router.get('/daily/:date', async (req, res) => {
         ORDER BY name
       `);
 
-      // PRIMERO: ELIMINAR todos los callTimes de CONTRIBUCIONES existentes
-      // para que solo aparezcan los 2 que trabajan (el 3ro descansa sin callTime)
+      // PRIMERO: ELIMINAR SOLO callTimes automáticos de CONTRIBUCIONES
+      // NO tocar callTimes manuales (ley suprema)
       contribucionesPersonnel.rows.forEach(p => {
         const personId = p.id.toString();
+
+        // 🚨 PILAR 1: NO eliminar callTimes manuales
+        if (manualCallTimes[personId]) {
+          console.log(`   🔒 ${p.name} tiene callTime MANUAL (${callTimes[personId]}) - protegido`);
+          return; // No tocar
+        }
+
         if (callTimes[personId]) {
           delete callTimes[personId];
-          console.log(`   🗑️ Eliminado callTime previo de ${p.name}`);
+          console.log(`   🗑️ Eliminado callTime automático previo de ${p.name}`);
         }
       });
 
@@ -1445,14 +1465,28 @@ router.get('/daily/:date', async (req, res) => {
         console.log(`   Patrón semana ${rotationWeek}: Carolina (08:00) + Michael (14:00), Adrian descansa`);
       }
 
-      // Asignar callTimes SOLO a los 2 que trabajan
+      // Asignar callTimes SOLO a los 2 que trabajan (si no son manuales)
       if (contribMap[t1Name]) {
-        callTimes[contribMap[t1Name]] = t1CallTime;
-        console.log(`   ✅ CONTRIBUCIONES: ${t1Name} → ${t1CallTime}`);
+        const personId = contribMap[t1Name];
+
+        // 🚨 PILAR 1: NO sobrescribir callTimes manuales
+        if (manualCallTimes[personId]) {
+          console.log(`   🔒 CONTRIBUCIONES: ${t1Name} tiene callTime MANUAL (${callTimes[personId]}) - protegido`);
+        } else {
+          callTimes[personId] = t1CallTime;
+          console.log(`   ✅ CONTRIBUCIONES: ${t1Name} → ${t1CallTime}`);
+        }
       }
       if (contribMap[t2Name]) {
-        callTimes[contribMap[t2Name]] = t2CallTime;
-        console.log(`   ✅ CONTRIBUCIONES: ${t2Name} → ${t2CallTime}`);
+        const personId = contribMap[t2Name];
+
+        // 🚨 PILAR 1: NO sobrescribir callTimes manuales
+        if (manualCallTimes[personId]) {
+          console.log(`   🔒 CONTRIBUCIONES: ${t2Name} tiene callTime MANUAL (${callTimes[personId]}) - protegido`);
+        } else {
+          callTimes[personId] = t2CallTime;
+          console.log(`   ✅ CONTRIBUCIONES: ${t2Name} → ${t2CallTime}`);
+        }
       }
       console.log(`   💤 CONTRIBUCIONES: ${descansaName} → DESCANSA (sin callTime)`);
     }
@@ -1463,59 +1497,13 @@ router.get('/daily/:date', async (req, res) => {
     // NO deben sobrescribir callTimes ya guardados con cambios manuales
     console.log('✅ NO sobrescribiendo callTimes con shifts - usando callTimes guardados directamente');
 
-    // 🔧 GENERAR ASIGNACIONES AUTOMÁTICAS basadas en solapamiento de horarios
-    console.log('🔄 Generando asignaciones automáticas basadas en solapamiento de horarios...');
-
-    // Obtener los shifts para esta fecha
-    const shiftsData = programsData.shifts || [];
-
-    // Generar asignaciones automáticas para TODO el personal
-    const autoAssignments = {};
-
-    // Para cada programa, asignar personal cuyo turno solape con el horario del programa
-    allPrograms.forEach(program => {
-      if (!program.defaultTime) return; // Saltar programas sin hora
-
-      // Parsear hora del programa
-      const [programHour, programMin] = program.defaultTime.split(':').map(Number);
-      const programStartMinutes = programHour * 60 + programMin;
-
-      // Estimar duración del programa (1 hora por defecto)
-      const programEndMinutes = programStartMinutes + 60;
-
-      // Para cada shift, verificar solapamiento
-      shiftsData.forEach(shift => {
-        // Parsear horario del turno
-        const shiftStart = shift.shift_start; // "13:00:00"
-        const shiftEnd = shift.shift_end;     // "19:00:00"
-
-        const [shiftStartHour, shiftStartMin] = shiftStart.split(':').map(Number);
-        const [shiftEndHour, shiftEndMin] = shiftEnd.split(':').map(Number);
-
-        const shiftStartMinutes = shiftStartHour * 60 + shiftStartMin;
-        const shiftEndMinutes = shiftEndHour * 60 + shiftEndMin;
-
-        // Verificar solapamiento: el programa debe empezar antes de que termine el turno
-        // y terminar después de que empiece el turno
-        const haySolapamiento = programStartMinutes < shiftEndMinutes && programEndMinutes > shiftStartMinutes;
-
-        if (haySolapamiento) {
-          const key = `${shift.personnel_id}_${program.id}`;
-          autoAssignments[key] = true;
-        }
-      });
-    });
-
-    console.log(`   ✅ Generadas ${Object.keys(autoAssignments).length} asignaciones automáticas por solapamiento`);
-
-    // Mezclar asignaciones guardadas + automáticas (las guardadas tienen prioridad)
-    const mergedAssignments = {
-      ...autoAssignments,      // Primero las automáticas
-      ...finalAssignments      // Luego las guardadas (sobrescriben si hay conflicto)
-    };
+    // 🔧 NO GENERAR ASIGNACIONES AUTOMÁTICAS EN EL BACKEND
+    // El frontend ya lo hace correctamente con la lógica de solapamiento inteligente
+    // Solo devolver las asignaciones guardadas tal cual
+    const mergedAssignments = finalAssignments;
 
     console.log(`✅ Programación encontrada para ${date}`);
-    console.log(`   📊 Asignaciones totales: ${Object.keys(mergedAssignments).length} (${Object.keys(finalAssignments).length} guardadas + ${Object.keys(autoAssignments).length} automáticas)`);
+    console.log(`   📊 Asignaciones: ${Object.keys(mergedAssignments).length}`);
     console.log(`   ⏰ CallTimes: ${Object.keys(callTimes).length}`);
     console.log(`   📺 Programas: ${allPrograms.length} (${reporteriaPrograms.length} de reportería)`);
     console.log(`   🕐 Guardado en: ${schedule.updated_at}`);
@@ -1523,8 +1511,10 @@ router.get('/daily/:date', async (req, res) => {
     res.json({
       found: true,
       date,
-      assignments: mergedAssignments, // 🔧 Mezcla de guardadas + automáticas
+      assignments: mergedAssignments,
       callTimes: callTimes,
+      manualCallTimes: manualCallTimes, // 🚨 PILAR 1: Devolver marcadores de manuales
+      manualAssignments: manualAssignments, // 🚨 PILAR 3: Devolver marcadores de asignaciones manuales
       programs: allPrograms,
       savedAt: schedule.updated_at,
       reporteriaCalls: reporteriaResult.rows
@@ -1629,12 +1619,23 @@ router.post('/regenerar-turnos', async (req, res) => {
       );
 
       if (existingResult.rows.length > 0) {
-        // YA EXISTE - Regenerar SOLO shifts y callTimes, mantener programs y assignments
+        // YA EXISTE - HARD DELETE de asignaciones automáticas
         const existingData = existingResult.rows[0];
         const existingAssignments = existingData.assignments_data || {};
         const existingPrograms = existingData.programs_data || {};
 
         console.log(`   🔄 ${fecha}: Regenerando turnos (${Object.keys(existingPrograms.programs || []).length} programas preservados)...`);
+
+        // 🔥 HARD DELETE: Borrar TODAS las asignaciones automáticas de la BD
+        // Solo preservaremos las manuales en memoria
+        console.log(`   🔥 [HARD DELETE] Borrando assignments_data del día ${fecha} de la base de datos...`);
+        await pool.query(
+          `UPDATE daily_schedules
+           SET assignments_data = '{}'::jsonb
+           WHERE date = $1`,
+          [fecha]
+        );
+        console.log(`   ✅ [HARD DELETE] Base de datos limpiada para ${fecha}`);
 
         // Generar nuevos turnos llamando internamente al endpoint auto-shifts
         // Simular la llamada HTTP usando el mismo código
@@ -1672,37 +1673,172 @@ router.post('/regenerar-turnos', async (req, res) => {
           newCallTimes[shift.personnel_id] = shift.shift_start.substring(0, 5);
         });
 
-        // Crear programs_data actualizado: MANTENER programs, ACTUALIZAR shifts y callTimes
+        // 🚨 PILAR 1: PRESERVAR callTimes MANUALES (ley suprema)
+        // Los callTimes marcados como manuales NO se tocan NUNCA
+        const existingCallTimes = existingPrograms.callTimes || {};
+        const existingManualCallTimes = existingPrograms.manualCallTimes || {};
+
+        const mergedCallTimes = {};
+        let manualesRespetados = 0;
+        let nuevosAgregados = 0;
+        let automaticosActualizados = 0;
+
+        // Para cada persona en los nuevos turnos
+        newShifts.forEach(shift => {
+          const personnelId = shift.personnel_id.toString();
+          const newCallTime = shift.shift_start.substring(0, 5);
+
+          if (existingManualCallTimes[personnelId]) {
+            // 🔒 MANUAL: Respetar el callTime manual del usuario (ley suprema)
+            mergedCallTimes[personnelId] = existingCallTimes[personnelId];
+            manualesRespetados++;
+          } else if (existingCallTimes[personnelId]) {
+            // 🔄 AUTOMÁTICO EXISTENTE: Actualizar al nuevo turno
+            mergedCallTimes[personnelId] = newCallTime;
+            automaticosActualizados++;
+          } else {
+            // ➕ NUEVO: Agregar callTime para personal nuevo
+            mergedCallTimes[personnelId] = newCallTime;
+            nuevosAgregados++;
+          }
+        });
+
+        console.log(`   🔒 CallTimes: ${manualesRespetados} manuales respetados, ${automaticosActualizados} automáticos actualizados, ${nuevosAgregados} nuevos agregados`);
+
+        // 🚨 PILAR 3: RECALCULAR ASIGNACIONES AUTOMÁTICAS después de cambios de personal
+        // Obtener asignaciones manuales existentes (las que el usuario marcó explícitamente)
+        const existingManualAssignments = existingPrograms.manualAssignments || {};
+
+        console.log(`   🧹 LIMPIEZA: ${Object.keys(existingAssignments).length} asignaciones totales, ${Object.keys(existingManualAssignments).length} manuales a preservar`);
+
+        // Función auxiliar para convertir tiempo a minutos
+        const timeToMinutes = (time) => {
+          const [h, m] = time.split(':').map(Number);
+          return h * 60 + m;
+        };
+
+        // 🔥 LIMPIEZA TOTAL: Empezar desde cero (solo manuales sobreviven)
+        const recalculatedAssignments = {};
+        const programs = existingPrograms.programs || [];
+
+        let manualesPreservadas = 0;
+        let automaticasRecalculadas = 0;
+        let automaticasEliminadas = 0;
+
+        // PASO 1: Contar cuántas automáticas vamos a eliminar
+        Object.keys(existingAssignments).forEach(key => {
+          if (!existingManualAssignments[key]) {
+            automaticasEliminadas++;
+          }
+        });
+
+        console.log(`   🔥 Eliminando ${automaticasEliminadas} asignaciones automáticas antiguas`);
+
+        // PASO 2: Preservar SOLO las asignaciones manuales del usuario
+        Object.keys(existingManualAssignments).forEach(key => {
+          if (existingManualAssignments[key]) {
+            recalculatedAssignments[key] = existingAssignments[key];
+            manualesPreservadas++;
+          }
+        });
+
+        // PASO 3: Recalcular asignaciones automáticas usando solapamiento inteligente
+        // 🚨 IMPORTANTE: Usar mergedCallTimes (que incluye manuales) NO shiftStart
+        newShifts.forEach(shift => {
+          const personnelId = shift.personnel_id.toString();
+
+          // 🔑 USAR CALLTIME (manual si existe, automático si no)
+          const callTime = mergedCallTimes[personnelId] || shift.shift_start.substring(0, 5);
+          const shiftEnd = shift.shift_end.substring(0, 5);
+          const callMinutes = timeToMinutes(callTime);
+          const shiftEndMinutes = timeToMinutes(shiftEnd);
+
+          // Log si estamos usando callTime manual
+          if (existingManualCallTimes[personnelId]) {
+            console.log(`   🔒 ${shift.name}: Usando callTime MANUAL ${callTime} (no shift ${shift.shift_start.substring(0, 5)})`);
+          }
+
+          programs.forEach(program => {
+            const key = `${personnelId}_${program.id}`;
+
+            // Si es manual, ya la preservamos arriba
+            if (existingManualAssignments[key]) {
+              return;
+            }
+
+            // Obtener tiempo del programa
+            const programTime = program.defaultTime || program.time || '';
+            const timeParts = programTime.split('-');
+            const programStartTime = timeParts[0].trim();
+
+            let programEndTime;
+            if (timeParts.length > 1) {
+              programEndTime = timeParts[1].trim();
+            } else {
+              // Si no tiene rango, asumir 1 hora de duración
+              const [h, m] = programStartTime.split(':').map(Number);
+              const endM = h * 60 + m + 60;
+              programEndTime = `${String(Math.floor(endM / 60)).padStart(2, '0')}:${String(endM % 60).padStart(2, '0')}`;
+            }
+
+            const programStartMinutes = timeToMinutes(programStartTime);
+            const programEndMinutes = timeToMinutes(programEndTime);
+
+            // 🚨 LÓGICA DE SOLAPAMIENTO DE COBERTURA (Regla del Usuario)
+            // REGLA: Un programa DEBE asignarse si el trabajador está presente en CUALQUIER MOMENTO de la emisión
+            // FÓRMULA: (programStartMinutes < shiftEndMinutes) && (programEndMinutes > callMinutes)
+            //
+            // Ejemplos correctos:
+            // - Programa 05:00-10:00, Turno 09:00-17:00 → SÍ asignar (trabajador cubre de 09:00 a 10:00)
+            // - Programa 12:00-14:00, Turno 13:00-19:00 → SÍ asignar (trabajador cubre de 13:00 a 14:00)
+            // - Programa 18:00-20:00, Turno 08:00-16:00 → NO asignar (trabajador no está presente)
+            //
+            // NO rechazamos programas que empezaron antes del llamado, el trabajador los puede continuar
+            const hasOverlap = (programStartMinutes < shiftEndMinutes) && (programEndMinutes > callMinutes);
+
+            if (hasOverlap) {
+              recalculatedAssignments[key] = true;
+              automaticasRecalculadas++;
+            }
+          });
+        });
+
+        console.log(`   🔄 Asignaciones recalculadas: ${manualesPreservadas} manuales preservadas, ${automaticasRecalculadas} automáticas regeneradas`);
+
+        // Crear programs_data actualizado: MANTENER programs y callTimes manuales, ACTUALIZAR shifts
         const updatedProgramsData = {
           programs: existingPrograms.programs || [], // ✅ PRESERVAR programas existentes
           shifts: newShifts, // 🔄 NUEVOS turnos
-          callTimes: newCallTimes // 🔄 NUEVOS llamados
+          callTimes: mergedCallTimes, // ✅ PRESERVAR callTimes manuales + actualizar automáticos
+          manualCallTimes: existingManualCallTimes, // ✅ PRESERVAR marcadores de callTimes manuales
+          manualAssignments: existingManualAssignments // ✅ PRESERVAR marcadores de asignaciones manuales
         };
 
-        // Actualizar SOLO programs_data, MANTENER assignments_data sin cambios
+        // Actualizar programs_data Y assignments_data con asignaciones recalculadas
         await pool.query(
           `UPDATE daily_schedules
-           SET programs_data = $1, updated_at = CURRENT_TIMESTAMP
-           WHERE date = $2`,
-          [JSON.stringify(updatedProgramsData), fecha]
+           SET programs_data = $1, assignments_data = $2, updated_at = CURRENT_TIMESTAMP
+           WHERE date = $3`,
+          [JSON.stringify(updatedProgramsData), JSON.stringify(recalculatedAssignments), fecha]
         );
 
         diasActualizados++;
-        console.log(`   ✅ ${fecha}: ${newShifts.length} turnos regenerados, ${(existingPrograms.programs || []).length} programas preservados`);
+        console.log(`   ✅ ${fecha}: ${newShifts.length} turnos regenerados, ${automaticasRecalculadas} asignaciones recalculadas, ${manualesPreservadas} asignaciones manuales preservadas`);
       } else {
         // NO EXISTE - Se generará automáticamente al cargar el día
         console.log(`   ⏭️  ${fecha}: No existe registro, se generará al cargar`);
       }
     }
 
-    console.log(`✅ REGENERACIÓN COMPLETA: ${diasActualizados} días actualizados con nuevos turnos (programas preservados).`);
+    console.log(`✅ REGENERACIÓN COMPLETA: ${diasActualizados} días actualizados con nuevos turnos y asignaciones recalculadas.`);
 
     res.json({
       success: true,
-      message: `Turnos regenerados para ${mes}/${anio}`,
+      clearCache: true, // 🔥 Flag para forzar refresco del frontend
+      message: `Turnos y asignaciones regenerados para ${mes}/${anio}`,
       diasActualizados: diasActualizados,
       periodo: `${primerDia} a ${ultimoDiaStr}`,
-      nota: 'Los turnos fueron actualizados según el nuevo personal. Tus programas y asignaciones se mantuvieron intactos.'
+      nota: '🚨 HARD DELETE + RECÁLCULO: Base de datos limpiada y asignaciones regeneradas con filtro de reloj. Las asignaciones manuales fueron preservadas.'
     });
 
   } catch (error) {

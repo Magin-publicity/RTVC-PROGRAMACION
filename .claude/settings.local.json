@@ -38,7 +38,9 @@
       "Bash(PGPASSWORD=Padres2023 psql:*)",
       "Bash(\"/c/Program Files/PostgreSQL/17/bin/psql\" -U postgres -d rtvc_scheduling -c \"CREATE TABLE IF NOT EXISTS program_mappings \\(program_id INTEGER PRIMARY KEY, studio_resource INTEGER, master_resource INTEGER, updated_at TIMESTAMP DEFAULT NOW\\(\\), created_at TIMESTAMP DEFAULT NOW\\(\\)\\);\")",
       "Bash(git commit:*)",
-      "Bash(cmd //c \"taskkill /F /PID 22732\")"
+      "Bash(cmd //c \"taskkill /F /PID 22732\")",
+      "Bash(cmd //c \"taskkill /F /PID 49444\")",
+      "Bash(tasklist:*)"
     ],
     "deny": [],
     "ask": []
