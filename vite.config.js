@@ -7,25 +7,14 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // Habilitar PWA en desarrollo
-      devOptions: {
-        enabled: true,
-        type: 'module',
-        navigateFallback: 'index.html'
-      },
-      // Estrategia de Service Worker
-      strategies: 'injectManifest',
-      srcDir: 'public',
-      filename: 'sw.js',
-      // Configuración del manifest
+      // Registro automático del SW
+      registerType: 'autoUpdate',
+      // Incluir archivos estáticos
+      includeAssets: ['icons/*.png', 'icons/*.svg', 'manifest.json'],
+      // Configuración del manifest (usa el manifest.json existente)
       manifest: false, // Usamos nuestro manifest.json personalizado
-      // Incluir archivos
-      includeAssets: ['icons/*.svg', 'icons/*.png'],
-      // NO generar SW automático, usamos el nuestro
-      injectRegister: false,
-      // Workbox options (solo si usas generateSW en lugar de injectManifest)
+      // Workbox - estrategia automática (generateSW)
       workbox: {
-        // Estas opciones se ignoran con 'injectManifest', pero las dejamos por si cambias
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
         runtimeCaching: [
           {
@@ -43,6 +32,11 @@ export default defineConfig({
             }
           }
         ]
+      },
+      // Habilitar PWA en desarrollo
+      devOptions: {
+        enabled: true,
+        type: 'module'
       }
     })
   ],
