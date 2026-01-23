@@ -41,7 +41,8 @@
       "Bash(cmd //c \"taskkill /F /PID 22732\")",
       "Bash(cmd //c \"taskkill /F /PID 49444\")",
       "Bash(tasklist:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(ipconfig:*)"
     ],
     "deny": [],
     "ask": []
