@@ -7,9 +7,29 @@ const app = express();
 const server = http.createServer(app);
 
 // Configurar Socket.io con CORS
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:4173',
+  process.env.FRONTEND_URL,
+  'https://*.vercel.app' // Permitir todos los dominios de Vercel
+].filter(Boolean);
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Permitir requests sin origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+
+      // Verificar si el origin está en la lista o es un dominio de Vercel
+      if (allowedOrigins.some(allowed =>
+          origin === allowed ||
+          origin.includes('vercel.app')
+      )) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true
   }
@@ -18,8 +38,21 @@ const io = new Server(server, {
 // Hacer io accesible en las rutas
 app.set('io', io);
 
-// Middleware
-app.use(cors());
+// Middleware CORS para Express
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.some(allowed =>
+        origin === allowed ||
+        origin.includes('vercel.app')
+    )) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 // Socket.io connection handler
