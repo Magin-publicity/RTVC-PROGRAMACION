@@ -10,6 +10,8 @@ const server = http.createServer(app);
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:4173',
+  'http://10.66.0.165:5173',
+  'http://10.225.95.165:5173',
   process.env.FRONTEND_URL,
   'https://*.vercel.app' // Permitir todos los dominios de Vercel
 ].filter(Boolean);

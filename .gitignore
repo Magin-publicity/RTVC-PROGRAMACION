@@ -5,6 +5,7 @@ backend/node_modules/
 # Build outputs
 dist/
 build/
+dev-dist/
 *.log
 
 # Environment variables
