@@ -9,7 +9,14 @@ const server = http.createServer(app);
 // Configurar Socket.io con CORS
 const allowedOrigins = [
   'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:5176',
   'http://localhost:4173',
+  'http://192.168.1.26:5173',
+  'http://192.168.1.26:5174',
+  'http://192.168.1.26:5175',
+  'http://192.168.1.26:5176',
   'http://10.66.0.165:5173',
   'http://10.225.95.165:5173',
   process.env.FRONTEND_URL,
@@ -97,6 +104,7 @@ const routesRoutes = require('./routes/routes');
 const fleetRoutes = require('./routes/fleet');
 const mealsRoutes = require('./routes/meals');
 const logisticsRoutes = require('./routes/logistics');
+const snapshotsRoutes = require('./routes/snapshots');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/personnel', personnelRoutes);
@@ -116,6 +124,7 @@ app.use('/api/routes', routesRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api/meals', mealsRoutes);
 app.use('/api/logistics', logisticsRoutes);
+app.use('/api/snapshots', snapshotsRoutes);
 
 // Puerto
 const PORT = process.env.PORT || 3000;

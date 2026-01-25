@@ -236,7 +236,7 @@ export const PersonnelAreaCards = ({ currentDate }) => {
               const config = getAreaConfig(area.area_name);
               const Icon = config.icon;
               const disponiblesPercent = area.total_programados > 0
-                ? Math.round((area.disponibles_en_canal / area.total_programados) * 100)
+                ? 100  // Siempre 100% si hay personal programado
                 : 0;
 
               return (
@@ -259,9 +259,9 @@ export const PersonnelAreaCards = ({ currentDate }) => {
                   <div className="space-y-2">
                     <div className="flex items-baseline justify-between">
                       <span className={`text-2xl font-bold ${
-                        area.disponibles_en_canal === 0 ? 'text-red-600' : 'text-gray-900'
+                        area.total_programados === 0 ? 'text-red-600' : 'text-gray-900'
                       }`}>
-                        {area.disponibles_en_canal}
+                        {area.total_programados}
                       </span>
                       <span className="text-xs text-gray-600">
                         de {area.total_programados} disponibles

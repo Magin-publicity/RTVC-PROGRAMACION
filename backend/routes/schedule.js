@@ -42,6 +42,47 @@ router.post('/rotation-week', async (req, res) => {
 router.get('/auto-shifts/:date', async (req, res) => {
   try {
     const { date } = req.params;
+
+    // 📸 PASO 1: Verificar si existe un snapshot para esta fecha
+    console.log(`🔍 Verificando snapshot para ${date}...`);
+    const snapshotMetadata = await pool.query(
+      'SELECT * FROM snapshot_metadata WHERE snapshot_date = $1',
+      [date]
+    );
+
+    // Si existe snapshot, devolver datos inmutables
+    if (snapshotMetadata.rows.length > 0) {
+      console.log(`✅ Snapshot encontrado para ${date}, devolviendo datos históricos`);
+
+      const snapshotShifts = await pool.query(`
+        SELECT
+          personnel_id,
+          personnel_name as name,
+          area,
+          shift_start_time as shift_start,
+          shift_end_time as shift_end,
+          shift_number as week_number,
+          shift_label as original_shift,
+          is_weekend,
+          rotation_week as rotation_number,
+          status,
+          notes
+        FROM shift_snapshots
+        WHERE snapshot_date = $1
+        ORDER BY area, shift_number
+      `, [date]);
+
+      return res.json({
+        from_snapshot: true,
+        snapshot_date: date,
+        metadata: snapshotMetadata.rows[0],
+        shifts: snapshotShifts.rows,
+        total_shifts: snapshotShifts.rows.length
+      });
+    }
+
+    console.log(`📊 No hay snapshot para ${date}, calculando dinámicamente...`);
+
     // Agregar 'T12:00:00' para evitar problemas de zona horaria
     const selectedDate = new Date(date + 'T12:00:00');
 
@@ -1858,28 +1899,29 @@ router.get('/personnel-by-area/:date', async (req, res) => {
 
     console.log(`📊 Obteniendo personal por área para ${date}`);
 
-    // 1. Obtener todos los turnos programados para este día
-    const shiftsResult = await pool.query(`
-      SELECT
-        p.area,
-        p.id as personnel_id,
-        p.name,
-        p.active
-      FROM personnel p
-      WHERE p.active = true
-      ORDER BY p.area, p.name
-    `);
+    // 1. Obtener los turnos del día usando la lógica de auto-shifts
+    // Esto nos da SOLO las personas que trabajan HOY
+    const selectedDate = new Date(date + 'T12:00:00');
+    const dayOfWeek = selectedDate.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-    // 2. Obtener programación del día (call times)
-    const scheduleResult = await pool.query(
-      'SELECT assignments_data, programs_data FROM daily_schedules WHERE date = $1',
-      [date]
-    );
+    console.log(`   Fecha: ${date}, Es fin de semana: ${isWeekend}`);
 
-    const programsData = scheduleResult.rows[0]?.programs_data || {};
-    const callTimes = programsData.callTimes || {};
+    // Llamar internamente a la lógica que ya usa auto-shifts
+    // Reutilizar la misma query que auto-shifts para consistencia
+    const shiftsResponse = await fetch(`http://localhost:3000/api/schedule/auto-shifts/${date}`);
+    let shifts = [];
 
-    // 3. Obtener novedades activas del día
+    if (shiftsResponse.ok) {
+      const shiftsData = await shiftsResponse.json();
+
+      // Si viene de snapshot, usar shiftsData.shifts, sino usar shiftsData directamente
+      shifts = shiftsData.from_snapshot ? shiftsData.shifts : shiftsData;
+    }
+
+    console.log(`   Total turnos obtenidos: ${shifts.length}`);
+
+    // 2. Obtener novedades activas del día
     const noveltiesResult = await pool.query(`
       SELECT personnel_id, type, description
       FROM novelties
@@ -1894,7 +1936,7 @@ router.get('/personnel-by-area/:date', async (req, res) => {
       noveltiesMap[n.personnel_id] = n;
     });
 
-    // 4. Obtener despachos activos del día (si existe la tabla)
+    // 3. Obtener despachos activos del día (si existe la tabla)
     let dispatchesMap = {};
     try {
       const dispatchesResult = await pool.query(`
@@ -1914,14 +1956,14 @@ router.get('/personnel-by-area/:date', async (req, res) => {
       });
     } catch (error) {
       // Tabla fleet_dispatches no existe aún, continuar sin despachos
-      console.log('ℹ️  Tabla fleet_dispatches no disponible, continuando sin información de despachos');
+      console.log('ℹ️  Tabla fleet_dispatches no disponible');
     }
 
-    // 5. Agrupar por área y calcular estadísticas
+    // 4. Agrupar por área - SOLO contar personas con turnos HOY
     const areaStats = {};
 
-    shiftsResult.rows.forEach(person => {
-      const area = person.area || 'Sin área';
+    shifts.forEach(shift => {
+      const area = shift.area || 'Sin área';
 
       if (!areaStats[area]) {
         areaStats[area] = {
@@ -1934,35 +1976,25 @@ router.get('/personnel-by-area/:date', async (req, res) => {
         };
       }
 
+      // Contar cada turno (persona trabajando hoy)
       areaStats[area].total_programados++;
 
       // Determinar estado
-      const enNovedad = !!noveltiesMap[person.personnel_id];
-      const enDespacho = !!dispatchesMap[person.personnel_id];
-      const tieneHoraLlamado = !!callTimes[person.personnel_id];
+      const enNovedad = !!noveltiesMap[shift.personnel_id];
+      const enDespacho = !!dispatchesMap[shift.personnel_id];
 
       if (enDespacho) {
         areaStats[area].en_despacho++;
         areaStats[area].en_terreno++;
       } else if (enNovedad) {
-        const novelty = noveltiesMap[person.personnel_id];
+        const novelty = noveltiesMap[shift.personnel_id];
         if (novelty.type.toLowerCase().includes('viaje')) {
           areaStats[area].en_terreno++;
         }
         areaStats[area].en_novedad++;
-      } else if (tieneHoraLlamado) {
-        // Si tiene hora de llamado y no está en despacho/novedad, está en canal
-        const currentHour = new Date().getHours();
-        const currentMinutes = new Date().getMinutes();
-        const currentTime = currentHour * 60 + currentMinutes;
-
-        const [callHour, callMinutes] = callTimes[person.personnel_id].split(':').map(Number);
-        const callTimeMinutes = callHour * 60 + callMinutes;
-
-        if (currentTime >= callTimeMinutes) {
-          // Ya pasó su hora de llamado, debería estar en canal
-          areaStats[area].disponibles_en_canal++;
-        }
+      } else {
+        // Disponible en canal (trabajando normalmente)
+        areaStats[area].disponibles_en_canal++;
       }
     });
 
@@ -1970,6 +2002,7 @@ router.get('/personnel-by-area/:date', async (req, res) => {
     const result = Object.values(areaStats).sort((a, b) => b.total_programados - a.total_programados);
 
     console.log(`✅ Estadísticas calculadas para ${Object.keys(areaStats).length} áreas`);
+    console.log(`   Ejemplo: ${result[0]?.area_name} - ${result[0]?.total_programados} personas trabajando hoy`);
 
     res.json(result);
 
@@ -2023,8 +2056,15 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
           });
         }).on('error', reject);
       });
-      autoShifts = shiftsResponse || [];
-      console.log(`   📊 Obtenidos ${autoShifts.length} turnos automáticos para ${date}`);
+
+      // Si viene de snapshot, extraer el array de shifts
+      if (shiftsResponse && shiftsResponse.from_snapshot) {
+        autoShifts = shiftsResponse.shifts || [];
+        console.log(`   📸 Usando ${autoShifts.length} turnos desde snapshot para ${date}`);
+      } else {
+        autoShifts = Array.isArray(shiftsResponse) ? shiftsResponse : [];
+        console.log(`   📊 Obtenidos ${autoShifts.length} turnos automáticos para ${date}`);
+      }
     } catch (error) {
       console.log('   ⚠️ No se pudieron obtener turnos automáticos, usando datos guardados');
     }

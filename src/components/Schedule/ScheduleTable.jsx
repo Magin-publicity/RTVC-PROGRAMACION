@@ -132,6 +132,8 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
   const [autoShifts, setAutoShifts] = useState([]);
   const [programMappings, setProgramMappings] = useState({});
   const [loadedFromDB, setLoadedFromDB] = useState(false); // Indica si los datos actuales vienen de BD
+  const [isFromSnapshot, setIsFromSnapshot] = useState(false); // 📸 Indica si los datos vienen de snapshot histórico
+  const [snapshotMetadata, setSnapshotMetadata] = useState(null); // 📸 Metadata del snapshot
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
@@ -251,6 +253,8 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       setManualAssignments({});
       setAutoShifts([]);
       setLoadedFromDB(false);
+      setIsFromSnapshot(false); // 📸 Resetear indicador de snapshot
+      setSnapshotMetadata(null); // 📸 Limpiar metadata de snapshot
       setHasUnsavedChanges(false); // Importante: nuevo día = sin cambios pendientes
 
       // Resetear refs de comparación para que el detector NO dispare en la primera carga
@@ -320,7 +324,19 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         const shiftsData = await shiftsRes.json();
 
         if (isCancelled) return;
-        setAutoShifts(shiftsData);
+
+        // 📸 Detectar si los datos vienen de snapshot histórico
+        if (shiftsData.from_snapshot) {
+          console.log(`📸 [SNAPSHOT] Datos históricos cargados desde snapshot de ${dateStr}`);
+          setIsFromSnapshot(true);
+          setSnapshotMetadata(shiftsData.metadata);
+          setAutoShifts(shiftsData.shifts);
+        } else {
+          console.log(`📊 [DINÁMICO] Datos calculados dinámicamente para ${dateStr}`);
+          setIsFromSnapshot(false);
+          setSnapshotMetadata(null);
+          setAutoShifts(shiftsData);
+        }
 
         // NO usar programas de BD - siempre usar programs.js
         console.log('✅ [ScheduleTable] Usando programas de programs.js, NO de BD');
@@ -565,6 +581,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         programs: programs.length
       });
 
+      // PASO 1: Guardar en el endpoint daily (formato actual)
       const response = await fetch(`${API_URL}/schedule/daily/${dateStr}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -580,15 +597,59 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
       const result = await response.json();
 
-      if (response.ok) {
-        console.log(`✅ [GUARDADO MANUAL] Guardado exitoso para ${dateStr}`);
-        setLastSaved(new Date());
-        setHasUnsavedChanges(false); // Marcar como guardado
-        alert('✅ Jornada guardada exitosamente');
-      } else {
+      if (!response.ok) {
         console.error(`❌ [GUARDADO MANUAL] Error del servidor:`, result);
         alert(`❌ Error al guardar: ${result.error || 'Error desconocido'}`);
+        return;
       }
+
+      console.log(`✅ [GUARDADO MANUAL] Guardado exitoso en daily/${dateStr}`);
+
+      // PASO 2: Guardar snapshot inmutable para historial
+      console.log(`📸 [SNAPSHOT] Guardando snapshot inmutable para ${dateStr}...`);
+
+      // Preparar datos del snapshot desde autoShifts
+      const snapshotShifts = autoShifts.map(shift => ({
+        area: shift.area,
+        personnel_id: shift.personnel_id,
+        personnel_name: shift.name,
+        personnel_role: shift.role || null,
+        shift_number: shift.week_number || 1,
+        shift_start_time: shift.shift_start,
+        shift_end_time: shift.shift_end,
+        shift_label: shift.original_shift || `T${shift.week_number || 1}`,
+        shift_description: shift.turno_descripcion || null,
+        status: 'ACTIVO',
+        notes: null,
+        rotation_week: shift.rotation_number || shift.week_number || null,
+        is_weekend: isWeekend
+      }));
+
+      const snapshotResponse = await fetch(`${API_URL}/snapshots/save/${dateStr}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shifts: snapshotShifts,
+          rotation_week: snapshotShifts[0]?.rotation_week || null,
+          notes: `Guardado manual desde ScheduleTable - ${new Date().toLocaleString('es-CO')}`
+        })
+      });
+
+      const snapshotResult = await snapshotResponse.json();
+
+      if (snapshotResponse.ok) {
+        console.log(`✅ [SNAPSHOT] Snapshot guardado exitosamente:`, snapshotResult);
+        setLastSaved(new Date());
+        setHasUnsavedChanges(false);
+        alert('✅ Jornada guardada exitosamente\n📸 Snapshot histórico creado');
+      } else {
+        console.warn(`⚠️ [SNAPSHOT] Error al guardar snapshot:`, snapshotResult);
+        // No fallar si el snapshot falla - el guardado principal ya funcionó
+        setLastSaved(new Date());
+        setHasUnsavedChanges(false);
+        alert('✅ Jornada guardada exitosamente\n⚠️ Snapshot no pudo crearse (datos guardados en formato anterior)');
+      }
+
     } catch (error) {
       console.error('❌ [GUARDADO MANUAL] Error de red:', error);
       alert(`❌ Error de red: ${error.message}`);
@@ -965,9 +1026,23 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         {/* Encabezado */}
         <div className="bg-blue-900 text-white p-3">
           <div className="flex justify-between items-center">
-          <h2 className="text-lg font-bold text-center flex-1">
-            COORDINACIÓN PARA EL CUMPLIMIENTO DE ACTIVIDADES DE RTVC {formatDate(selectedDate)}
-          </h2>
+          <div className="flex-1">
+            <h2 className="text-lg font-bold text-center">
+              COORDINACIÓN PARA EL CUMPLIMIENTO DE ACTIVIDADES DE RTVC {formatDate(selectedDate)}
+            </h2>
+            {/* 📸 Indicador de Snapshot Histórico */}
+            {isFromSnapshot && snapshotMetadata && (
+              <div className="flex items-center justify-center gap-2 mt-1">
+                <div className="bg-amber-600 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-2">
+                  <Camera size={14} />
+                  <span>SNAPSHOT HISTÓRICO</span>
+                </div>
+                <span className="text-xs text-gray-300">
+                  Guardado: {new Date(snapshotMetadata.saved_at).toLocaleString('es-CO')}
+                </span>
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             {/* Indicador de conexión WebSocket */}
             <div className="flex items-center gap-2 bg-blue-800 px-3 py-2 rounded">
