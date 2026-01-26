@@ -133,6 +133,49 @@ router.post('/save/:date', async (req, res) => {
 });
 
 /**
+ * GET /api/snapshots/list
+ * Obtiene la lista de todos los snapshots guardados (para la Máquina del Tiempo)
+ */
+router.get('/list', async (req, res) => {
+  try {
+    console.log(`📚 Consultando lista de snapshots...`);
+
+    const result = await pool.query(`
+      SELECT
+        snapshot_date,
+        saved_at,
+        saved_by,
+        total_personnel,
+        total_areas,
+        is_locked,
+        notes
+      FROM snapshot_metadata
+      ORDER BY snapshot_date DESC
+    `);
+
+    const snapshots = result.rows;
+
+    // Calcular estadísticas
+    const stats = {
+      totalDays: snapshots.length,
+      oldestDate: snapshots.length > 0 ? snapshots[snapshots.length - 1].snapshot_date : null,
+      newestDate: snapshots.length > 0 ? snapshots[0].snapshot_date : null
+    };
+
+    console.log(`   ✅ ${snapshots.length} snapshots encontrados`);
+
+    res.json({
+      snapshots,
+      stats
+    });
+
+  } catch (error) {
+    console.error('❌ Error consultando lista de snapshots:', error);
+    res.status(500).json({ error: 'Error al consultar lista de snapshots', details: error.message });
+  }
+});
+
+/**
  * GET /api/snapshots/:date
  * Obtiene el snapshot de una fecha específica
  */

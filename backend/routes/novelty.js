@@ -29,6 +29,44 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Obtener novedades de una fecha específica
+router.get('/date/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+
+    console.log(`📅 Consultando novedades para ${date}...`);
+
+    const result = await pool.query(`
+      SELECT
+        n.id,
+        n.personnel_id,
+        n.date,
+        n.start_date,
+        n.end_date,
+        n.type AS novelty_type,
+        n.description,
+        p.name AS personnel_name,
+        p.area,
+        p.role
+      FROM novelties n
+      LEFT JOIN personnel p ON n.personnel_id = p.id
+      WHERE $1 BETWEEN COALESCE(n.start_date, n.date) AND COALESCE(n.end_date, n.date)
+      ORDER BY p.name
+    `, [date]);
+
+    console.log(`   ✅ ${result.rows.length} novedades encontradas`);
+
+    res.json({
+      date,
+      novelties: result.rows,
+      total: result.rows.length
+    });
+  } catch (error) {
+    console.error('❌ Error al obtener novedades por fecha:', error);
+    res.status(500).json({ error: 'Error al obtener novedades por fecha' });
+  }
+});
+
 // Crear una nueva novedad
 router.post('/', async (req, res) => {
   const { personnel_id, date, start_date, end_date, type, description } = req.body;

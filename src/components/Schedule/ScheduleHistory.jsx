@@ -1,38 +1,62 @@
 // src/components/Schedule/ScheduleHistory.jsx
 import React, { useState, useEffect } from 'react';
-import { Calendar, Download, Trash2, Eye } from 'lucide-react';
-import { scheduleHistoryService } from '../../services/scheduleHistoryService';
-import { Button } from '../UI/Button';
+import { Calendar, ArrowLeft, Eye, Clock } from 'lucide-react';
+import { HistoricalScheduleView } from './HistoricalScheduleView';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export const ScheduleHistory = ({ onLoadDate }) => {
-  const [history, setHistory] = useState({});
+  const [history, setHistory] = useState([]);
   const [stats, setStats] = useState({ totalDays: 0, oldestDate: null, newestDate: null });
   const [selectedDate, setSelectedDate] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('list'); // 'list' o 'detail'
 
   useEffect(() => {
     loadHistory();
   }, []);
 
-  const loadHistory = () => {
-    const allHistory = scheduleHistoryService.getAll();
-    const historyStats = scheduleHistoryService.getStats();
-    setHistory(allHistory);
-    setStats(historyStats);
-  };
+  const loadHistory = async () => {
+    try {
+      setLoading(true);
 
-  const handleDeleteDay = (date) => {
-    if (confirm(`¿Estás seguro de eliminar el historial del ${formatDate(date)}?`)) {
-      scheduleHistoryService.deleteDay(date);
-      loadHistory();
+      // Cargar desde snapshots (historial inmutable)
+      const response = await fetch(`${API_URL}/snapshots/list`);
+
+      if (response.ok) {
+        const data = await response.json();
+        setHistory(data.snapshots || []);
+        setStats(data.stats || { totalDays: 0, oldestDate: null, newestDate: null });
+      } else {
+        console.warn('No se pudo cargar el historial desde snapshots');
+        setHistory([]);
+      }
+    } catch (error) {
+      console.error('Error loading history:', error);
+      setHistory([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleViewDay = (date) => {
+  const handleViewDay = (dateStr) => {
+    // Convertir fecha string a objeto Date
+    const [year, month, day] = dateStr.split('-');
+    const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    setSelectedDate(dateObj);
+    setViewMode('detail');
+  };
+
+  const handleBackToList = () => {
+    setSelectedDate(null);
+    setViewMode('list');
+  };
+
+  const handleBackToToday = () => {
+    setSelectedDate(null);
+    setViewMode('list');
     if (onLoadDate) {
-      // Convertir fecha string a objeto Date
-      const [year, month, day] = date.split('-');
-      const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-      onLoadDate(dateObj);
+      onLoadDate(new Date());
     }
   };
 
@@ -57,14 +81,34 @@ export const ScheduleHistory = ({ onLoadDate }) => {
     });
   };
 
-  const sortedDates = Object.keys(history).sort().reverse();
+  // Si estamos en modo detalle, mostrar la vista histórica
+  if (viewMode === 'detail' && selectedDate) {
+    return (
+      <HistoricalScheduleView
+        selectedDate={selectedDate}
+        onBack={handleBackToToday}
+      />
+    );
+  }
+
+  // Vista de lista de historial
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando historial...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Historial de Programación</h2>
+          <h2 className="text-2xl font-bold text-gray-900">📚 Máquina del Tiempo</h2>
           <p className="text-gray-600 mt-1">
             Consulta la programación guardada de días anteriores
           </p>
@@ -130,18 +174,18 @@ export const ScheduleHistory = ({ onLoadDate }) => {
           <h3 className="text-lg font-semibold text-gray-900">Días Guardados</h3>
         </div>
 
-        {sortedDates.length === 0 ? (
+        {history.length === 0 ? (
           <div className="px-6 py-12 text-center text-gray-500">
             <Calendar className="mx-auto mb-4 text-gray-400" size={48} />
             <p>No hay historial guardado aún</p>
             <p className="text-sm mt-2">
-              El historial se guarda automáticamente cuando trabajas en la programación
+              El historial se guarda automáticamente cuando trabajas en la programación y presionas "Guardar Jornada"
             </p>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {sortedDates.map(date => {
-              const dayData = history[date];
+            {history.map(dayData => {
+              const date = dayData.snapshot_date;
               return (
                 <div
                   key={date}
@@ -154,14 +198,20 @@ export const ScheduleHistory = ({ onLoadDate }) => {
                       </h4>
                       <div className="mt-1 text-sm text-gray-600 space-y-1">
                         <p>
-                          Programas: <strong>{dayData.programs?.length || 0}</strong>
+                          Personal: <strong>{dayData.total_personnel || 0}</strong>
                         </p>
                         <p>
-                          Asignaciones: <strong>{Object.keys(dayData.assignments || {}).filter(k => dayData.assignments[k]).length}</strong>
+                          Áreas: <strong>{dayData.total_areas || 0}</strong>
                         </p>
                         <p className="text-xs text-gray-500">
-                          Guardado: {formatDateTime(dayData.savedAt)}
+                          Guardado: {formatDateTime(dayData.saved_at)}
                         </p>
+                        {dayData.is_locked && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded">
+                            <Clock size={12} />
+                            Bloqueado
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -169,18 +219,10 @@ export const ScheduleHistory = ({ onLoadDate }) => {
                       <button
                         onClick={() => handleViewDay(date)}
                         className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
-                        title="Ver este día"
+                        title="Ver programación histórica"
                       >
                         <Eye size={16} />
-                        Ver
-                      </button>
-                      <button
-                        onClick={() => handleDeleteDay(date)}
-                        className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 border border-red-600 rounded-md hover:bg-red-50 transition-colors"
-                        title="Eliminar historial"
-                      >
-                        <Trash2 size={16} />
-                        Eliminar
+                        Ver Programación
                       </button>
                     </div>
                   </div>
@@ -194,13 +236,14 @@ export const ScheduleHistory = ({ onLoadDate }) => {
       {/* Información */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h4 className="text-sm font-semibold text-blue-900 mb-2">
-          ℹ️ Información sobre el Historial
+          ℹ️ Información sobre la Máquina del Tiempo
         </h4>
         <ul className="text-sm text-blue-800 space-y-1">
-          <li>• El historial se guarda automáticamente cuando trabajas en la programación</li>
-          <li>• Puedes ver la programación de cualquier día anterior haciendo clic en "Ver"</li>
-          <li>• Los datos se guardan localmente en tu navegador</li>
-          <li>• Si eliminas el historial de un día, no se puede recuperar</li>
+          <li>• El historial se guarda automáticamente cuando presionas "Guardar Jornada"</li>
+          <li>• Puedes ver la programación de cualquier día anterior haciendo clic en "Ver Programación"</li>
+          <li>• Los datos históricos son de SOLO LECTURA - no se pueden modificar</li>
+          <li>• Las novedades (viajes, permisos, etc.) se resaltan con colores especiales</li>
+          <li>• Los datos se guardan permanentemente en la base de datos</li>
         </ul>
       </div>
     </div>
