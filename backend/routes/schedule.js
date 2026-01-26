@@ -1956,7 +1956,8 @@ router.get('/personnel-by-area/:date', async (req, res) => {
         const currentMinutes = new Date().getMinutes();
         const currentTime = currentHour * 60 + currentMinutes;
 
-        const [callHour, callMinutes] = callTimes[person.personnel_id].split(':').map(Number);
+        const callTimeStr = String(callTimes[person.personnel_id] || '00:00');
+        const [callHour, callMinutes] = callTimeStr.split(':').map(Number);
         const callTimeMinutes = callHour * 60 + callMinutes;
 
         if (currentTime >= callTimeMinutes) {
@@ -2129,7 +2130,8 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
 
       let enCanal = false;
       if (callTime && !dispatch && !novelty) {
-        const [callHour, callMinutes] = callTime.split(':').map(Number);
+        const callTimeStr = String(callTime || '00:00');
+        const [callHour, callMinutes] = callTimeStr.split(':').map(Number);
         const callTimeMinutes = callHour * 60 + callMinutes;
         enCanal = currentTime >= callTimeMinutes;
       }
