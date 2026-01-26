@@ -672,29 +672,47 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         is_weekend: isWeekend
       }));
 
-      const snapshotResponse = await fetch(`${API_URL}/snapshots/save/${dateStr}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shifts: snapshotShifts,
-          rotation_week: snapshotShifts[0]?.rotation_week || null,
-          notes: `Guardado manual desde ScheduleTable - ${new Date().toLocaleString('es-CO')}`
-        })
-      });
+      // Intentar guardar snapshot (OPCIONAL - no debe fallar el guardado principal)
+      try {
+        const snapshotResponse = await fetch(`${API_URL}/snapshots/save/${dateStr}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shifts: snapshotShifts,
+            rotation_week: snapshotShifts[0]?.rotation_week || null,
+            notes: `Guardado manual desde ScheduleTable - ${new Date().toLocaleString('es-CO')}`
+          })
+        });
 
-      const snapshotResult = await snapshotResponse.json();
+        // Verificar si la respuesta es JSON antes de parsear
+        const contentType = snapshotResponse.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const snapshotResult = await snapshotResponse.json();
 
-      if (snapshotResponse.ok) {
-        console.log(`✅ [SNAPSHOT] Snapshot guardado exitosamente:`, snapshotResult);
+          if (snapshotResponse.ok) {
+            console.log(`✅ [SNAPSHOT] Snapshot guardado exitosamente:`, snapshotResult);
+            setLastSaved(new Date());
+            setHasUnsavedChanges(false);
+            alert('✅ Jornada guardada exitosamente\n📸 Snapshot histórico creado');
+          } else {
+            console.warn(`⚠️ [SNAPSHOT] Error al guardar snapshot:`, snapshotResult);
+            setLastSaved(new Date());
+            setHasUnsavedChanges(false);
+            alert('✅ Jornada guardada exitosamente\n⚠️ Snapshot no pudo crearse (datos guardados correctamente)');
+          }
+        } else {
+          // El servidor retornó HTML (error 500 o 404) - las tablas no existen
+          console.warn(`⚠️ [SNAPSHOT] Endpoint no disponible (tablas no creadas aún)`);
+          setLastSaved(new Date());
+          setHasUnsavedChanges(false);
+          alert('✅ Jornada guardada exitosamente');
+        }
+      } catch (snapshotError) {
+        // Error de red o parsing - no importa, el guardado principal ya funcionó
+        console.warn(`⚠️ [SNAPSHOT] Error al guardar snapshot:`, snapshotError.message);
         setLastSaved(new Date());
         setHasUnsavedChanges(false);
-        alert('✅ Jornada guardada exitosamente\n📸 Snapshot histórico creado');
-      } else {
-        console.warn(`⚠️ [SNAPSHOT] Error al guardar snapshot:`, snapshotResult);
-        // No fallar si el snapshot falla - el guardado principal ya funcionó
-        setLastSaved(new Date());
-        setHasUnsavedChanges(false);
-        alert('✅ Jornada guardada exitosamente\n⚠️ Snapshot no pudo crearse (datos guardados en formato anterior)');
+        alert('✅ Jornada guardada exitosamente');
       }
 
     } catch (error) {
