@@ -1128,6 +1128,166 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       return;
     }
 
+    // 🎬 LÓGICA ESPECIAL PARA CAMARÓGRAFOS DE REPORTERÍA - SISTEMA DE DUPLAS
+    // Un camarógrafo del T1 (06:00-13:00) tiene un relevo anclado en T2 (13:00-20:00)
+    if (areaName === 'CAMARÓGRAFOS DE REPORTERÍA') {
+      console.log(`📹 CAMARÓGRAFOS DE REPORTERÍA: Aplicando sistema de duplas con relevo`);
+
+      // Definir duplas de relevo por equipo (mismo orden que backend)
+      const DUPLAS_REPORTERIA = [
+        // X3 - Cámaras Propias
+        { t1: 'Floresmiro Luna', t2: 'Julián Luna', equipo: 'X3', tipo: 'propias' },
+        { t1: 'Leonel Cifuentes', t2: 'Andrés Ramírez', equipo: 'X3', tipo: 'propias' },
+        // SONY 300 - Cámaras Propias
+        { t1: 'Edgar Nieto', t2: 'Didier Buitrago', equipo: 'SONY 300', tipo: 'propias' },
+        { t1: 'William Uribe', t2: 'Marco Solórzano', equipo: 'SONY 300', tipo: 'propias' },
+        // Cámaras RTVC
+        { t1: 'Erick Velázquez', t2: 'Cesar Morales', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+        { t1: 'William Ruiz', t2: 'Álvaro Díaz', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+        { t1: 'Carlos Wilches', t2: 'Victor Vargas', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+        { t1: 'Enrique Muñoz', t2: 'Edgar Castillo', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+        { t1: 'John Ruiz', t2: 'Ramiro Balaguera', equipo: 'Cámara RTVC', tipo: 'rtvc' }
+      ];
+
+      const newCallTimes = { ...callTimes };
+      const newEndTimes = { ...endTimes };
+      const newManualCallTimes = { ...manualCallTimes };
+      const newManualEndTimes = { ...manualEndTimes };
+
+      let duplasAsignadas = 0;
+      let duplasIncompletas = 0;
+
+      DUPLAS_REPORTERIA.forEach(dupla => {
+        const t1Person = availableEmployees.find(p => p.name === dupla.t1);
+        const t2Person = availableEmployees.find(p => p.name === dupla.t2);
+
+        // Solo asignar si AMBOS están disponibles (relevo completo)
+        if (t1Person && t2Person) {
+          // T1: Mañana 06:00-13:00
+          newCallTimes[t1Person.id] = '06:00';
+          newEndTimes[t1Person.id] = '13:00';
+          newManualCallTimes[t1Person.id] = true;
+          newManualEndTimes[t1Person.id] = true;
+
+          // T2: Tarde 13:00-20:00
+          newCallTimes[t2Person.id] = '13:00';
+          newEndTimes[t2Person.id] = '20:00';
+          newManualCallTimes[t2Person.id] = true;
+          newManualEndTimes[t2Person.id] = true;
+
+          console.log(`   ✅ Dupla ${dupla.equipo}: ${dupla.t1} (T1 06:00) ↔ ${dupla.t2} (T2 13:00)`);
+          duplasAsignadas++;
+        } else {
+          duplasIncompletas++;
+          if (t1Person && !t2Person) {
+            console.log(`   ⚠️ Dupla incompleta: ${dupla.t1} disponible pero ${dupla.t2} no disponible (${dupla.equipo})`);
+          } else if (!t1Person && t2Person) {
+            console.log(`   ⚠️ Dupla incompleta: ${dupla.t2} disponible pero ${dupla.t1} no disponible (${dupla.equipo})`);
+          }
+        }
+      });
+
+      // Redistribuir asignaciones según los nuevos horarios
+      const newAssignments = { ...assignments };
+      const newManualAssignments = { ...manualAssignments };
+
+      // Limpiar asignaciones NO manuales de esta área
+      areaPersonnel.forEach(person => {
+        programs.forEach(program => {
+          const key = `${person.id}_${program.id}`;
+          if (!newManualAssignments[key]) {
+            delete newAssignments[key];
+          }
+        });
+      });
+
+      // Asignar empleados a programas según solapamiento horario
+      DUPLAS_REPORTERIA.forEach(dupla => {
+        const t1Person = availableEmployees.find(p => p.name === dupla.t1);
+        const t2Person = availableEmployees.find(p => p.name === dupla.t2);
+
+        if (t1Person && t2Person) {
+          // Asignar T1 (06:00-13:00)
+          const t1CallMinutes = timeToMinutes('06:00');
+          const t1EndMinutes = timeToMinutes('13:00');
+
+          programs.forEach(program => {
+            const key = `${t1Person.id}_${program.id}`;
+            if (newManualAssignments[key]) {
+              newAssignments[key] = true;
+              return;
+            }
+
+            const programTime = program.defaultTime || program.time || '';
+            const timeParts = programTime.split('-');
+            const programStartTime = timeParts[0].trim();
+
+            let programEndTime;
+            if (timeParts.length > 1) {
+              programEndTime = timeParts[1].trim();
+            } else {
+              const [h, m] = programStartTime.split(':').map(Number);
+              const endM = h * 60 + m + 60;
+              programEndTime = `${String(Math.floor(endM / 60)).padStart(2, '0')}:${String(endM % 60).padStart(2, '0')}`;
+            }
+
+            const programStartMinutes = timeToMinutes(programStartTime);
+            const programEndMinutes = timeToMinutes(programEndTime);
+
+            const hasOverlap = (programStartMinutes < t1EndMinutes) && (programEndMinutes > t1CallMinutes);
+
+            if (hasOverlap) {
+              newAssignments[key] = true;
+            }
+          });
+
+          // Asignar T2 (13:00-20:00)
+          const t2CallMinutes = timeToMinutes('13:00');
+          const t2EndMinutes = timeToMinutes('20:00');
+
+          programs.forEach(program => {
+            const key = `${t2Person.id}_${program.id}`;
+            if (newManualAssignments[key]) {
+              newAssignments[key] = true;
+              return;
+            }
+
+            const programTime = program.defaultTime || program.time || '';
+            const timeParts = programTime.split('-');
+            const programStartTime = timeParts[0].trim();
+
+            let programEndTime;
+            if (timeParts.length > 1) {
+              programEndTime = timeParts[1].trim();
+            } else {
+              const [h, m] = programStartTime.split(':').map(Number);
+              const endM = h * 60 + m + 60;
+              programEndTime = `${String(Math.floor(endM / 60)).padStart(2, '0')}:${String(endM % 60).padStart(2, '0')}`;
+            }
+
+            const programStartMinutes = timeToMinutes(programStartTime);
+            const programEndMinutes = timeToMinutes(programEndTime);
+
+            const hasOverlap = (programStartMinutes < t2EndMinutes) && (programEndMinutes > t2CallMinutes);
+
+            if (hasOverlap) {
+              newAssignments[key] = true;
+            }
+          });
+        }
+      });
+
+      setCallTimes(newCallTimes);
+      setEndTimes(newEndTimes);
+      setManualCallTimes(newManualCallTimes);
+      setManualEndTimes(newManualEndTimes);
+      setAssignments(newAssignments);
+
+      console.log(`✅ [CAMARÓGRAFOS DE REPORTERÍA] Reorganización completada`);
+      alert(`✅ Cámaras de Reportería reorganizados con sistema de duplas\n\n📊 Duplas completas asignadas: ${duplasAsignadas}/${DUPLAS_REPORTERIA.length}\n⚠️ Duplas incompletas: ${duplasIncompletas}\n\n🎬 T1 (06:00-13:00) → Relevos en T2 (13:00-20:00)`);
+      return;
+    }
+
     // 3. ALGORITMOS PREDEFINIDOS POR NÚMERO DE EMPLEADOS (OTRAS ÁREAS)
     // Configuraciones oficiales del sistema (basadas en configure-shift-patterns.js)
     const TURNOS_PREDEFINIDOS = {

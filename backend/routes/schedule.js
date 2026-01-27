@@ -966,42 +966,110 @@ router.get('/auto-shifts/:date', async (req, res) => {
         return; // Salir para que no use la lógica de patrones
       }
 
-      // ⚠️ CRÍTICO - NO MODIFICAR: LÓGICA ESPECIAL PARA REPORTERÍA
-      // Esta lógica implementa un sistema de grupos fijos (GRUPO_A y GRUPO_B) que
-      // alternan entre turnos AM y PM cada semana basándose en weeksDiff
-      // - weeksDiff par: GRUPO_A → AM, GRUPO_B → PM
-      // - weeksDiff impar: GRUPO_A → PM, GRUPO_B → AM
-      if (area === 'CAMARÓGRAFOS DE REPORTERÍA' || area === 'ASISTENTES DE REPORTERÍA') {
+      // 🎬 CRÍTICO - LÓGICA ESPECIAL PARA REPORTERÍA CON SISTEMA DE DUPLAS
+      // Sistema de duplas de relevo: Un camarógrafo del T1 (06:00-13:00) tiene un relevo
+      // anclado en el T2 (13:00-20:00) por compatibilidad de equipo
+      if (area === 'CAMARÓGRAFOS DE REPORTERÍA') {
+        console.log(`📹 ${area}: Sistema de duplas con relevo T1 → T2`);
+
+        // Definir duplas de relevo por equipo
+        const DUPLAS_REPORTERIA = [
+          // X3 - Cámaras Propias
+          { t1: 'Floresmiro Luna', t2: 'Julián Luna', equipo: 'X3', tipo: 'propias' },
+          { t1: 'Leonel Cifuentes', t2: 'Andrés Ramírez', equipo: 'X3', tipo: 'propias' },
+          // SONY 300 - Cámaras Propias
+          { t1: 'Edgar Nieto', t2: 'Didier Buitrago', equipo: 'SONY 300', tipo: 'propias' },
+          { t1: 'William Uribe', t2: 'Marco Solórzano', equipo: 'SONY 300', tipo: 'propias' },
+          // Cámaras RTVC
+          { t1: 'Erick Velázquez', t2: 'Cesar Morales', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+          { t1: 'William Ruiz', t2: 'Álvaro Díaz', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+          { t1: 'Carlos Wilches', t2: 'Victor Vargas', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+          { t1: 'Enrique Muñoz', t2: 'Edgar Castillo', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+          { t1: 'John Ruiz', t2: 'Ramiro Balaguera', equipo: 'Cámara RTVC', tipo: 'rtvc' }
+        ];
+
+        // Filtrar personal disponible (excluir novedades bloqueantes)
+        const availablePeople = people.filter(person => {
+          const novelty = noveltiesMap[person.id];
+          if (!novelty) return true;
+          const blockingTypes = ['VIAJE', 'VIAJE MÓVIL', 'LIBRE', 'SIN_CONTRATO', 'INCAPACIDAD'];
+          return !blockingTypes.includes(novelty.type);
+        });
+
+        const availableNames = new Set(availablePeople.map(p => p.name));
+        console.log(`   Personal disponible: ${availablePeople.length}/${people.length}`);
+
+        // Asignar duplas completas
+        let duplasAsignadas = 0;
+        DUPLAS_REPORTERIA.forEach(dupla => {
+          const t1Person = availablePeople.find(p => p.name === dupla.t1);
+          const t2Person = availablePeople.find(p => p.name === dupla.t2);
+
+          // Solo asignar si AMBOS están disponibles (relevo completo)
+          if (t1Person && t2Person) {
+            // T1: Mañana 06:00-13:00
+            shifts.push({
+              personnel_id: t1Person.id,
+              name: t1Person.name,
+              area: t1Person.area,
+              shift_start: '06:00:00',
+              shift_end: '13:00:00',
+              week_number: currentWeek,
+              original_shift: 'T1',
+              dupla_equipo: dupla.equipo,
+              dupla_relevo: dupla.t2
+            });
+
+            // T2: Tarde 13:00-20:00
+            shifts.push({
+              personnel_id: t2Person.id,
+              name: t2Person.name,
+              area: t2Person.area,
+              shift_start: '13:00:00',
+              shift_end: '20:00:00',
+              week_number: currentWeek,
+              original_shift: 'T2',
+              dupla_equipo: dupla.equipo,
+              dupla_relevo: dupla.t1
+            });
+
+            console.log(`   ✅ Dupla ${dupla.equipo}: ${dupla.t1} (T1) ↔ ${dupla.t2} (T2)`);
+            duplasAsignadas++;
+          } else if (t1Person && !t2Person) {
+            console.log(`   ⚠️ Dupla incompleta: ${dupla.t1} disponible pero ${dupla.t2} no disponible (${dupla.equipo})`);
+          } else if (!t1Person && t2Person) {
+            console.log(`   ⚠️ Dupla incompleta: ${dupla.t2} disponible pero ${dupla.t1} no disponible (${dupla.equipo})`);
+          }
+        });
+
+        console.log(`   📊 Total duplas asignadas: ${duplasAsignadas}/${DUPLAS_REPORTERIA.length}`);
+        return; // Salir para no usar la lógica estándar
+      }
+
+      // 🎬 LÓGICA PARA ASISTENTES DE REPORTERÍA (mantener sistema de grupos)
+      if (area === 'ASISTENTES DE REPORTERÍA') {
         console.log(`📹 ${area}: Usando sistema de grupos fijos con rotación semanal`);
 
         // Determinar si debemos alternar los grupos esta semana
-        // Si weeksDiff es par: GRUPO_A → AM, GRUPO_B → PM
-        // Si weeksDiff es impar: GRUPO_A → PM, GRUPO_B → AM (rotación)
         const debeRotar = weeksDiff % 2 === 1;
-
         console.log(`   📅 Semana ${currentWeek}, weeksDiff: ${weeksDiff}, Rotar: ${debeRotar ? 'SÍ' : 'NO'}`);
 
         people.forEach(person => {
-          // Verificar el grupo al que pertenece la persona
           const grupoOriginal = person.grupo_reporteria;
-
-          // Aplicar rotación si corresponde
           let turnoActual;
+
           if (debeRotar) {
-            // Alternar: GRUPO_A trabaja PM, GRUPO_B trabaja AM
             turnoActual = grupoOriginal === 'GRUPO_A' ? 'PM' : 'AM';
           } else {
-            // Normal: GRUPO_A trabaja AM, GRUPO_B trabaja PM
             turnoActual = grupoOriginal === 'GRUPO_A' ? 'AM' : 'PM';
           }
 
           if (turnoActual === 'AM') {
-            // Turno mañana 08:00-13:00
             shifts.push({
               personnel_id: person.id,
               name: person.name,
               area: person.area,
-              shift_start: '08:00:00',
+              shift_start: '06:00:00',
               shift_end: '13:00:00',
               week_number: currentWeek,
               original_shift: grupoOriginal,
@@ -1009,7 +1077,6 @@ router.get('/auto-shifts/:date', async (req, res) => {
               turno_rotado: turnoActual
             });
           } else {
-            // Turno tarde 13:00-20:00
             shifts.push({
               personnel_id: person.id,
               name: person.name,
