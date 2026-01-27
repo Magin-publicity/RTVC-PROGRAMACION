@@ -1,5 +1,5 @@
 // src/components/Schedule/ScheduleTable.jsx
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Plus, Download, Edit2, Trash2, Wifi, WifiOff, Camera } from 'lucide-react';
 import { generateSchedulePDF } from '../../utils/pdfGenerator';
 import { classifyPersonnel, getResourceForPersonnel } from '../../utils/personnelClassification';
@@ -7,6 +7,7 @@ import { programMappingService } from '../../services/programMappingService';
 import { customProgramsService } from '../../services/customProgramsService';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useContractValidation } from '../../hooks/useContractValidation';
+import { useWorkdayReminder } from '../../hooks/useWorkdayReminder';
 import { WeekSelector } from '../Calendar/WeekSelector';
 import { WEEKDAY_PROGRAMS as WEEKDAY_PROGRAMS_SOURCE, WEEKEND_PROGRAMS as WEEKEND_PROGRAMS_SOURCE } from '../../data/programs';
 
@@ -45,7 +46,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
           'Tienes cambios sin guardar en esta fecha.\n\n' +
           '¿Deseas descartarlos y cambiar de día?\n\n' +
           '• SÍ: Descartar cambios y cambiar de día\n' +
-          '• NO: Permanecer en este día (usa "Guardar Jornada" primero)'
+          '• NO: Permanecer en este día (usa "Guardar" primero)'
         );
 
         if (!confirmed) {
@@ -197,6 +198,9 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
   // Indicador de conexión (sin WebSocket real, solo visual)
   const { isConnected } = useRealtimeSync(dateStr);
+
+  // 🕐 Hook de recordatorio para cerrar jornada a las 8 PM (solo para el día actual)
+  useWorkdayReminder(selectedDate, handleCloseWorkday, true);
 
 
   // EFECTO COMBINADO: Cargar programs Y assignments en el orden correcto
@@ -603,7 +607,8 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     }
   }, [assignments, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments, isLoadingSchedule]);
 
-  // 💾 GUARDADO MANUAL: Función para guardar cuando el usuario presiona el botón
+  // 💾 GUARDADO SIMPLE: Guardar cambios sin crear snapshot histórico
+  // Se puede usar múltiples veces durante el día para cualquier fecha
   const handleSaveSchedule = async () => {
     setIsSaving(true);
 
@@ -616,7 +621,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         }
       });
 
-      console.log(`💾 [GUARDADO MANUAL] Guardando ${dateStr}:`, {
+      console.log(`💾 [GUARDADO SIMPLE] Guardando ${dateStr}:`, {
         assignments: Object.keys(simpleAssignments).length,
         callTimes: Object.keys(callTimes).length,
         endTimes: Object.keys(endTimes).length,
@@ -626,7 +631,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         programs: programs.length
       });
 
-      // PASO 1: Guardar en el endpoint daily (formato actual)
+      // Guardar en el endpoint daily (formato actual) - SIN snapshot
       const response = await fetch(`${API_URL}/schedule/daily/${dateStr}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -645,17 +650,79 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       const result = await response.json();
 
       if (!response.ok) {
-        console.error(`❌ [GUARDADO MANUAL] Error del servidor:`, result);
+        console.error(`❌ [GUARDADO SIMPLE] Error del servidor:`, result);
         alert(`❌ Error al guardar: ${result.error || 'Error desconocido'}`);
         return;
       }
 
-      console.log(`✅ [GUARDADO MANUAL] Guardado exitoso en daily/${dateStr}`);
+      console.log(`✅ [GUARDADO SIMPLE] Guardado exitoso en daily/${dateStr}`);
+      setLastSaved(new Date());
+      setHasUnsavedChanges(false);
+      alert('✅ Cambios guardados correctamente');
 
-      // PASO 2: Guardar snapshot inmutable para historial
-      console.log(`📸 [SNAPSHOT] Guardando snapshot inmutable para ${dateStr}...`);
+    } catch (error) {
+      console.error('❌ [GUARDADO SIMPLE] Error de red:', error);
+      alert(`❌ Error de red: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-      // Preparar datos del snapshot desde autoShifts
+  // 📸 CERRAR JORNADA: Guardar + crear snapshot histórico inmutable
+  // Se usa una sola vez al final del día para crear el registro permanente
+  const handleCloseWorkday = useCallback(async () => {
+    // Confirmar que quiere cerrar la jornada
+    if (!window.confirm(
+      '📸 CERRAR JORNADA DEL DÍA\n\n' +
+      `Vas a cerrar oficialmente la jornada del ${formatDate(selectedDate)}.\n\n` +
+      '✅ Se guardará:\n' +
+      '• Programación actual en la base de datos\n' +
+      '• Snapshot histórico INMUTABLE para la Máquina del Tiempo\n\n' +
+      '⚠️ Este snapshot quedará registrado permanentemente.\n\n' +
+      '¿Continuar?'
+    )) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      // PASO 1: Guardar datos actuales (igual que guardado simple)
+      const simpleAssignments = {};
+      Object.keys(assignments).forEach(key => {
+        if (assignments[key]) {
+          simpleAssignments[key] = true;
+        }
+      });
+
+      console.log(`📸 [CERRAR JORNADA] Guardando y creando snapshot para ${dateStr}...`);
+
+      const response = await fetch(`${API_URL}/schedule/daily/${dateStr}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignments: simpleAssignments,
+          callTimes,
+          endTimes,
+          manualCallTimes,
+          manualEndTimes,
+          manualAssignments,
+          programs,
+          shifts: autoShifts
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error(`❌ [CERRAR JORNADA] Error del servidor:`, result);
+        alert(`❌ Error al guardar: ${result.error || 'Error desconocido'}`);
+        return;
+      }
+
+      console.log(`✅ [CERRAR JORNADA] Datos guardados, creando snapshot histórico...`);
+
+      // PASO 2: Crear snapshot inmutable para historial
       const snapshotShifts = autoShifts.map(shift => ({
         area: shift.area,
         personnel_id: shift.personnel_id,
@@ -672,56 +739,47 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         is_weekend: isWeekend
       }));
 
-      // Intentar guardar snapshot (OPCIONAL - no debe fallar el guardado principal)
-      try {
-        const snapshotResponse = await fetch(`${API_URL}/snapshots/save/${dateStr}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            shifts: snapshotShifts,
-            rotation_week: snapshotShifts[0]?.rotation_week || null,
-            notes: `Guardado manual desde ScheduleTable - ${new Date().toLocaleString('es-CO')}`
-          })
-        });
+      const snapshotResponse = await fetch(`${API_URL}/snapshots/save/${dateStr}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shifts: snapshotShifts,
+          rotation_week: snapshotShifts[0]?.rotation_week || null,
+          notes: `Cierre de jornada - ${new Date().toLocaleString('es-CO')}`
+        })
+      });
 
-        // Verificar si la respuesta es JSON antes de parsear
-        const contentType = snapshotResponse.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          const snapshotResult = await snapshotResponse.json();
+      // Verificar si la respuesta es JSON antes de parsear
+      const contentType = snapshotResponse.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const snapshotResult = await snapshotResponse.json();
 
-          if (snapshotResponse.ok) {
-            console.log(`✅ [SNAPSHOT] Snapshot guardado exitosamente:`, snapshotResult);
-            setLastSaved(new Date());
-            setHasUnsavedChanges(false);
-            alert('✅ Jornada guardada exitosamente\n📸 Snapshot histórico creado');
-          } else {
-            console.warn(`⚠️ [SNAPSHOT] Error al guardar snapshot:`, snapshotResult);
-            setLastSaved(new Date());
-            setHasUnsavedChanges(false);
-            alert('✅ Jornada guardada exitosamente\n⚠️ Snapshot no pudo crearse (datos guardados correctamente)');
-          }
-        } else {
-          // El servidor retornó HTML (error 500 o 404) - las tablas no existen
-          console.warn(`⚠️ [SNAPSHOT] Endpoint no disponible (tablas no creadas aún)`);
+        if (snapshotResponse.ok) {
+          console.log(`✅ [SNAPSHOT] Snapshot histórico creado:`, snapshotResult);
           setLastSaved(new Date());
           setHasUnsavedChanges(false);
-          alert('✅ Jornada guardada exitosamente');
+          alert('✅ Jornada cerrada exitosamente\n📸 Snapshot histórico creado\n\nPuedes ver este día en "Historial" (Máquina del Tiempo)');
+        } else {
+          console.warn(`⚠️ [SNAPSHOT] Error al crear snapshot:`, snapshotResult);
+          setLastSaved(new Date());
+          setHasUnsavedChanges(false);
+          alert('✅ Datos guardados correctamente\n⚠️ Error al crear snapshot histórico');
         }
-      } catch (snapshotError) {
-        // Error de red o parsing - no importa, el guardado principal ya funcionó
-        console.warn(`⚠️ [SNAPSHOT] Error al guardar snapshot:`, snapshotError.message);
+      } else {
+        // El servidor retornó HTML (error 500 o 404)
+        console.warn(`⚠️ [SNAPSHOT] Endpoint no disponible`);
         setLastSaved(new Date());
         setHasUnsavedChanges(false);
-        alert('✅ Jornada guardada exitosamente');
+        alert('✅ Datos guardados correctamente\n⚠️ Sistema de snapshots no disponible');
       }
 
     } catch (error) {
-      console.error('❌ [GUARDADO MANUAL] Error de red:', error);
-      alert(`❌ Error de red: ${error.message}`);
+      console.error('❌ [CERRAR JORNADA] Error:', error);
+      alert(`❌ Error al cerrar jornada: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [assignments, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments, programs, autoShifts, dateStr, selectedDate, isWeekend]);
 
   const formatDate = (date) => {
     const days = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'];
@@ -1004,20 +1062,33 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
               </div>
             )}
 
-            {/* 💾 BOTÓN GUARDAR JORNADA */}
+            {/* 💾 BOTÓN GUARDAR (guardado simple) */}
             <button
               onClick={handleSaveSchedule}
               disabled={isSaving || !hasUnsavedChanges}
               className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded font-medium transition-all whitespace-nowrap ${
                 hasUnsavedChanges
-                  ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg animate-pulse'
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg'
                   : 'bg-gray-400 text-gray-200 cursor-not-allowed'
               } disabled:opacity-50`}
-              title={hasUnsavedChanges ? 'Hay cambios sin guardar' : 'No hay cambios pendientes'}
+              title={hasUnsavedChanges ? 'Guardar cambios (sin cerrar jornada)' : 'No hay cambios pendientes'}
             >
               <span className="text-lg flex-shrink-0">💾</span>
               <span className="text-xs sm:text-sm font-bold">
-                {hasUnsavedChanges ? 'Guardar Jornada' : 'Sin cambios'}
+                {hasUnsavedChanges ? 'Guardar' : 'Sin cambios'}
+              </span>
+            </button>
+
+            {/* 📸 BOTÓN CERRAR JORNADA (guardar + snapshot histórico) */}
+            <button
+              onClick={handleCloseWorkday}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded font-medium transition-all whitespace-nowrap bg-green-600 hover:bg-green-700 text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Cerrar jornada del día y crear snapshot histórico"
+            >
+              <span className="text-lg flex-shrink-0">📸</span>
+              <span className="text-xs sm:text-sm font-bold">
+                Cerrar Jornada
               </span>
             </button>
 
