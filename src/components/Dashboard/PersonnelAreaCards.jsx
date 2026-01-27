@@ -452,7 +452,7 @@ export const PersonnelAreaCards = ({ currentDate }) => {
       )}
 
       {/* Estilos de animación */}
-      <style jsx>{`
+      <style>{`
         @keyframes slide-up {
           from {
             transform: translateY(100%);

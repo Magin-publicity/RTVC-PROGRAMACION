@@ -809,6 +809,236 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     return `${dayName} ${day} ${month} DE ${year}`;
   };
 
+  // 🔄 REORGANIZACIÓN POR ÁREA: Redistribuir empleados disponibles usando algoritmos predefinidos
+  const handleReorganizeArea = (areaName) => {
+    console.log(`🔄 [REORGANIZAR ÁREA] Iniciando reorganización para: ${areaName}`);
+
+    // 1. Obtener todos los empleados de esta área
+    const areaPersonnel = personnel.filter(p => p.area === areaName);
+    console.log(`   📊 Total empleados en ${areaName}: ${areaPersonnel.length}`);
+
+    // 2. Filtrar empleados DISPONIBLES (tienen Hora Llamado válida + sin novedades bloqueantes)
+    const availableEmployees = areaPersonnel.filter(person => {
+      const personCallTime = callTimes[person.id];
+
+      // Sin hora de llamado válida = NO disponible
+      if (!personCallTime || personCallTime === '--:--' || personCallTime === '' || personCallTime === 'Seleccionar...' || !personCallTime.includes(':')) {
+        console.log(`   ❌ ${person.name}: Sin hora de llamado válida (valor: "${personCallTime}")`);
+        return false;
+      }
+
+      // Verificar novedades bloqueantes (Viaje, Sin Contrato, Libre)
+      const today = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      const hasBlockingNovelty = novelties?.some(n => {
+        if (Number(n.personnel_id) !== Number(person.id)) return false;
+        if (!['VIAJE', 'SIN_CONTRATO', 'LIBRE'].includes(n.type)) return false;
+
+        if (n.start_date && n.end_date) {
+          const startStr = n.start_date.split('T')[0];
+          const endStr = n.end_date.split('T')[0];
+          return todayStr >= startStr && todayStr <= endStr;
+        }
+
+        if (n.date) {
+          return n.date.split('T')[0] === todayStr;
+        }
+
+        return false;
+      });
+
+      if (hasBlockingNovelty) {
+        console.log(`   ❌ ${person.name}: Tiene novedad bloqueante`);
+        return false;
+      }
+
+      console.log(`   ✅ ${person.name}: Disponible (${personCallTime})`);
+      return true;
+    });
+
+    const employeeCount = availableEmployees.length;
+    console.log(`   📊 Empleados disponibles: ${employeeCount}`);
+
+    if (employeeCount === 0) {
+      alert(`⚠️ No hay empleados disponibles en ${areaName}\n\nTodos tienen novedades bloqueantes o no tienen hora de llamado.`);
+      return;
+    }
+
+    // 3. ALGORITMOS PREDEFINIDOS POR NÚMERO DE EMPLEADOS
+    // Configuraciones oficiales del sistema (basadas en configure-shift-patterns.js)
+    const TURNOS_PREDEFINIDOS = {
+      1: [
+        { callTime: '05:00', endTime: '10:00', label: 'T1 Apertura' }
+      ],
+      2: [
+        { callTime: '05:00', endTime: '10:00', label: 'T1 Apertura' },
+        { callTime: '09:00', endTime: '14:00', label: 'T2 Mañana' }
+      ],
+      3: [
+        { callTime: '05:00', endTime: '10:00', label: 'T1 Apertura' },
+        { callTime: '09:00', endTime: '14:00', label: 'T2 Mañana' },
+        { callTime: '11:00', endTime: '16:00', label: 'T3 Media Jornada' }
+      ],
+      4: [
+        { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+        { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+        { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+        { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' }
+      ],
+      5: [
+        { callTime: '05:00', endTime: '10:00', label: 'T1 Apertura' },
+        { callTime: '09:00', endTime: '14:00', label: 'T2 Mañana' },
+        { callTime: '11:00', endTime: '16:00', label: 'T3 Media Jornada' },
+        { callTime: '14:00', endTime: '19:00', label: 'T4 Tarde' },
+        { callTime: '17:00', endTime: '22:00', label: 'T5 Cierre' }
+      ],
+      6: [
+        { callTime: '05:00', endTime: '10:00', label: 'T1 Apertura' },
+        { callTime: '09:00', endTime: '14:00', label: 'T2 Mañana' },
+        { callTime: '11:00', endTime: '16:00', label: 'T3 Media Jornada' },
+        { callTime: '13:00', endTime: '18:00', label: 'T3.5 Tarde Temprana' },
+        { callTime: '14:00', endTime: '19:00', label: 'T4 Tarde' },
+        { callTime: '17:00', endTime: '22:00', label: 'T5 Cierre' }
+      ],
+      7: [
+        { callTime: '05:00', endTime: '10:00', label: 'T1 Apertura' },
+        { callTime: '08:00', endTime: '13:00', label: 'T1.5 Mañana Temprana' },
+        { callTime: '09:00', endTime: '14:00', label: 'T2 Mañana' },
+        { callTime: '11:00', endTime: '16:00', label: 'T3 Media Jornada' },
+        { callTime: '13:00', endTime: '18:00', label: 'T3.5 Tarde Temprana' },
+        { callTime: '14:00', endTime: '19:00', label: 'T4 Tarde' },
+        { callTime: '17:00', endTime: '22:00', label: 'T5 Cierre' }
+      ],
+      8: [
+        { callTime: '05:00', endTime: '10:00', label: 'T1 Apertura' },
+        { callTime: '07:00', endTime: '12:00', label: 'T1.25 Muy Temprano' },
+        { callTime: '08:00', endTime: '13:00', label: 'T1.5 Mañana Temprana' },
+        { callTime: '09:00', endTime: '14:00', label: 'T2 Mañana' },
+        { callTime: '11:00', endTime: '16:00', label: 'T3 Media Jornada' },
+        { callTime: '13:00', endTime: '18:00', label: 'T3.5 Tarde Temprana' },
+        { callTime: '14:00', endTime: '19:00', label: 'T4 Tarde' },
+        { callTime: '17:00', endTime: '22:00', label: 'T5 Cierre' }
+      ]
+    };
+
+    // Seleccionar algoritmo según cantidad de empleados
+    // Si hay más de 8, usar el de 8 y extender con turnos adicionales
+    let turnosAlgoritmo;
+    if (employeeCount <= 8) {
+      turnosAlgoritmo = TURNOS_PREDEFINIDOS[employeeCount];
+    } else {
+      // Para más de 8 empleados, usar base de 8 y agregar turnos intermedios
+      turnosAlgoritmo = [...TURNOS_PREDEFINIDOS[8]];
+      const extraEmployees = employeeCount - 8;
+
+      // Agregar turnos intermedios distribuidos uniformemente
+      for (let i = 0; i < extraEmployees; i++) {
+        const baseHour = 10 + i;
+        turnosAlgoritmo.push({
+          callTime: `${String(baseHour).padStart(2, '0')}:00`,
+          endTime: `${String(baseHour + 5).padStart(2, '0')}:00`,
+          label: `T Extra ${i + 1}`
+        });
+      }
+    }
+
+    console.log(`   🎯 Aplicando algoritmo para ${employeeCount} empleados`);
+    console.log(`   📋 Turnos del algoritmo:`, turnosAlgoritmo.map(t => `${t.callTime}-${t.endTime} (${t.label})`));
+
+    // 4. Ordenar empleados por hora de entrada actual
+    const sortedEmployees = [...availableEmployees].sort((a, b) => {
+      const timeA = callTimes[a.id] || '99:99';
+      const timeB = callTimes[b.id] || '99:99';
+      return timeA.localeCompare(timeB);
+    });
+
+    console.log(`   📋 Empleados ordenados:`, sortedEmployees.map(e => `${e.name} (${callTimes[e.id]})`));
+
+    // 5. Asignar turnos del algoritmo a los empleados (actualizar callTimes y endTimes)
+    const newCallTimes = { ...callTimes };
+    const newEndTimes = { ...endTimes };
+    const newManualCallTimes = { ...manualCallTimes };
+    const newManualEndTimes = { ...manualEndTimes };
+
+    sortedEmployees.forEach((employee, index) => {
+      const turno = turnosAlgoritmo[index];
+      newCallTimes[employee.id] = turno.callTime;
+      newEndTimes[employee.id] = turno.endTime;
+      // Marcar como manual para que no se sobrescriban
+      newManualCallTimes[employee.id] = true;
+      newManualEndTimes[employee.id] = true;
+      console.log(`   ⏰ ${employee.name}: ${turno.callTime} - ${turno.endTime}`);
+    });
+
+    // 6. Redistribuir asignaciones según los nuevos horarios
+    const newAssignments = { ...assignments };
+    const newManualAssignments = { ...manualAssignments };
+
+    // Limpiar todas las asignaciones NO manuales de esta área
+    areaPersonnel.forEach(person => {
+      programs.forEach(program => {
+        const key = `${person.id}_${program.id}`;
+        if (!newManualAssignments[key]) {
+          delete newAssignments[key];
+        }
+      });
+    });
+
+    // Asignar empleados a programas según solapamiento horario
+    sortedEmployees.forEach((employee, index) => {
+      const turno = turnosAlgoritmo[index];
+      const callMinutes = timeToMinutes(turno.callTime);
+      const endMinutes = timeToMinutes(turno.endTime);
+
+      programs.forEach(program => {
+        const key = `${employee.id}_${program.id}`;
+
+        // Respetar asignaciones manuales
+        if (newManualAssignments[key]) {
+          console.log(`   🔧 Respetando asignación manual: ${employee.name} → ${program.name}`);
+          newAssignments[key] = true;
+          return;
+        }
+
+        // Calcular solapamiento
+        const programTime = program.defaultTime || program.time || '';
+        const timeParts = programTime.split('-');
+        const programStartTime = timeParts[0].trim();
+
+        let programEndTime;
+        if (timeParts.length > 1) {
+          programEndTime = timeParts[1].trim();
+        } else {
+          const [h, m] = programStartTime.split(':').map(Number);
+          const endM = h * 60 + m + 60;
+          programEndTime = `${String(Math.floor(endM / 60)).padStart(2, '0')}:${String(endM % 60).padStart(2, '0')}`;
+        }
+
+        const programStartMinutes = timeToMinutes(programStartTime);
+        const programEndMinutes = timeToMinutes(programEndTime);
+
+        // Lógica de cobertura parcial: programa solapa con turno del empleado
+        const hasOverlap = (programStartMinutes < endMinutes) && (programEndMinutes > callMinutes);
+
+        if (hasOverlap) {
+          newAssignments[key] = true;
+          console.log(`   ✅ ${employee.name} → ${program.name} (${programStartTime}-${programEndTime})`);
+        }
+      });
+    });
+
+    // 7. Aplicar cambios
+    setCallTimes(newCallTimes);
+    setEndTimes(newEndTimes);
+    setManualCallTimes(newManualCallTimes);
+    setManualEndTimes(newManualEndTimes);
+    setAssignments(newAssignments);
+
+    console.log(`✅ [REORGANIZAR ÁREA] Completado para ${areaName}`);
+    alert(`✅ Área ${areaName} reorganizada con ${employeeCount} operadores disponibles\n\n🎯 Algoritmo aplicado: ${employeeCount} empleados`);
+  };
+
 
 
   // 🚨 FUNCIÓN RESET: Limpiar datos del día actual y forzar recarga desde BD
@@ -1166,18 +1396,59 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
           <tbody>
             {sortedDepts.map(([dept, deptPersonnel]) => {
-              // ordenar personal por hora de llamado
+              // Ordenar personal por hora de llamado
+              // Los que NO tienen hora válida van al final (como Julián sin contrato)
               const sortedByTime = [...deptPersonnel].sort((a, b) => {
-                const timeA = callTimes[a.id] || '99:99';
-                const timeB = callTimes[b.id] || '99:99';
-                return (timeA || "").toString().localeCompare((timeB || "").toString());
+                const timeA = callTimes[a.id];
+                const timeB = callTimes[b.id];
+
+                // Función auxiliar para validar hora válida
+                const isValidTime = (time) => {
+                  if (!time) return false;
+                  if (time === '') return false;
+                  if (time === '--:--') return false;
+                  if (time === 'Seleccionar...') return false;
+                  if (time.startsWith('Selecc')) return false; // Captura "Seleccio", "Seleccionar", etc.
+                  if (!time.includes(':')) return false;
+                  return true;
+                };
+
+                const hasValidTimeA = isValidTime(timeA);
+                const hasValidTimeB = isValidTime(timeB);
+
+                // LOGS para debugging (puedes comentar después)
+                if (dept === 'DIRECTORES DE CÁMARA') {
+                  console.log(`[SORT] ${a.name}: "${timeA}" → válido: ${hasValidTimeA}`);
+                }
+
+                // Sin hora válida → al final
+                if (!hasValidTimeA && !hasValidTimeB) {
+                  return a.name.localeCompare(b.name); // Ordenar alfabéticamente entre sí
+                }
+                if (!hasValidTimeA) return 1; // A sin hora → va después de B
+                if (!hasValidTimeB) return -1; // B sin hora → va después de A
+
+                // Ambos tienen hora válida, ordenar por hora
+                return timeA.localeCompare(timeB);
               });
 
               return (
   <React.Fragment key={dept}>
     {/* Encabezado del área */}
     <tr className="bg-blue-800 text-white font-bold">
-      <td colSpan={4 + programs.length} className="border border-gray-300 p-2">{dept}</td>
+      <td colSpan={4 + programs.length} className="border border-gray-300 p-2">
+        <div className="flex items-center justify-between">
+          <span>{dept}</span>
+          <button
+            onClick={() => handleReorganizeArea(dept)}
+            className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
+            title="Reorganizar área automáticamente"
+          >
+            <span>🔄</span>
+            <span className="text-xs">Reorganizar</span>
+          </button>
+        </div>
+      </td>
     </tr>
 
     {/* Encabezado de columnas para esta área */}

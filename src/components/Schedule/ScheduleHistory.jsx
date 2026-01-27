@@ -61,13 +61,26 @@ export const ScheduleHistory = ({ onLoadDate }) => {
   };
 
   const formatDate = (dateStr) => {
-    const date = new Date(dateStr + 'T00:00:00');
+    // Manejar tanto formato ISO completo como formato YYYY-MM-DD
+    const date = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T00:00:00');
     return date.toLocaleDateString('es-ES', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
+  };
+
+  const formatDateUppercase = (dateStr) => {
+    // Manejar tanto formato ISO completo como formato YYYY-MM-DD
+    const date = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T00:00:00');
+    const formatted = date.toLocaleDateString('es-ES', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    return formatted.toUpperCase();
   };
 
   const formatDateTime = (isoString) => {
@@ -189,29 +202,34 @@ export const ScheduleHistory = ({ onLoadDate }) => {
               return (
                 <div
                   key={date}
-                  className="px-6 py-4 hover:bg-gray-50 transition-colors"
+                  className="px-6 py-5 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <h4 className="font-semibold text-gray-900">
-                        {formatDate(date)}
+                      {/* FECHA DE PROGRAMACIÓN - PROMINENTE */}
+                      <h4 className="text-xl font-bold text-blue-900 mb-3">
+                        📅 {formatDateUppercase(date)}
                       </h4>
-                      <div className="mt-1 text-sm text-gray-600 space-y-1">
-                        <p>
-                          Personal: <strong>{dayData.total_personnel || 0}</strong>
+
+                      {/* Información secundaria */}
+                      <div className="mt-2 text-sm text-gray-600 space-y-1.5">
+                        <div className="flex gap-4">
+                          <p>
+                            Personal: <strong className="text-gray-900">{dayData.total_personnel || 0}</strong>
+                          </p>
+                          <p>
+                            Áreas: <strong className="text-gray-900">{dayData.total_areas || 0}</strong>
+                          </p>
+                          {dayData.is_locked && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-800 text-xs font-medium rounded">
+                              <Clock size={12} />
+                              Bloqueado
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 italic">
+                          ⏰ Guardado el {formatDateTime(dayData.saved_at)}
                         </p>
-                        <p>
-                          Áreas: <strong>{dayData.total_areas || 0}</strong>
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Guardado: {formatDateTime(dayData.saved_at)}
-                        </p>
-                        {dayData.is_locked && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded">
-                            <Clock size={12} />
-                            Bloqueado
-                          </span>
-                        )}
                       </div>
                     </div>
 
