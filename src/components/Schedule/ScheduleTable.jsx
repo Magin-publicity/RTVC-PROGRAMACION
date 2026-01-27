@@ -827,13 +827,13 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         return false;
       }
 
-      // Verificar novedades bloqueantes (Viaje, Sin Contrato, Libre)
+      // Verificar novedades bloqueantes (Viaje, Viaje Móvil, Sin Contrato, Libre, Incapacidad)
       const today = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
       const hasBlockingNovelty = novelties?.some(n => {
         if (Number(n.personnel_id) !== Number(person.id)) return false;
-        if (!['VIAJE', 'SIN_CONTRATO', 'LIBRE'].includes(n.type)) return false;
+        if (!['VIAJE', 'VIAJE MÓVIL', 'SIN_CONTRATO', 'LIBRE', 'INCAPACIDAD'].includes(n.type)) return false;
 
         if (n.start_date && n.end_date) {
           const startStr = n.start_date.split('T')[0];
@@ -865,7 +865,270 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       return;
     }
 
-    // 3. ALGORITMOS PREDEFINIDOS POR NÚMERO DE EMPLEADOS
+    // 🎥 LÓGICA ESPECIAL PARA CAMARÓGRAFOS DE ESTUDIO (LUNES A VIERNES)
+    // Distribución progresiva con sacrificio de Redacción para proteger Estudio 1
+    if (areaName === 'CAMARÓGRAFOS DE ESTUDIO') {
+      console.log(`📹 CAMARÓGRAFOS DE ESTUDIO: Aplicando distribución progresiva`);
+
+      // Filtrar novedades bloqueantes adicionales (VIAJE MÓVIL, INCAPACIDAD)
+      const finalAvailable = availableEmployees.filter(person => {
+        const today = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+        const hasExtraBlockingNovelty = novelties?.some(n => {
+          if (Number(n.personnel_id) !== Number(person.id)) return false;
+          if (!['VIAJE MÓVIL', 'INCAPACIDAD'].includes(n.type)) return false;
+
+          if (n.start_date && n.end_date) {
+            const startStr = n.start_date.split('T')[0];
+            const endStr = n.end_date.split('T')[0];
+            return todayStr >= startStr && todayStr <= endStr;
+          }
+
+          if (n.date) {
+            return n.date.split('T')[0] === todayStr;
+          }
+
+          return false;
+        });
+
+        if (hasExtraBlockingNovelty) {
+          console.log(`   ❌ ${person.name}: Tiene novedad bloqueante adicional (VIAJE MÓVIL/INCAPACIDAD)`);
+          return false;
+        }
+        return true;
+      });
+
+      const numAvailable = finalAvailable.length;
+      console.log(`   Personal total: ${employeeCount}, Disponible final: ${numAvailable}`);
+
+      // Definir distribución según reglas progresivas
+      let distribucion = null;
+      let descripcion = '';
+
+      if (numAvailable >= 20) {
+        // 20 Cámaras (Full): T1(6: 4 Est/2 Red), T2(6: 4 Est/2 Red), T3(4: 4 Est), T4(4: 4 Est)
+        distribucion = [
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Redacción' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Redacción' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Redacción' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Redacción' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' }
+        ];
+        descripcion = '20+ cámaras (Full) - T1(6), T2(6), T3(4), T4(4)';
+      } else if (numAvailable === 19) {
+        // 19 Cámaras: T2 baja a 5 (4 Est / 1 Red)
+        distribucion = [
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Redacción' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Redacción' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Redacción' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' }
+        ];
+        descripcion = '19 cámaras - T1(6), T2(5), T3(4), T4(4)';
+      } else if (numAvailable === 18) {
+        // 18 Cámaras: T1 y T2 bajan a 5 cada uno (4 Est / 1 Red cada uno)
+        distribucion = [
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Redacción' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Redacción' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' }
+        ];
+        descripcion = '18 cámaras - T1(5), T2(5), T3(4), T4(4)';
+      } else if (numAvailable === 17) {
+        // 17 Cámaras: T1(5), T2(4: 0 Redacción), T3(4), T4(4). Redacción se sacrifica en T2
+        distribucion = [
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Redacción' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' },
+          { callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' }
+        ];
+        descripcion = '17 cámaras - T1(5), T2(4-Solo Estudio), T3(4), T4(4)';
+      } else if (numAvailable === 16) {
+        // 16 Cámaras (Móvil): T1(6), T2(5: 1 Red), T3/T4 fusionados(5)
+        distribucion = [
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Redacción' },
+          { callTime: '05:00', endTime: '11:00', label: 'T1 Redacción' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' },
+          { callTime: '09:00', endTime: '15:00', label: 'T2 Redacción' },
+          { callTime: '13:00', endTime: '22:00', label: 'T3 Extendido' },
+          { callTime: '13:00', endTime: '22:00', label: 'T3 Extendido' },
+          { callTime: '13:00', endTime: '22:00', label: 'T3 Extendido' },
+          { callTime: '13:00', endTime: '22:00', label: 'T3 Extendido' },
+          { callTime: '13:00', endTime: '22:00', label: 'T3 Extendido' }
+        ];
+        descripcion = '16 cámaras (Móvil) - T1(6), T2(5), T3 extendido(5)';
+      } else {
+        // Menos de 16: Priorizar Estudio 1 (4 cupos) en todos los turnos, Redacción con 0
+        const cuposPorTurno = Math.max(1, Math.floor(numAvailable / 4));
+        const resto = numAvailable % 4;
+
+        const t1Cupos = Math.min(cuposPorTurno + (resto > 0 ? 1 : 0), numAvailable);
+        const t2Cupos = Math.min(cuposPorTurno + (resto > 1 ? 1 : 0), Math.max(0, numAvailable - t1Cupos));
+        const t3Cupos = Math.min(cuposPorTurno + (resto > 2 ? 1 : 0), Math.max(0, numAvailable - t1Cupos - t2Cupos));
+        const t4Cupos = Math.max(0, numAvailable - t1Cupos - t2Cupos - t3Cupos);
+
+        distribucion = [];
+        for (let i = 0; i < t1Cupos; i++) distribucion.push({ callTime: '05:00', endTime: '11:00', label: 'T1 Apertura' });
+        for (let i = 0; i < t2Cupos; i++) distribucion.push({ callTime: '09:00', endTime: '15:00', label: 'T2 Mañana' });
+        for (let i = 0; i < t3Cupos; i++) distribucion.push({ callTime: '13:00', endTime: '19:00', label: 'T3 Tarde' });
+        for (let i = 0; i < t4Cupos; i++) distribucion.push({ callTime: '16:00', endTime: '22:00', label: 'T4 Cierre' });
+
+        descripcion = `${numAvailable} cámaras (Crítico) - Priorizando Estudio 1, Redacción en 0`;
+      }
+
+      console.log(`   📊 ${descripcion}`);
+
+      // Ordenar empleados alfabéticamente (mismo orden que backend)
+      const sortedEmployees = [...finalAvailable].sort((a, b) => a.name.localeCompare(b.name));
+
+      // Asignar turnos
+      const newCallTimes = { ...callTimes };
+      const newEndTimes = { ...endTimes };
+      const newManualCallTimes = { ...manualCallTimes };
+      const newManualEndTimes = { ...manualEndTimes };
+
+      sortedEmployees.forEach((employee, index) => {
+        if (index < distribucion.length) {
+          const turno = distribucion[index];
+          newCallTimes[employee.id] = turno.callTime;
+          newEndTimes[employee.id] = turno.endTime;
+          newManualCallTimes[employee.id] = true;
+          newManualEndTimes[employee.id] = true;
+          console.log(`   ⏰ ${employee.name}: ${turno.callTime} - ${turno.endTime} (${turno.label})`);
+        }
+      });
+
+      // Redistribuir asignaciones según los nuevos horarios
+      const newAssignments = { ...assignments };
+      const newManualAssignments = { ...manualAssignments };
+
+      // Limpiar asignaciones NO manuales de esta área
+      areaPersonnel.forEach(person => {
+        programs.forEach(program => {
+          const key = `${person.id}_${program.id}`;
+          if (!newManualAssignments[key]) {
+            delete newAssignments[key];
+          }
+        });
+      });
+
+      // Asignar empleados a programas según solapamiento horario
+      sortedEmployees.forEach((employee, index) => {
+        if (index < distribucion.length) {
+          const turno = distribucion[index];
+          const callMinutes = timeToMinutes(turno.callTime);
+          const endMinutes = timeToMinutes(turno.endTime);
+
+          programs.forEach(program => {
+            const key = `${employee.id}_${program.id}`;
+
+            if (newManualAssignments[key]) {
+              newAssignments[key] = true;
+              return;
+            }
+
+            const programTime = program.defaultTime || program.time || '';
+            const timeParts = programTime.split('-');
+            const programStartTime = timeParts[0].trim();
+
+            let programEndTime;
+            if (timeParts.length > 1) {
+              programEndTime = timeParts[1].trim();
+            } else {
+              const [h, m] = programStartTime.split(':').map(Number);
+              const endM = h * 60 + m + 60;
+              programEndTime = `${String(Math.floor(endM / 60)).padStart(2, '0')}:${String(endM % 60).padStart(2, '0')}`;
+            }
+
+            const programStartMinutes = timeToMinutes(programStartTime);
+            const programEndMinutes = timeToMinutes(programEndTime);
+
+            const hasOverlap = (programStartMinutes < endMinutes) && (programEndMinutes > callMinutes);
+
+            if (hasOverlap) {
+              newAssignments[key] = true;
+            }
+          });
+        }
+      });
+
+      // Aplicar cambios
+      setCallTimes(newCallTimes);
+      setEndTimes(newEndTimes);
+      setManualCallTimes(newManualCallTimes);
+      setManualEndTimes(newManualEndTimes);
+      setAssignments(newAssignments);
+
+      console.log(`✅ [CAMARÓGRAFOS DE ESTUDIO] Reorganización completada`);
+      alert(`✅ Cámaras de Estudio reorganizados\n\n📊 ${descripcion}\n👥 ${numAvailable} operadores disponibles`);
+      return;
+    }
+
+    // 3. ALGORITMOS PREDEFINIDOS POR NÚMERO DE EMPLEADOS (OTRAS ÁREAS)
     // Configuraciones oficiales del sistema (basadas en configure-shift-patterns.js)
     const TURNOS_PREDEFINIDOS = {
       1: [
