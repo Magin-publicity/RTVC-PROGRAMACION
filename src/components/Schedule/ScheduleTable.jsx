@@ -1042,24 +1042,65 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
       console.log(`   📊 ${descripcion}`);
 
+      // Calcular weeksDiff para rotación (mismo cálculo que backend)
+      const mondayOfWeek = new Date(selectedDate);
+      mondayOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay() + (selectedDate.getDay() === 0 ? -6 : 1));
+      const baseDate = new Date('2025-12-30'); // Lunes de referencia
+      const weeksDiff = Math.floor((mondayOfWeek - baseDate) / (7 * 24 * 60 * 60 * 1000));
+
       // Ordenar empleados alfabéticamente (mismo orden que backend)
       const sortedEmployees = [...finalAvailable].sort((a, b) => a.name.localeCompare(b.name));
 
-      // Asignar turnos
+      // 🔄 CREAR GRUPOS BASE Y APLICAR ROTACIÓN SEMANAL
+      // Primero creamos los grupos según la distribución (compacta)
+      const turnosUnicos = [];
+      const turnosCuenta = {};
+      distribucion.forEach(slot => {
+        const key = `${slot.callTime}-${slot.endTime}`;
+        if (!turnosCuenta[key]) {
+          turnosUnicos.push({ callTime: slot.callTime, endTime: slot.endTime, label: slot.label, count: 0 });
+          turnosCuenta[key] = turnosUnicos.length - 1;
+        }
+        turnosUnicos[turnosCuenta[key]].count++;
+      });
+
+      // Crear grupos base (sin rotación)
+      const gruposBase = [];
+      let employeeIndex = 0;
+      turnosUnicos.forEach(turno => {
+        const grupo = [];
+        for (let i = 0; i < turno.count && employeeIndex < sortedEmployees.length; i++) {
+          grupo.push(sortedEmployees[employeeIndex]);
+          employeeIndex++;
+        }
+        gruposBase.push({
+          turno: turno,
+          empleados: grupo
+        });
+      });
+
+      console.log(`   🔄 Rotación semanal: weeksDiff = ${weeksDiff} (offset de turnos)`);
+
+      // Asignar turnos con rotación
       const newCallTimes = { ...callTimes };
       const newEndTimes = { ...endTimes };
       const newManualCallTimes = { ...manualCallTimes };
       const newManualEndTimes = { ...manualEndTimes };
 
-      sortedEmployees.forEach((employee, index) => {
-        if (index < distribucion.length) {
-          const turno = distribucion[index];
-          newCallTimes[employee.id] = turno.callTime;
-          newEndTimes[employee.id] = turno.endTime;
+      // Aplicar rotación: cada grupo se mueve al turno siguiente
+      gruposBase.forEach((grupo, grupoIndex) => {
+        const turnoRotadoIndex = (grupoIndex + weeksDiff) % turnosUnicos.length;
+        const turnoRotado = turnosUnicos[turnoRotadoIndex];
+
+        console.log(`   Grupo ${grupoIndex + 1} (${grupo.empleados.length} personas) → ${turnoRotado.callTime}-${turnoRotado.endTime} (rotación +${weeksDiff})`);
+
+        grupo.empleados.forEach(employee => {
+          newCallTimes[employee.id] = turnoRotado.callTime;
+          newEndTimes[employee.id] = turnoRotado.endTime;
           newManualCallTimes[employee.id] = true;
           newManualEndTimes[employee.id] = true;
-          console.log(`   ⏰ ${employee.name}: ${turno.callTime} - ${turno.endTime} (${turno.label})`);
-        }
+          console.log(`      ✅ ${employee.name}: ${turnoRotado.callTime} - ${turnoRotado.endTime}`);
+        });
       });
 
       // Redistribuir asignaciones según los nuevos horarios
@@ -1076,13 +1117,15 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         });
       });
 
-      // Asignar empleados a programas según solapamiento horario
-      sortedEmployees.forEach((employee, index) => {
-        if (index < distribucion.length) {
-          const turno = distribucion[index];
-          const callMinutes = timeToMinutes(turno.callTime);
-          const endMinutes = timeToMinutes(turno.endTime);
+      // Asignar empleados a programas según solapamiento horario (usando grupos rotados)
+      gruposBase.forEach((grupo, grupoIndex) => {
+        const turnoRotadoIndex = (grupoIndex + weeksDiff) % turnosUnicos.length;
+        const turnoRotado = turnosUnicos[turnoRotadoIndex];
 
+        const callMinutes = timeToMinutes(turnoRotado.callTime);
+        const endMinutes = timeToMinutes(turnoRotado.endTime);
+
+        grupo.empleados.forEach(employee => {
           programs.forEach(program => {
             const key = `${employee.id}_${program.id}`;
 
@@ -1113,7 +1156,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
               newAssignments[key] = true;
             }
           });
-        }
+        });
       });
 
       // Aplicar cambios

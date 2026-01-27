@@ -732,34 +732,52 @@ router.get('/auto-shifts/:date', async (req, res) => {
           console.log(`   📊 Distribución: ${numAvailable} cámaras (Crítico) - Priorizando Estudio 1, Redacción en 0`);
         }
 
-        // Asignar personas a turnos con rotación semanal
-        // La rotación se aplica desplazando qué turno le toca a cada persona, no la selección de personas
+        // 🔄 ROTACIÓN SEMANAL DE GRUPOS COMPLETOS
+        // Los grupos se desplazan cada semana: T1→T2, T2→T3, T3→T4, T4→T1
+        // Usamos weeksDiff como offset para rotar los turnos
         const sortedPeople = availablePeople.slice().sort((a, b) => a.name.localeCompare(b.name));
 
-        distribucion.forEach(turno => {
-          console.log(`   ${turno.id} ${turno.label} → ${turno.cupos} cupos (${turno.estudio} Est, ${turno.redaccion} Red)`);
-        });
-
-        // Asignar personas secuencialmente a los turnos
+        // Crear grupos base según la distribución (sin rotación)
+        const gruposBase = [];
         let personIndex = 0;
         distribucion.forEach(turno => {
+          const grupo = [];
           for (let i = 0; i < turno.cupos && personIndex < sortedPeople.length; i++) {
-            const person = sortedPeople[personIndex];
+            grupo.push(sortedPeople[personIndex]);
+            personIndex++;
+          }
+          gruposBase.push({
+            turno: turno,
+            personas: grupo
+          });
+        });
 
+        console.log(`   🔄 Rotación semanal: weeksDiff = ${weeksDiff} (offset de turnos)`);
+
+        // Aplicar rotación: desplazar los turnos según weeksDiff
+        // El grupo 0 va al turno (0 + weeksDiff) % numTurnos
+        gruposBase.forEach((grupo, grupoIndex) => {
+          // Calcular a qué turno le toca este grupo esta semana
+          const turnoRotadoIndex = (grupoIndex + weeksDiff) % distribucion.length;
+          const turnoRotado = distribucion[turnoRotadoIndex];
+
+          console.log(`   Grupo ${grupoIndex + 1} (${grupo.personas.length} personas) → ${turnoRotado.id} ${turnoRotado.label} (rotación +${weeksDiff})`);
+
+          // Asignar cada persona del grupo al turno rotado
+          grupo.personas.forEach(person => {
             shifts.push({
               personnel_id: person.id,
               name: person.name,
               area: person.area,
-              shift_start: turno.start,
-              shift_end: turno.end,
+              shift_start: turnoRotado.start,
+              shift_end: turnoRotado.end,
               week_number: currentWeek,
-              original_shift: turno.label,
-              turno_descripcion: `${turno.id} - Estudio/Redacción`
+              original_shift: turnoRotado.label,
+              turno_descripcion: `${turnoRotado.id} - Estudio/Redacción`
             });
 
-            console.log(`      ✅ ${person.name} → ${turno.id} ${turno.label}`);
-            personIndex++;
-          }
+            console.log(`      ✅ ${person.name} → ${turnoRotado.id} ${turnoRotado.label}`);
+          });
         });
 
         return; // Salir para no usar la lógica estándar
