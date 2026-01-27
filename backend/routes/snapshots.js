@@ -44,9 +44,9 @@ router.post('/save/:date', async (req, res) => {
 
     await client.query('BEGIN');
 
-    // 1. Verificar si ya existe un snapshot para esta fecha
+    // 1. Verificar si el snapshot está bloqueado
     const existingSnapshotResult = await client.query(
-      'SELECT id, is_locked FROM snapshot_metadata WHERE snapshot_date = $1',
+      'SELECT is_locked FROM snapshot_metadata WHERE snapshot_date = $1',
       [date]
     );
 
@@ -58,15 +58,10 @@ router.post('/save/:date', async (req, res) => {
       });
     }
 
-    // 2. Eliminar snapshot anterior si existe (para permitir sobreescritura)
-    if (existingSnapshotResult.rows.length > 0) {
-      console.log(`   ♻️  Eliminando snapshot anterior para ${date}...`);
-      await client.query('DELETE FROM shift_snapshots WHERE snapshot_date = $1', [date]);
-      await client.query('DELETE FROM snapshot_metadata WHERE snapshot_date = $1', [date]);
-    }
+    // 2. UPSERT automáticamente actualiza si existe, no necesitamos DELETE
 
-    // 3. Insertar todas las asignaciones
-    console.log(`   💾 Insertando ${shifts.length} asignaciones...`);
+    // 3. UPSERT: Insertar o actualizar asignaciones (evita error de llave duplicada)
+    console.log(`   💾 UPSERT: Guardando ${shifts.length} asignaciones...`);
 
     const insertPromises = shifts.map(shift => {
       return client.query(`
@@ -74,8 +69,21 @@ router.post('/save/:date', async (req, res) => {
           snapshot_date, area, personnel_id, personnel_name, personnel_role,
           shift_number, shift_start_time, shift_end_time, shift_label,
           shift_description, status, notes, rotation_week, saved_by,
-          is_weekend
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          is_weekend, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP)
+        ON CONFLICT (snapshot_date, area, personnel_id, shift_number)
+        DO UPDATE SET
+          personnel_name = EXCLUDED.personnel_name,
+          personnel_role = EXCLUDED.personnel_role,
+          shift_start_time = EXCLUDED.shift_start_time,
+          shift_end_time = EXCLUDED.shift_end_time,
+          shift_label = EXCLUDED.shift_label,
+          shift_description = EXCLUDED.shift_description,
+          status = EXCLUDED.status,
+          notes = EXCLUDED.notes,
+          rotation_week = EXCLUDED.rotation_week,
+          saved_by = EXCLUDED.saved_by,
+          is_weekend = EXCLUDED.is_weekend
       `, [
         date,
         shift.area,
@@ -97,13 +105,20 @@ router.post('/save/:date', async (req, res) => {
 
     await Promise.all(insertPromises);
 
-    // 4. Crear metadata del snapshot
+    // 4. UPSERT metadata del snapshot
     const areasCount = new Set(shifts.map(s => s.area)).size;
 
     await client.query(`
       INSERT INTO snapshot_metadata (
-        snapshot_date, saved_by, total_personnel, total_areas, notes
-      ) VALUES ($1, $2, $3, $4, $5)
+        snapshot_date, saved_by, total_personnel, total_areas, notes, saved_at
+      ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      ON CONFLICT (snapshot_date)
+      DO UPDATE SET
+        saved_by = EXCLUDED.saved_by,
+        total_personnel = EXCLUDED.total_personnel,
+        total_areas = EXCLUDED.total_areas,
+        notes = EXCLUDED.notes,
+        saved_at = CURRENT_TIMESTAMP
     `, [date, user_id || null, shifts.length, areasCount, notes || null]);
 
     await client.query('COMMIT');

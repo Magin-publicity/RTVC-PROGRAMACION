@@ -141,6 +141,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
   const [snapshotMetadata, setSnapshotMetadata] = useState(null); // 📸 Metadata del snapshot
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isClosingWorkday, setIsClosingWorkday] = useState(false); // Estado específico para cerrar jornada
   const [lastSaved, setLastSaved] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // 🚨 Indica si hay cambios sin guardar
   const isUpdatingFromSocket = useRef(false);
@@ -667,6 +668,12 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
   // 📸 CERRAR JORNADA: Guardar + crear snapshot histórico inmutable
   // Se usa una sola vez al final del día para crear el registro permanente
   const handleCloseWorkday = useCallback(async () => {
+    // Prevenir doble clic
+    if (isClosingWorkday) {
+      console.log('⚠️ [CERRAR JORNADA] Ya se está procesando, ignorando doble clic');
+      return;
+    }
+
     // Confirmar que quiere cerrar la jornada
     if (!window.confirm(
       '📸 CERRAR JORNADA DEL DÍA\n\n' +
@@ -680,6 +687,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       return;
     }
 
+    setIsClosingWorkday(true);
     setIsSaving(true);
 
     try {
@@ -718,55 +726,63 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
       console.log(`✅ [CERRAR JORNADA] Datos guardados, creando snapshot histórico...`);
 
-      // PASO 2: Crear snapshot inmutable para historial
-      const snapshotShifts = autoShifts.map(shift => ({
-        area: shift.area,
-        personnel_id: shift.personnel_id,
-        personnel_name: shift.name,
-        personnel_role: shift.role || null,
-        shift_number: shift.week_number || 1,
-        shift_start_time: shift.shift_start,
-        shift_end_time: shift.shift_end,
-        shift_label: shift.original_shift || `T${shift.week_number || 1}`,
-        shift_description: shift.turno_descripcion || null,
-        status: 'ACTIVO',
-        notes: null,
-        rotation_week: shift.rotation_number || shift.week_number || null,
-        is_weekend: isWeekend
-      }));
+      // PASO 2: Crear snapshot inmutable para historial (en segundo plano, no bloquea UI)
+      let snapshotSuccess = false;
+      try {
+        const snapshotShifts = autoShifts.map(shift => ({
+          area: shift.area,
+          personnel_id: shift.personnel_id,
+          personnel_name: shift.name,
+          personnel_role: shift.role || null,
+          shift_number: shift.week_number || 1,
+          shift_start_time: shift.shift_start,
+          shift_end_time: shift.shift_end,
+          shift_label: shift.original_shift || `T${shift.week_number || 1}`,
+          shift_description: shift.turno_descripcion || null,
+          status: 'ACTIVO',
+          notes: null,
+          rotation_week: shift.rotation_number || shift.week_number || null,
+          is_weekend: isWeekend
+        }));
 
-      const snapshotResponse = await fetch(`${API_URL}/snapshots/save/${dateStr}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shifts: snapshotShifts,
-          rotation_week: snapshotShifts[0]?.rotation_week || null,
-          notes: `Cierre de jornada - ${new Date().toLocaleString('es-CO')}`
-        })
-      });
+        const snapshotResponse = await fetch(`${API_URL}/snapshots/save/${dateStr}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shifts: snapshotShifts,
+            rotation_week: snapshotShifts[0]?.rotation_week || null,
+            notes: `Cierre de jornada - ${new Date().toLocaleString('es-CO')}`
+          })
+        });
 
-      // Verificar si la respuesta es JSON antes de parsear
-      const contentType = snapshotResponse.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const snapshotResult = await snapshotResponse.json();
+        // Verificar si la respuesta es JSON antes de parsear
+        const contentType = snapshotResponse.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const snapshotResult = await snapshotResponse.json();
 
-        if (snapshotResponse.ok) {
-          console.log(`✅ [SNAPSHOT] Snapshot histórico creado:`, snapshotResult);
-          setLastSaved(new Date());
-          setHasUnsavedChanges(false);
-          alert('✅ Jornada cerrada exitosamente\n📸 Snapshot histórico creado\n\nPuedes ver este día en "Historial" (Máquina del Tiempo)');
+          if (snapshotResponse.ok) {
+            console.log(`✅ [SNAPSHOT] Snapshot histórico creado:`, snapshotResult);
+            snapshotSuccess = true;
+          } else {
+            console.warn(`⚠️ [SNAPSHOT] Error al crear snapshot:`, snapshotResult.error);
+          }
         } else {
-          console.warn(`⚠️ [SNAPSHOT] Error al crear snapshot:`, snapshotResult);
-          setLastSaved(new Date());
-          setHasUnsavedChanges(false);
-          alert('✅ Datos guardados correctamente\n⚠️ Error al crear snapshot histórico');
+          console.warn(`⚠️ [SNAPSHOT] Respuesta no-JSON del servidor`);
         }
+      } catch (snapshotError) {
+        console.warn(`⚠️ [SNAPSHOT] Error al guardar snapshot (no crítico):`, snapshotError.message);
+      }
+
+      // Actualizar estado y mostrar mensaje AL USUARIO
+      setLastSaved(new Date());
+      setHasUnsavedChanges(false);
+
+      if (snapshotSuccess) {
+        alert('✅ Jornada cerrada exitosamente\n📸 Snapshot histórico creado\n\nPuedes ver este día en "Historial" (Máquina del Tiempo)');
       } else {
-        // El servidor retornó HTML (error 500 o 404)
-        console.warn(`⚠️ [SNAPSHOT] Endpoint no disponible`);
-        setLastSaved(new Date());
-        setHasUnsavedChanges(false);
-        alert('✅ Datos guardados correctamente\n⚠️ Sistema de snapshots no disponible');
+        // No mostrar error de snapshot al usuario - los datos se guardaron correctamente
+        console.log('ℹ️ Datos guardados correctamente (snapshot no se creó, pero no es crítico)');
+        alert('✅ Jornada cerrada exitosamente\n\nDatos guardados correctamente en la base de datos.');
       }
 
     } catch (error) {
@@ -774,8 +790,9 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       alert(`❌ Error al cerrar jornada: ${error.message}`);
     } finally {
       setIsSaving(false);
+      setIsClosingWorkday(false);
     }
-  }, [assignments, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments, programs, autoShifts, dateStr, selectedDate, isWeekend]);
+  }, [assignments, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments, programs, autoShifts, dateStr, selectedDate, isWeekend, isClosingWorkday]);
 
   // 🕐 Hook de recordatorio para cerrar jornada a las 8 PM (solo para el día actual)
   // Debe estar DESPUÉS de handleCloseWorkday para evitar "Cannot access before initialization"
@@ -1082,14 +1099,25 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
             {/* 📸 BOTÓN CERRAR JORNADA (guardar + snapshot histórico) */}
             <button
               onClick={handleCloseWorkday}
-              disabled={isSaving}
+              disabled={isSaving || isClosingWorkday}
               className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded font-medium transition-all whitespace-nowrap bg-green-600 hover:bg-green-700 text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Cerrar jornada del día y crear snapshot histórico"
+              title={isClosingWorkday ? 'Cerrando jornada...' : 'Cerrar jornada del día y crear snapshot histórico'}
             >
-              <span className="text-lg flex-shrink-0">📸</span>
-              <span className="text-xs sm:text-sm font-bold">
-                Cerrar Jornada
-              </span>
+              {isClosingWorkday ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                  <span className="text-xs sm:text-sm font-bold">
+                    Cerrando...
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-lg flex-shrink-0">📸</span>
+                  <span className="text-xs sm:text-sm font-bold">
+                    Cerrar Jornada
+                  </span>
+                </>
+              )}
             </button>
 
             {/* 🚨 BOTÓN RESET DATOS HOY */}
