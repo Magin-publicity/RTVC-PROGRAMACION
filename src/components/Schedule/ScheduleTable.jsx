@@ -199,10 +199,6 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
   // Indicador de conexión (sin WebSocket real, solo visual)
   const { isConnected } = useRealtimeSync(dateStr);
 
-  // 🕐 Hook de recordatorio para cerrar jornada a las 8 PM (solo para el día actual)
-  useWorkdayReminder(selectedDate, handleCloseWorkday, true);
-
-
   // EFECTO COMBINADO: Cargar programs Y assignments en el orden correcto
   useEffect(() => {
     let isCancelled = false;
@@ -780,6 +776,10 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       setIsSaving(false);
     }
   }, [assignments, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments, programs, autoShifts, dateStr, selectedDate, isWeekend]);
+
+  // 🕐 Hook de recordatorio para cerrar jornada a las 8 PM (solo para el día actual)
+  // Debe estar DESPUÉS de handleCloseWorkday para evitar "Cannot access before initialization"
+  useWorkdayReminder(selectedDate, handleCloseWorkday, true);
 
   const formatDate = (date) => {
     const days = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO'];
