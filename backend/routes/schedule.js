@@ -634,12 +634,132 @@ router.get('/auto-shifts/:date', async (req, res) => {
     // ⚠️ Cambiar estas lógicas romperá la rotación de múltiples áreas ⚠️
     // ⚠️⚠️⚠️ FIN DE ADVERTENCIA CRÍTICA ⚠️⚠️⚠️
 
+    // Obtener novedades del día para filtrar personal disponible
+    const noveltiesResult = await pool.query(
+      `SELECT * FROM novelties WHERE $1::date BETWEEN start_date AND end_date`,
+      [date]
+    );
+    const noveltiesMap = {};
+    noveltiesResult.rows.forEach(n => {
+      noveltiesMap[n.personnel_id] = n;
+    });
+
     // Asignar turnos según patrones con rotación y redistribución equitativa
     Object.keys(personnelByArea).forEach(area => {
       const patterns = patternsByArea[area] || [];
       const people = personnelByArea[area];
 
       if (patterns.length === 0) return;
+
+      // 🎥 CRÍTICO - LÓGICA ESPECIAL PARA CAMARÓGRAFOS DE ESTUDIO (ENTRE SEMANA)
+      // Distribución progresiva con sacrificio de Redacción para proteger Estudio 1
+      // Reglas de distribución basadas en cantidad de personal disponible
+      if (area === 'CAMARÓGRAFOS DE ESTUDIO') {
+        console.log(`📹 CAMARÓGRAFOS DE ESTUDIO (entre semana): Aplicando reglas de distribución progresiva`);
+
+        // Filtrar personal disponible (excluir novedades bloqueantes)
+        const availablePeople = people.filter(person => {
+          const novelty = noveltiesMap[person.id];
+          if (!novelty) return true; // Sin novedad = disponible
+
+          // Novedades bloqueantes
+          const blockingTypes = ['VIAJE', 'VIAJE MÓVIL', 'LIBRE', 'SIN_CONTRATO', 'INCAPACIDAD'];
+          return !blockingTypes.includes(novelty.type);
+        });
+
+        const numAvailable = availablePeople.length;
+        console.log(`   Personal total: ${people.length}, Disponible: ${numAvailable}`);
+
+        // Definir distribución según reglas progresivas
+        let distribucion = null;
+
+        if (numAvailable >= 20) {
+          // 20 Cámaras (Full): T1(6: 4 Est/2 Red), T2(6: 4 Est/2 Red), T3(4: 4 Est), T4(4: 4 Est)
+          distribucion = [
+            { id: 'T1', start: '05:00:00', end: '11:00:00', label: '05:00', cupos: 6, estudio: 4, redaccion: 2 },
+            { id: 'T2', start: '09:00:00', end: '15:00:00', label: '09:00', cupos: 6, estudio: 4, redaccion: 2 },
+            { id: 'T3', start: '13:00:00', end: '19:00:00', label: '13:00', cupos: 4, estudio: 4, redaccion: 0 },
+            { id: 'T4', start: '16:00:00', end: '22:00:00', label: '16:00', cupos: 4, estudio: 4, redaccion: 0 }
+          ];
+          console.log(`   📊 Distribución: 20+ cámaras (Full) - T1(6), T2(6), T3(4), T4(4)`);
+        } else if (numAvailable === 19) {
+          // 19 Cámaras: T2 baja a 5 (4 Est / 1 Red)
+          distribucion = [
+            { id: 'T1', start: '05:00:00', end: '11:00:00', label: '05:00', cupos: 6, estudio: 4, redaccion: 2 },
+            { id: 'T2', start: '09:00:00', end: '15:00:00', label: '09:00', cupos: 5, estudio: 4, redaccion: 1 },
+            { id: 'T3', start: '13:00:00', end: '19:00:00', label: '13:00', cupos: 4, estudio: 4, redaccion: 0 },
+            { id: 'T4', start: '16:00:00', end: '22:00:00', label: '16:00', cupos: 4, estudio: 4, redaccion: 0 }
+          ];
+          console.log(`   📊 Distribución: 19 cámaras - T1(6), T2(5), T3(4), T4(4)`);
+        } else if (numAvailable === 18) {
+          // 18 Cámaras: T1 y T2 bajan a 5 cada uno (4 Est / 1 Red cada uno)
+          distribucion = [
+            { id: 'T1', start: '05:00:00', end: '11:00:00', label: '05:00', cupos: 5, estudio: 4, redaccion: 1 },
+            { id: 'T2', start: '09:00:00', end: '15:00:00', label: '09:00', cupos: 5, estudio: 4, redaccion: 1 },
+            { id: 'T3', start: '13:00:00', end: '19:00:00', label: '13:00', cupos: 4, estudio: 4, redaccion: 0 },
+            { id: 'T4', start: '16:00:00', end: '22:00:00', label: '16:00', cupos: 4, estudio: 4, redaccion: 0 }
+          ];
+          console.log(`   📊 Distribución: 18 cámaras - T1(5), T2(5), T3(4), T4(4)`);
+        } else if (numAvailable === 17) {
+          // 17 Cámaras: T1(5), T2(4: 0 Redacción), T3(4), T4(4). Redacción se sacrifica en T2
+          distribucion = [
+            { id: 'T1', start: '05:00:00', end: '11:00:00', label: '05:00', cupos: 5, estudio: 4, redaccion: 1 },
+            { id: 'T2', start: '09:00:00', end: '15:00:00', label: '09:00', cupos: 4, estudio: 4, redaccion: 0 },
+            { id: 'T3', start: '13:00:00', end: '19:00:00', label: '13:00', cupos: 4, estudio: 4, redaccion: 0 },
+            { id: 'T4', start: '16:00:00', end: '22:00:00', label: '16:00', cupos: 4, estudio: 4, redaccion: 0 }
+          ];
+          console.log(`   📊 Distribución: 17 cámaras - T1(5), T2(4-Solo Estudio), T3(4), T4(4)`);
+        } else if (numAvailable === 16) {
+          // 16 Cámaras (Móvil): T1(6), T2(5: 1 Red), T3/T4 fusionados(5)
+          distribucion = [
+            { id: 'T1', start: '05:00:00', end: '11:00:00', label: '05:00', cupos: 6, estudio: 4, redaccion: 2 },
+            { id: 'T2', start: '09:00:00', end: '15:00:00', label: '09:00', cupos: 5, estudio: 4, redaccion: 1 },
+            { id: 'T3', start: '13:00:00', end: '22:00:00', label: '13:00', cupos: 5, estudio: 4, redaccion: 1 }
+          ];
+          console.log(`   📊 Distribución: 16 cámaras (Móvil) - T1(6), T2(5), T3 extendido(5)`);
+        } else {
+          // Menos de 16: Priorizar Estudio 1 (4 cupos) en todos los turnos, Redacción con 0
+          const cuposPorTurno = Math.floor(numAvailable / 4); // Distribuir equitativamente
+          const resto = numAvailable % 4;
+
+          distribucion = [
+            { id: 'T1', start: '05:00:00', end: '11:00:00', label: '05:00', cupos: Math.min(cuposPorTurno + (resto > 0 ? 1 : 0), 4), estudio: 4, redaccion: 0 },
+            { id: 'T2', start: '09:00:00', end: '15:00:00', label: '09:00', cupos: Math.min(cuposPorTurno + (resto > 1 ? 1 : 0), 4), estudio: 4, redaccion: 0 },
+            { id: 'T3', start: '13:00:00', end: '19:00:00', label: '13:00', cupos: Math.min(cuposPorTurno + (resto > 2 ? 1 : 0), 4), estudio: 4, redaccion: 0 },
+            { id: 'T4', start: '16:00:00', end: '22:00:00', label: '16:00', cupos: Math.min(cuposPorTurno, 4), estudio: 4, redaccion: 0 }
+          ].filter(t => t.cupos > 0); // Eliminar turnos sin cupos
+
+          console.log(`   📊 Distribución: ${numAvailable} cámaras (Crítico) - Priorizando Estudio 1, Redacción en 0`);
+        }
+
+        // Asignar personas a turnos con rotación
+        const sortedPeople = availablePeople.slice().sort((a, b) => a.name.localeCompare(b.name));
+        let personIndex = 0;
+
+        distribucion.forEach(turno => {
+          console.log(`   ${turno.id} ${turno.label} → ${turno.cupos} cupos (${turno.estudio} Est, ${turno.redaccion} Red)`);
+
+          for (let i = 0; i < turno.cupos && personIndex < sortedPeople.length; i++) {
+            const person = sortedPeople[(personIndex + weeksDiff) % sortedPeople.length];
+
+            shifts.push({
+              personnel_id: person.id,
+              name: person.name,
+              area: person.area,
+              shift_start: turno.start,
+              shift_end: turno.end,
+              week_number: currentWeek,
+              original_shift: turno.label,
+              turno_descripcion: `${turno.id} - Estudio/Redacción`
+            });
+
+            console.log(`      ✅ ${person.name} → ${turno.id} ${turno.label}`);
+            personIndex++;
+          }
+        });
+
+        return; // Salir para no usar la lógica estándar
+      }
 
       // ⚠️ CRÍTICO - NO MODIFICAR: LÓGICA ESPECIAL PARA ÁREAS CON 2 PERSONAS
       // Plantilla mínima con 2 personas que cubren apertura y cierre
