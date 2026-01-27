@@ -732,15 +732,19 @@ router.get('/auto-shifts/:date', async (req, res) => {
           console.log(`   📊 Distribución: ${numAvailable} cámaras (Crítico) - Priorizando Estudio 1, Redacción en 0`);
         }
 
-        // Asignar personas a turnos con rotación
+        // Asignar personas a turnos con rotación semanal
+        // La rotación se aplica desplazando qué turno le toca a cada persona, no la selección de personas
         const sortedPeople = availablePeople.slice().sort((a, b) => a.name.localeCompare(b.name));
-        let personIndex = 0;
 
         distribucion.forEach(turno => {
           console.log(`   ${turno.id} ${turno.label} → ${turno.cupos} cupos (${turno.estudio} Est, ${turno.redaccion} Red)`);
+        });
 
+        // Asignar personas secuencialmente a los turnos
+        let personIndex = 0;
+        distribucion.forEach(turno => {
           for (let i = 0; i < turno.cupos && personIndex < sortedPeople.length; i++) {
-            const person = sortedPeople[(personIndex + weeksDiff) % sortedPeople.length];
+            const person = sortedPeople[personIndex];
 
             shifts.push({
               personnel_id: person.id,
