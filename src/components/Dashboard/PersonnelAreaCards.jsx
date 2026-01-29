@@ -190,6 +190,15 @@ export const PersonnelAreaCards = ({ currentDate }) => {
 
       if (response.ok) {
         const data = await response.json();
+
+        // DEBUG TEMPORAL: Verificar datos de Guillermo
+        const guillermo = data.find(p => p.nombre && p.nombre.includes('Guillermo'));
+        if (guillermo) {
+          console.log('🔍 GUILLERMO DATOS RECIBIDOS:', guillermo);
+          console.log('🔍 travel_event_info existe?:', !!guillermo.travel_event_info);
+          console.log('🔍 travel_event_info contenido:', guillermo.travel_event_info);
+        }
+
         setDetailedPersonnel(data);
         setSelectedArea(areaName);
       } else {
@@ -346,6 +355,15 @@ export const PersonnelAreaCards = ({ currentDate }) => {
               ) : (
                 <div className="space-y-3">
                   {detailedPersonnel.map((person) => {
+                    // DEBUG TEMPORAL: Log en renderizado
+                    if (person.nombre && person.nombre.includes('Guillermo')) {
+                      console.log('🎨 RENDER GUILLERMO:', {
+                        nombre: person.nombre,
+                        travel_event_info: person.travel_event_info,
+                        tiene: !!person.travel_event_info
+                      });
+                    }
+
                     const status = getStatusIcon(person);
                     const StatusIcon = status.icon;
                     const llamadoPasado = person.hora_llamado && new Date(`${currentDate.toISOString().split('T')[0]}T${person.hora_llamado}`) < new Date();
@@ -417,23 +435,16 @@ export const PersonnelAreaCards = ({ currentDate }) => {
                           </div>
                         </div>
 
-                        {/* Información de comisión de viaje - PRIORIDAD 1 */}
-                        {person.travel_event_info && (
+                        {/* Información de VIAJE (desde novedad_info) - PRIORIDAD 1 */}
+                        {person.en_viaje && person.novedad_info && person.novedad_info.tipo === 'VIAJE' && (
                           <div className="mt-2 p-2 bg-green-600 text-white rounded shadow-sm">
-                            <p className="font-bold text-[11px]">✈️ EN COMISIÓN</p>
-                            <p className="text-[10px] uppercase">{person.travel_event_info.evento}</p>
-                            <p className="text-[10px]">📍 {person.travel_event_info.destino}</p>
-                            {person.travel_event_info.liveu && (
-                              <p className="text-[10px]">📡 {person.travel_event_info.liveu}</p>
-                            )}
-                            {person.travel_event_info.hora_salida && (
-                              <p className="text-[10px]">🕐 Salida: {person.travel_event_info.hora_salida}</p>
-                            )}
+                            <p className="font-bold text-[11px]">✈️ EN COMISIÓN DE VIAJE</p>
+                            <p className="text-[10px]">{person.novedad_info.descripcion}</p>
                           </div>
                         )}
 
                         {/* Información de despacho - PRIORIDAD 2 */}
-                        {!person.travel_event_info && person.en_despacho && person.despacho_info && (
+                        {!person.en_viaje && person.en_despacho && person.despacho_info && (
                           <div className="mt-2 p-2 bg-blue-100 border-l-4 border-blue-500 rounded">
                             <p className="text-xs font-bold text-blue-700">
                               <Truck size={14} className="inline mr-1" />
@@ -447,13 +458,13 @@ export const PersonnelAreaCards = ({ currentDate }) => {
                           </div>
                         )}
 
-                        {person.en_viaje && person.novedad_info && !person.travel_event_info && (
-                          <div className="mt-3 bg-purple-100 border border-purple-300 rounded-lg p-3">
-                            <p className="text-xs font-bold text-purple-900 mb-1">
-                              <Plane size={14} className="inline mr-1" />
-                              En Viaje / Novedad
+                        {/* Otras novedades (no viaje) - PRIORIDAD 3 */}
+                        {person.novedad_info && person.novedad_info.tipo !== 'VIAJE' && !person.en_despacho && (
+                          <div className="mt-2 p-2 bg-purple-100 border border-purple-300 rounded">
+                            <p className="text-xs font-bold text-purple-900">
+                              {person.novedad_info.tipo}
                             </p>
-                            <p className="text-xs text-gray-700">
+                            <p className="text-[10px] text-gray-700">
                               {person.novedad_info.descripcion}
                             </p>
                           </div>

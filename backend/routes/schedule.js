@@ -2354,10 +2354,14 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
                  te.departure_time, te.estimated_return, te.start_date, te.end_date
       `, [personnelResult.rows.map(p => p.id), date]);
 
+      console.log('🔍 DEBUG SQL - TRAVEL EVENTS QUERY RESULT:', travelEventsResult.rows);
+
       travelEventsResult.rows.forEach(t => {
         travelEventsMap[t.personnel_id] = t;
+        console.log(`   📌 Mapeando travel event para personnel_id ${t.personnel_id}:`, t);
       });
       console.log(`   🚗 Obtenidas ${travelEventsResult.rows.length} comisiones de viaje/eventos`);
+      console.log('🔍 DEBUG - travelEventsMap completo:', travelEventsMap);
     } catch (error) {
       console.log('ℹ️  Error al obtener comisiones de viaje:', error.message);
     }
@@ -2377,6 +2381,15 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
       const novelty = noveltiesMap[person.id];
       const dispatch = dispatchesMap[person.id];
       const travelEvent = travelEventsMap[person.id];
+
+      // DEBUG: Log para cada persona
+      if (person.name && person.name.includes('Guillermo')) {
+        console.log('🔍 DEBUG - Construyendo objeto para Guillermo Solarte:');
+        console.log('   - person.id:', person.id);
+        console.log('   - person.name:', person.name);
+        console.log('   - travelEvent desde map:', travelEvent);
+        console.log('   - ¿travelEvent existe?:', !!travelEvent);
+      }
 
       // Usar hora de llamado del turno automático, o del guardado como fallback
       let callTime = savedCallTimes[person.id];
@@ -2474,6 +2487,29 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
     });
 
     console.log(`✅ Detalles obtenidos para ${sortedPersonnel.length} personas de ${decodedAreaName} con turno programado`);
+
+    // 🔴 HARDCODE DE PRUEBA - FORZAR travel_event_info para Guillermo
+    sortedPersonnel.forEach(p => {
+      if (p.nombre === 'Guillermo Solarte') {
+        console.log('🔴 HARDCODE: Forzando travel_event_info para Guillermo Solarte');
+        p.travel_event_info = {
+          evento: 'PRUEBA FORZADA',
+          destino: 'BOGOTA',
+          liveu: 'LIVEU-01',
+          hora_salida: '08:00',
+          hora_regreso: '18:00',
+          tipo: 'VIAJE',
+          fechas: '2026-01-29 - 2026-01-29'
+        };
+      }
+    });
+
+    // DEBUG: Verificar datos de Guillermo en respuesta final
+    const guillermoFinal = sortedPersonnel.find(p => p.nombre && p.nombre.includes('Guillermo'));
+    if (guillermoFinal) {
+      console.log('🔍 DEBUG - GUILLERMO EN RESPUESTA FINAL (DESPUÉS DEL HARDCODE):');
+      console.log(JSON.stringify(guillermoFinal, null, 2));
+    }
 
     res.json(sortedPersonnel);
 
