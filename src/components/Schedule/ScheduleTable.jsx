@@ -145,6 +145,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
   const [lastSaved, setLastSaved] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // 🚨 Indica si hay cambios sin guardar
   const isUpdatingFromSocket = useRef(false);
+  const [travelEvents, setTravelEvents] = useState([]); // 🚗 Eventos de viaje para esta fecha
 
   // 🚨 Refs para detectar cambios REALES (no solo carga de datos)
   const previousAssignments = useRef(null);
@@ -300,6 +301,19 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         // PASO 3: Obtener turnos
         const shiftsRes = await fetch(`${API_URL}/schedule/auto-shifts/${dateStr}`);
         const shiftsData = await shiftsRes.json();
+
+        if (isCancelled) return;
+
+        // PASO 3.5: Cargar eventos de viaje para esta fecha
+        try {
+          const travelEventsRes = await fetch(`${API_URL}/travel-events/date/${dateStr}`);
+          const travelEventsData = await travelEventsRes.json();
+          setTravelEvents(travelEventsData || []);
+          console.log(`🚗 [TRAVEL EVENTS] ${travelEventsData?.length || 0} eventos cargados para ${dateStr}`);
+        } catch (error) {
+          console.error('Error al cargar eventos de viaje:', error);
+          setTravelEvents([]);
+        }
 
         if (isCancelled) return;
 
@@ -1051,56 +1065,55 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       // Ordenar empleados alfabéticamente (mismo orden que backend)
       const sortedEmployees = [...finalAvailable].sort((a, b) => a.name.localeCompare(b.name));
 
-      // 🔄 CREAR GRUPOS BASE Y APLICAR ROTACIÓN SEMANAL
-      // Primero creamos los grupos según la distribución (compacta)
+      // 🔄 ROTACIÓN SEMANAL - Las personas rotan entre los turnos cada semana
+      // Identificar turnos únicos desde distribucion y contar cupos (mismo algoritmo que backend)
       const turnosUnicos = [];
-      const turnosCuenta = {};
-      distribucion.forEach(slot => {
-        const key = `${slot.callTime}-${slot.endTime}`;
-        if (!turnosCuenta[key]) {
-          turnosUnicos.push({ callTime: slot.callTime, endTime: slot.endTime, label: slot.label, count: 0 });
-          turnosCuenta[key] = turnosUnicos.length - 1;
+      distribucion.forEach(turno => {
+        const existe = turnosUnicos.find(t => t.callTime === turno.callTime && t.endTime === turno.endTime);
+        if (!existe) {
+          // Contar cuántos elementos de distribucion tienen este mismo horario
+          const cupos = distribucion.filter(t => t.callTime === turno.callTime && t.endTime === turno.endTime).length;
+          turnosUnicos.push({
+            callTime: turno.callTime,
+            endTime: turno.endTime,
+            label: turno.label,
+            cupos: cupos
+          });
         }
-        turnosUnicos[turnosCuenta[key]].count++;
-      });
-
-      // Crear grupos base (sin rotación)
-      const gruposBase = [];
-      let employeeIndex = 0;
-      turnosUnicos.forEach(turno => {
-        const grupo = [];
-        for (let i = 0; i < turno.count && employeeIndex < sortedEmployees.length; i++) {
-          grupo.push(sortedEmployees[employeeIndex]);
-          employeeIndex++;
-        }
-        gruposBase.push({
-          turno: turno,
-          empleados: grupo
-        });
       });
 
       console.log(`   🔄 Rotación semanal: weeksDiff = ${weeksDiff} (offset de turnos)`);
+      console.log(`   📊 Turnos únicos detectados: ${turnosUnicos.length} (${turnosUnicos.map(t => `${t.callTime}(${t.cupos})`).join(', ')})`);
 
-      // Asignar turnos con rotación
+      // Rotar el array de turnos según weeksDiff
+      const turnosRotados = turnosUnicos.map((_, index) => {
+        const rotatedIndex = (index + weeksDiff) % turnosUnicos.length;
+        return turnosUnicos[rotatedIndex];
+      });
+
+      console.log(`   📍 Turnos rotados: ${turnosRotados.map(t => `${t.callTime}(${t.cupos})`).join(' → ')}`);
+
+      // Asignar personas a los turnos rotados manteniendo el orden alfabético
       const newCallTimes = { ...callTimes };
       const newEndTimes = { ...endTimes };
       const newManualCallTimes = { ...manualCallTimes };
       const newManualEndTimes = { ...manualEndTimes };
 
-      // Aplicar rotación: cada grupo se mueve al turno siguiente
-      gruposBase.forEach((grupo, grupoIndex) => {
-        const turnoRotadoIndex = (grupoIndex + weeksDiff) % turnosUnicos.length;
-        const turnoRotado = turnosUnicos[turnoRotadoIndex];
+      let employeeIndex = 0;
+      turnosRotados.forEach((turno, turnoIndex) => {
+        console.log(`   Posición ${turnoIndex + 1} → Turno ${turno.callTime} (${turno.cupos} cupos)`);
 
-        console.log(`   Grupo ${grupoIndex + 1} (${grupo.empleados.length} personas) → ${turnoRotado.callTime}-${turnoRotado.endTime} (rotación +${weeksDiff})`);
+        // Asignar las siguientes N empleados a este turno
+        for (let i = 0; i < turno.cupos && employeeIndex < sortedEmployees.length; i++) {
+          const employee = sortedEmployees[employeeIndex];
+          employeeIndex++;
 
-        grupo.empleados.forEach(employee => {
-          newCallTimes[employee.id] = turnoRotado.callTime;
-          newEndTimes[employee.id] = turnoRotado.endTime;
+          newCallTimes[employee.id] = turno.callTime;
+          newEndTimes[employee.id] = turno.endTime;
           newManualCallTimes[employee.id] = true;
           newManualEndTimes[employee.id] = true;
-          console.log(`      ✅ ${employee.name}: ${turnoRotado.callTime} - ${turnoRotado.endTime}`);
-        });
+          console.log(`      ✅ ${employee.name}: ${turno.callTime} - ${turno.endTime}`);
+        }
       });
 
       // Redistribuir asignaciones según los nuevos horarios
@@ -1117,15 +1130,21 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         });
       });
 
-      // Asignar empleados a programas según solapamiento horario (usando grupos rotados)
-      gruposBase.forEach((grupo, grupoIndex) => {
-        const turnoRotadoIndex = (grupoIndex + weeksDiff) % turnosUnicos.length;
-        const turnoRotado = turnosUnicos[turnoRotadoIndex];
+      // Asignar empleados a programas según solapamiento horario (usando turnos rotados)
+      employeeIndex = 0;
+      turnosRotados.forEach((turno, turnoIndex) => {
+        const callMinutes = timeToMinutes(turno.callTime);
+        const endMinutes = timeToMinutes(turno.endTime);
 
-        const callMinutes = timeToMinutes(turnoRotado.callTime);
-        const endMinutes = timeToMinutes(turnoRotado.endTime);
+        // Procesar las siguientes N empleados para este turno
+        const empleadosTurno = [];
+        for (let i = 0; i < turno.cupos && employeeIndex < sortedEmployees.length; i++) {
+          empleadosTurno.push(sortedEmployees[employeeIndex]);
+          employeeIndex++;
+        }
 
-        grupo.empleados.forEach(employee => {
+        // Asignar cada empleado de este turno a programas con solapamiento horario
+        empleadosTurno.forEach(employee => {
           programs.forEach(program => {
             const key = `${employee.id}_${program.id}`;
 
@@ -1176,20 +1195,23 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     if (areaName === 'CAMARÓGRAFOS DE REPORTERÍA') {
       console.log(`📹 CAMARÓGRAFOS DE REPORTERÍA: Aplicando sistema de duplas con relevo`);
 
-      // Definir duplas de relevo por equipo (mismo orden que backend)
+      // Definir duplas de relevo por equipo (MISMO ORDEN Y NOMBRES QUE BACKEND)
       const DUPLAS_REPORTERIA = [
-        // X3 - Cámaras Propias
-        { t1: 'Floresmiro Luna', t2: 'Julián Luna', equipo: 'X3', tipo: 'propias' },
-        { t1: 'Leonel Cifuentes', t2: 'Andrés Ramírez', equipo: 'X3', tipo: 'propias' },
-        // SONY 300 - Cámaras Propias
-        { t1: 'Edgar Nieto', t2: 'Didier Buitrago', equipo: 'SONY 300', tipo: 'propias' },
-        { t1: 'William Uribe', t2: 'Marco Solórzano', equipo: 'SONY 300', tipo: 'propias' },
-        // Cámaras RTVC
-        { t1: 'Erick Velázquez', t2: 'Cesar Morales', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+        // Dupla 1 (Verde): Cámaras Propias
+        { t1: 'Erick Velásquez', t2: 'Cesar Morales', equipo: 'Cámara RTVC', tipo: 'propias' },
+        // Duplas 2-5 (Azul): Cámaras RTVC
         { t1: 'William Ruiz', t2: 'Álvaro Díaz', equipo: 'Cámara RTVC', tipo: 'rtvc' },
         { t1: 'Carlos Wilches', t2: 'Victor Vargas', equipo: 'Cámara RTVC', tipo: 'rtvc' },
         { t1: 'Enrique Muñoz', t2: 'Edgar Castillo', equipo: 'Cámara RTVC', tipo: 'rtvc' },
-        { t1: 'John Ruiz', t2: 'Ramiro Balaguera', equipo: 'Cámara RTVC', tipo: 'rtvc' }
+        { t1: 'John Ruiz B', t2: 'Ramiro Balaguera', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+        // Dupla 6 (Amarillo): X3
+        { t1: 'Floresmiro Luna', t2: 'Leonel Cifuentes', equipo: 'X3', tipo: 'propias' },
+        // Dupla 7 (Verde/Amarillo): SONY 300
+        { t1: 'Edgar Nieto', t2: 'Didier Buitrago', equipo: 'SONY 300', tipo: 'propias' },
+        // Dupla 8 (Amarillo): X3
+        { t1: 'Julián Luna', t2: 'Andrés Ramírez', equipo: 'X3', tipo: 'propias' },
+        // Dupla 9 (Verde/Amarillo): SONY 300
+        { t1: 'William Uribe', t2: 'Marco Solórzano', equipo: 'SONY 300', tipo: 'propias' }
       ];
 
       const newCallTimes = { ...callTimes };
@@ -1198,35 +1220,48 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       const newManualEndTimes = { ...manualEndTimes };
 
       let duplasAsignadas = 0;
-      let duplasIncompletas = 0;
+      let duplasConNovedades = 0;
 
+      // Buscar personas en TODO el personal del área (no solo disponibles)
       DUPLAS_REPORTERIA.forEach(dupla => {
-        const t1Person = availableEmployees.find(p => p.name === dupla.t1);
-        const t2Person = availableEmployees.find(p => p.name === dupla.t2);
+        const t1Person = areaPersonnel.find(p => p.name === dupla.t1);
+        const t2Person = areaPersonnel.find(p => p.name === dupla.t2);
 
-        // Solo asignar si AMBOS están disponibles (relevo completo)
-        if (t1Person && t2Person) {
-          // T1: Mañana 06:00-13:00
+        // Verificar disponibilidad real (no solo si está en availableEmployees)
+        const t1Available = t1Person && availableEmployees.find(p => p.id === t1Person.id);
+        const t2Available = t2Person && availableEmployees.find(p => p.id === t2Person.id);
+
+        // SIEMPRE asignar T1 si la persona existe en el área
+        if (t1Person) {
           newCallTimes[t1Person.id] = '06:00';
           newEndTimes[t1Person.id] = '13:00';
           newManualCallTimes[t1Person.id] = true;
           newManualEndTimes[t1Person.id] = true;
+        }
 
-          // T2: Tarde 13:00-20:00
+        // SIEMPRE asignar T2 si la persona existe en el área
+        if (t2Person) {
           newCallTimes[t2Person.id] = '13:00';
           newEndTimes[t2Person.id] = '20:00';
           newManualCallTimes[t2Person.id] = true;
           newManualEndTimes[t2Person.id] = true;
+        }
 
+        // Logging según disponibilidad
+        if (t1Available && t2Available) {
           console.log(`   ✅ Dupla ${dupla.equipo}: ${dupla.t1} (T1 06:00) ↔ ${dupla.t2} (T2 13:00)`);
           duplasAsignadas++;
-        } else {
-          duplasIncompletas++;
-          if (t1Person && !t2Person) {
-            console.log(`   ⚠️ Dupla incompleta: ${dupla.t1} disponible pero ${dupla.t2} no disponible (${dupla.equipo})`);
-          } else if (!t1Person && t2Person) {
-            console.log(`   ⚠️ Dupla incompleta: ${dupla.t2} disponible pero ${dupla.t1} no disponible (${dupla.equipo})`);
+        } else if (t1Person && t2Person) {
+          duplasConNovedades++;
+          if (!t1Available && t2Available) {
+            console.log(`   ⚠️ Dupla ${dupla.equipo}: ${dupla.t1} (T1) ✗ NOVEDAD | ${dupla.t2} (T2) ✓`);
+          } else if (t1Available && !t2Available) {
+            console.log(`   ⚠️ Dupla ${dupla.equipo}: ${dupla.t1} (T1) ✓ | ${dupla.t2} (T2) ✗ NOVEDAD`);
+          } else {
+            console.log(`   ⚠️ Dupla ${dupla.equipo}: ${dupla.t1} (T1) ✗ | ${dupla.t2} (T2) ✗ (ambos con novedad)`);
           }
+        } else {
+          console.log(`   ❌ Dupla ${dupla.equipo}: No se encontraron ambas personas en el área`);
         }
       });
 
@@ -1246,11 +1281,11 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
       // Asignar empleados a programas según solapamiento horario
       DUPLAS_REPORTERIA.forEach(dupla => {
-        const t1Person = availableEmployees.find(p => p.name === dupla.t1);
-        const t2Person = availableEmployees.find(p => p.name === dupla.t2);
+        const t1Person = areaPersonnel.find(p => p.name === dupla.t1);
+        const t2Person = areaPersonnel.find(p => p.name === dupla.t2);
 
-        if (t1Person && t2Person) {
-          // Asignar T1 (06:00-13:00)
+        // Asignar T1 (06:00-13:00) si existe
+        if (t1Person) {
           const t1CallMinutes = timeToMinutes('06:00');
           const t1EndMinutes = timeToMinutes('13:00');
 
@@ -1283,8 +1318,10 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
               newAssignments[key] = true;
             }
           });
+        }
 
-          // Asignar T2 (13:00-20:00)
+        // Asignar T2 (13:00-20:00) si existe
+        if (t2Person) {
           const t2CallMinutes = timeToMinutes('13:00');
           const t2EndMinutes = timeToMinutes('20:00');
 
@@ -1327,7 +1364,10 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       setAssignments(newAssignments);
 
       console.log(`✅ [CAMARÓGRAFOS DE REPORTERÍA] Reorganización completada`);
-      alert(`✅ Cámaras de Reportería reorganizados con sistema de duplas\n\n📊 Duplas completas asignadas: ${duplasAsignadas}/${DUPLAS_REPORTERIA.length}\n⚠️ Duplas incompletas: ${duplasIncompletas}\n\n🎬 T1 (06:00-13:00) → Relevos en T2 (13:00-20:00)`);
+      console.log(`   📊 Duplas completas: ${duplasAsignadas}/${DUPLAS_REPORTERIA.length}`);
+      console.log(`   📊 Duplas con novedades: ${duplasConNovedades}/${DUPLAS_REPORTERIA.length}`);
+
+      alert(`✅ Cámaras de Reportería reorganizados con sistema de duplas\n\n📊 Total duplas: ${DUPLAS_REPORTERIA.length} (${DUPLAS_REPORTERIA.length * 2} personas)\n✅ Duplas completas: ${duplasAsignadas}\n⚠️ Duplas con novedades: ${duplasConNovedades}\n\n🎬 T1 (06:00-13:00) ↔ T2 (13:00-20:00)\n\nTodas las duplas han sido asignadas, incluso las que tienen novedades.`);
       return;
     }
 
@@ -1828,7 +1868,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
             </button>
 
             <button
-              onClick={() => generateSchedulePDF(personnel, programs, assignments, callTimes, selectedDate, programMappings)}
+              onClick={() => generateSchedulePDF(personnel, programs, assignments, callTimes, selectedDate, programMappings, novelties, assignmentNotes, endTimes)}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded"
             >
               <Download size={18} />
@@ -2186,7 +2226,21 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                         let textColor = '#000000';
                         let isSinContrato = false;
 
-                        if (todayNovelty) {
+                        // 🚗 VERIFICAR SI ESTÁ EN UN EVENTO DE VIAJE (prioridad sobre novedades normales)
+                        const travelEvent = travelEvents.find(event => {
+                          if (event.status === 'CANCELADO') return false;
+                          return event.personnel && event.personnel.some(p => p.personnel_id === person.id);
+                        });
+
+                        if (travelEvent) {
+                          // Persona está en comisión de viaje/evento
+                          const eventType = travelEvent.event_type === 'VIAJE_FUERA_CIUDAD' ? 'VIAJE' :
+                                          travelEvent.event_type === 'VIAJE_LOCAL' ? 'VIAJE LOCAL' :
+                                          'EVENTO';
+                          cellText = `${eventType}: ${travelEvent.event_name}`;
+                          bgColor = 'rgb(0, 251, 58)'; // Verde (igual que viajes en novedades)
+                          textColor = '#000000'; // Texto negro para mejor contraste
+                        } else if (todayNovelty) {
                           // Verificar si la novedad es "SIN_CONTRATO"
                           if (todayNovelty.type === 'SIN_CONTRATO') {
                             // Si es sin contrato, dejar todo en blanco
@@ -2195,10 +2249,10 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                             textColor = '#000000';
                             isSinContrato = true;
                           } else if (todayNovelty.type === 'VIAJE') {
-                            // Si es viaje, color Amarillo intenso
+                            // Si es viaje, color Verde
                             cellText = todayNovelty.description || todayNovelty.type;
-                            bgColor = '#e9f907ff'; // Amarillo intenso
-                            textColor = '#FFFFFF';
+                            bgColor = 'rgb(0, 251, 58)'; // Verde
+                            textColor = '#000000'; // Texto negro para mejor contraste
                           } else {
                             // Para otras novedades, mostrar la descripción o tipo
                             cellText = todayNovelty.description || todayNovelty.type;
@@ -2230,15 +2284,24 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                               cellText = program.name;
                             }
                           }
-                          bgColor = '#f1410cff'; // Naranja
+                          bgColor = 'rgb(255, 108, 0)'; // Naranja corporativo
                           textColor = '#FFFFFF';
                         }
+
+                        // Definir borde sutil para celdas asignadas (naranja más oscuro)
+                        const borderStyle = isAssigned && !todayNovelty
+                          ? '1px solid rgba(204, 86, 0, 0.3)' // Naranja más oscuro y transparente
+                          : '1px solid rgb(209, 213, 219)'; // Gris por defecto (gray-300)
 
                         return (
                           <td
                             key={program.id}
-                            className="border border-gray-300 p-1 transition-colors"
-                            style={{ backgroundColor: bgColor, color: textColor }}
+                            className="p-1 transition-colors"
+                            style={{
+                              backgroundColor: bgColor,
+                              color: textColor,
+                              border: borderStyle
+                            }}
                           >
                             {isEditing ? (
                               <input
@@ -2259,7 +2322,8 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                                     setEditingCell(null);
                                   }
                                 }}
-                                className="w-full text-xs text-center font-semibold bg-orange-500 text-white border-none outline-none px-1"
+                                className="w-full text-xs text-center font-semibold text-white border-none outline-none px-1"
+                                style={{ backgroundColor: 'rgb(255, 108, 0)' }}
                                 autoFocus
                                 onClick={(e) => e.stopPropagation()}
                               />

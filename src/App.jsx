@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MainLayout } from './components/Layout/MainLayout';
 import { ScheduleTable } from './components/Schedule/ScheduleTable';
 import { ScheduleHistory } from './components/Schedule/ScheduleHistory';
@@ -21,6 +21,7 @@ import { PersonalLogistico } from './components/Personnel/PersonalLogistico';
 import { RoutesManagement } from './components/Routes/RoutesManagement';
 import FleetManagement from './components/Fleet/FleetManagement';
 import MealManagement from './components/Meals/MealManagement';
+import TravelEventList from './components/TravelEvents/TravelEventList';
 import { InstallPrompt } from './components/PWA/InstallPrompt';
 import { usePersonnel } from './hooks/usePersonnel';
 import { useSchedule } from './hooks/useSchedule';
@@ -39,6 +40,7 @@ function App() {
   const [activeView, setActiveView] = useState('dashboard');
   const [showAlert, setShowAlert] = useState(null);
   const [showNoveltiesModal, setShowNoveltiesModal] = useState(false);
+  const dataLoadedRef = useRef(false); // Bandera para evitar cargas duplicadas
 
   // Verificar si hay sesión guardada al cargar la app
   useEffect(() => {
@@ -60,15 +62,26 @@ function App() {
     setCurrentUser(user);
     setToken(userToken);
     setIsAuthenticated(true);
-    setActiveView('dashboard'); // Ir al dashboard al iniciar sesión
+    setActiveView('schedule'); // Ir al schedule al iniciar sesión (dashboard deshabilitado temporalmente)
   };
 
   // Hooks deben estar antes de cualquier return
   const { currentDate, goToNextWeek, goToPreviousWeek, goToWeek, goToToday } = useWeekNavigation();
-  const { personnel, loading: loadingPersonnel, addPerson, updatePerson, deletePerson } = usePersonnel();
-  const { schedule, loading: loadingSchedule, generateSchedule, updateScheduleEntry } = useSchedule(currentDate);
-  const { novelties, addNovelty, updateNovelty, deleteNovelty } = useNovelties();
+  const { personnel, loading: loadingPersonnel, loadPersonnel, addPerson, updatePerson, deletePerson } = usePersonnel();
+  const { schedule, loading: loadingSchedule, loadSchedule, generateSchedule, updateScheduleEntry } = useSchedule(currentDate);
+  const { novelties, loadNovelties, addNovelty, updateNovelty, deleteNovelty } = useNovelties();
   const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification } = useNotifications(novelties, personnel);
+
+  // Cargar datos UNA SOLA VEZ después del login
+  useEffect(() => {
+    if (isAuthenticated && !dataLoadedRef.current) {
+      console.log('🔄 Cargando datos después del login...');
+      dataLoadedRef.current = true; // Marcar como cargado
+      loadPersonnel();
+      loadNovelties();
+      // loadSchedule se llamará automáticamente cuando sea necesario
+    }
+  }, [isAuthenticated]); // Solo ejecutar cuando cambia isAuthenticated
 
   const handleViewAllNovelties = () => {
     setShowNoveltiesModal(true);
@@ -220,6 +233,14 @@ function App() {
 
       case 'meal-management':
         return <MealManagement />;
+
+      case 'travel-events':
+        return (
+          <TravelEventList
+            selectedDate={currentDate.toISOString().split('T')[0]}
+            personnel={personnel}
+          />
+        );
 
       default:
         return (

@@ -6,7 +6,5 @@ import './styles/globals.css';
 import './styles/modalCards.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  <App />
 );

@@ -125,7 +125,8 @@ export const usePersonnel = () => {
   }, [personnel]);
 
   useEffect(() => {
-    loadPersonnel();
+    // DESHABILITADO TEMPORALMENTE PARA EVITAR BUCLES
+    // loadPersonnel();
   }, [loadPersonnel]);
 
   return {

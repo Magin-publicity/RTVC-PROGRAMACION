@@ -105,9 +105,10 @@ export const useSchedule = (selectedDate) => {
   }, []);
 
   useEffect(() => {
-    if (selectedDate) {
-      loadSchedule(selectedDate);
-    }
+    // DESHABILITADO TEMPORALMENTE PARA EVITAR BUCLES
+    // if (selectedDate) {
+    //   loadSchedule(selectedDate);
+    // }
   }, [selectedDate, loadSchedule]);
 
   return {

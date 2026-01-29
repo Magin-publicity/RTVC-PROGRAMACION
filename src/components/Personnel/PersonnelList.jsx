@@ -52,7 +52,9 @@ export const PersonnelList = ({ personnel, onAdd, onUpdate, onDelete }) => {
 
   const handleAvailabilitySave = () => {
     // Recargar la lista de personal después de actualizar disponibilidad
-    window.location.reload();
+    // DESHABILITADO TEMPORALMENTE PARA EVITAR BUCLES
+    // window.location.reload();
+    console.log('✅ Disponibilidad actualizada (reload deshabilitado)');
   };
   
   const groupedByArea = filteredPersonnel.reduce((acc, person) => {

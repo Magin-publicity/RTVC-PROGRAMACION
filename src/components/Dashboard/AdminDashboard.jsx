@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Users, Calendar, AlertCircle, TrendingUp, CheckCircle, Camera, Video, AlertTriangle, Bus, X } from 'lucide-react';
 import { getDepartmentByRole } from '../../data/departments';
 import { getDisponibilidadRealizadores } from '../../services/asignacionesService';
@@ -27,14 +27,24 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   const [realizadoresDetalle, setRealizadoresDetalle] = useState([]);
   const [asistentesDetalle, setAsistentesDetalle] = useState([]);
   const [flotaDetalle, setFlotaDetalle] = useState([]);
+  const dataLoadedRef = useRef(false); // Bandera para evitar cargas duplicadas
 
   // Hook de validación de contratos
   const { contractStatus } = useContractValidation(personnel);
 
+  // Convertir fecha a string para usarla como dependencia estable
+  const fechaStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+
   // Cargar disponibilidad en tiempo real
   useEffect(() => {
+    // Cargar solo una vez usando la bandera
+    if (dataLoadedRef.current) {
+      return;
+    }
+    dataLoadedRef.current = true;
+
     const loadDisponibilidad = async () => {
-      const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+      const fecha = fechaStr;
 
       // NUEVO: Cargar disponibilidad de reportería con datos separados por área
       try {
@@ -68,6 +78,44 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         console.log('🎯 Seteando camarógrafos:', JSON.stringify(camarografosData, null, 2));
         console.log('🎯 Seteando asistentes:', JSON.stringify(asistentesData, null, 2));
 
+        // NUEVO: Cargar estadísticas de VIAJES & EVENTOS y ajustar antes de setear estados
+        try {
+          console.log('🚗 Consultando viajes & eventos para fecha:', fecha);
+          const travelResponse = await fetch(`/api/travel-events/stats/${fecha}`, {
+            cache: 'no-cache',
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+
+          if (!travelResponse.ok) {
+            throw new Error(`HTTP error! status: ${travelResponse.status}`);
+          }
+
+          const travelStats = await travelResponse.json();
+          console.log('📊 Estadísticas de viajes & eventos:', travelStats);
+
+          // Ajustar contadores excluyendo personal en comisiones (con validaciones de seguridad)
+          if (travelStats && travelStats.total_personnel > 0) {
+            // Reducir disponibilidad según personal en comisiones
+            if (travelStats.cameras_count > 0 && camarografosData && typeof camarografosData.disponibles === 'number') {
+              camarografosData.disponibles = Math.max(0, camarografosData.disponibles - parseInt(travelStats.cameras_count));
+              camarografosData.ocupados = (camarografosData.ocupados || 0) + parseInt(travelStats.cameras_count);
+            }
+            if (travelStats.assistants_count > 0 && asistentesData && typeof asistentesData.disponibles === 'number') {
+              asistentesData.disponibles = Math.max(0, asistentesData.disponibles - parseInt(travelStats.assistants_count));
+              asistentesData.ocupados = (asistentesData.ocupados || 0) + parseInt(travelStats.assistants_count);
+            }
+          }
+
+          console.log('🎯 Camarógrafos después de viajes:', JSON.stringify(camarografosData, null, 2));
+          console.log('🎯 Asistentes después de viajes:', JSON.stringify(asistentesData, null, 2));
+        } catch (error) {
+          console.error('❌ Error al cargar estadísticas de viajes & eventos:', error);
+          // No fallar silenciosamente - continuar sin ajustar por viajes
+        }
+
         setDisponibilidadCamarografos(camarografosData);
         setDisponibilidadAsistentes(asistentesData);
 
@@ -76,10 +124,38 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         console.error('❌ Error al cargar disponibilidad reportería:', error);
       }
 
-      // Cargar disponibilidad de realizadores (sin cambios)
+      // Cargar disponibilidad de realizadores y ajustar por viajes
       try {
-        const realizadores = await getDisponibilidadRealizadores(fecha);
-        setDisponibilidadRealizadores(realizadores);
+        let realizadoresData = await getDisponibilidadRealizadores(fecha);
+
+        // NUEVO: Ajustar realizadores según viajes & eventos
+        try {
+          const travelResponse = await fetch(`/api/travel-events/stats/${fecha}`, {
+            cache: 'no-cache',
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+
+          if (!travelResponse.ok) {
+            throw new Error(`HTTP error! status: ${travelResponse.status}`);
+          }
+
+          const travelStats = await travelResponse.json();
+
+          if (travelStats && travelStats.directors_count > 0 && realizadoresData && typeof realizadoresData.disponibles === 'number') {
+            realizadoresData.disponibles = Math.max(0, realizadoresData.disponibles - parseInt(travelStats.directors_count));
+            realizadoresData.ocupados = (realizadoresData.ocupados || 0) + parseInt(travelStats.directors_count);
+          }
+
+          console.log('🎯 Realizadores después de viajes:', JSON.stringify(realizadoresData, null, 2));
+        } catch (error) {
+          console.error('❌ Error al ajustar realizadores por viajes:', error);
+          // No fallar silenciosamente - continuar sin ajustar por viajes
+        }
+
+        setDisponibilidadRealizadores(realizadoresData);
       } catch (error) {
         console.error('Error al cargar disponibilidad realizadores:', error);
       }
@@ -133,7 +209,6 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
       // NUEVO: Cargar estadísticas de LiveU para la fecha actual del dashboard
       try {
         console.log('📡 Consultando equipos LiveU...');
-        const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
         const liveuResponse = await fetch(`/api/logistics/liveu/stats?date=${fecha}&t=${Date.now()}`, {
           cache: 'no-cache',
           headers: {
@@ -156,7 +231,6 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
 
       // Cargar todos los equipos LiveU para el modal (con información de despachos)
       try {
-        const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
         const allLiveuResponse = await fetch(`/api/logistics/liveu/detalle/${fecha}?t=${Date.now()}`, {
           cache: 'no-cache',
           headers: {
@@ -173,10 +247,10 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
     };
 
     loadDisponibilidad();
-    // Actualizar cada 30 segundos
-    const interval = setInterval(loadDisponibilidad, 30000);
-    return () => clearInterval(interval);
-  }, [currentDate]);
+    // Actualizar cada 30 segundos - DESHABILITADO TEMPORALMENTE para evitar bucles
+    // const interval = setInterval(loadDisponibilidad, 30000);
+    // return () => clearInterval(interval);
+  }, [fechaStr]); // Usar fechaStr en lugar de currentDate para evitar re-renders innecesarios
 
   // Función para recargar datos de LiveU
   const reloadLiveuData = async () => {
@@ -437,8 +511,25 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
 
   // Novedades recientes - mostrar las últimas 10, incluyendo las recién expiradas
   // Para "Novedades Recientes" mostramos las últimas independientemente de si están activas
-  // El widget de "Novedades Hoy" en la parte superior sí filtra por fecha actual
-  const recentNovelties = novelties
+  // NUEVO: Agrupar novelties por persona + descripción para evitar duplicados visuales
+  const groupedNovelties = novelties.reduce((acc, novelty) => {
+    const key = `${novelty.personnel_id}-${novelty.description || 'sin-desc'}`;
+
+    if (!acc[key]) {
+      acc[key] = novelty;
+    } else {
+      // Si ya existe, mantener la que tenga start_date más reciente
+      const existingDate = new Date(acc[key].start_date || acc[key].date || acc[key].created_at);
+      const currentDate = new Date(novelty.start_date || novelty.date || novelty.created_at);
+      if (currentDate > existingDate) {
+        acc[key] = novelty;
+      }
+    }
+
+    return acc;
+  }, {});
+
+  const recentNovelties = Object.values(groupedNovelties)
     .sort((a, b) => {
       // Ordenar por fecha más reciente primero
       const dateA = new Date(a.start_date || a.date || a.created_at);

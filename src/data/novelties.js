@@ -130,6 +130,16 @@ export const NOVELTY_TYPES = {
     requiresDescription: true,
     affectsSchedule: false,
     priority: 3
+  },
+  EVENTOS: {
+    id: 'EVENTOS',
+    name: 'Eventos',
+    icon: '🎉',
+    color: '#F59E0B',
+    bgColor: '#FEF3C7',
+    requiresDescription: true,
+    affectsSchedule: false,
+    priority: 3
   }
 };
 

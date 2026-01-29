@@ -27,7 +27,19 @@
     <!-- html2pdf.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
-    <!-- Service Worker Registration - Versión Estable -->
+    <!-- Service Worker Registration - DESHABILITADO TEMPORALMENTE PARA EVITAR BUCLES -->
+    <script>
+      // Desregistrar Service Workers existentes para prevenir bucles
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          registrations.forEach(registration => {
+            registration.unregister();
+            console.log('🗑️ Service Worker desregistrado');
+          });
+        });
+      }
+    </script>
+    <!--
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -78,6 +90,7 @@
         console.warn('⚠️ Service Workers no soportados en este navegador');
       }
     </script>
+    -->
   </head>
   <body>
     <div id="root"></div>

@@ -159,9 +159,11 @@ export const PersonnelAreaCards = ({ currentDate }) => {
           setAreaData(data);
         } else {
           console.error('❌ Error al cargar datos:', response.status);
+          setAreaData([]); // Setear array vacío en caso de error
         }
       } catch (error) {
         console.error('❌ Error al cargar datos de personal por área:', error);
+        setAreaData([]); // Setear array vacío en caso de error
       } finally {
         setLoading(false);
       }
@@ -190,9 +192,11 @@ export const PersonnelAreaCards = ({ currentDate }) => {
         const data = await response.json();
         setDetailedPersonnel(data);
         setSelectedArea(areaName);
+      } else {
+        console.error('Error al cargar detalles del área:', response.status);
       }
     } catch (error) {
-      console.error('❌ Error al cargar detalles del área:', error);
+      console.error('Error al cargar detalles del área:', error);
     }
   };
 
@@ -413,24 +417,37 @@ export const PersonnelAreaCards = ({ currentDate }) => {
                           </div>
                         </div>
 
-                        {/* Información de despacho/viaje */}
-                        {person.en_despacho && person.despacho_info && (
-                          <div className="mt-3 bg-blue-100 border border-blue-300 rounded-lg p-3">
-                            <p className="text-xs font-bold text-blue-900 mb-1">
-                              <Truck size={14} className="inline mr-1" />
-                              En Despacho
-                            </p>
-                            <div className="text-xs text-gray-700 space-y-1">
-                              <p><strong>Destino:</strong> {person.despacho_info.destino}</p>
-                              <p><strong>Vehículo:</strong> {person.despacho_info.vehiculo}</p>
-                              {person.despacho_info.hora_salida && (
-                                <p><strong>Salida:</strong> {person.despacho_info.hora_salida}</p>
-                              )}
-                            </div>
+                        {/* Información de comisión de viaje - PRIORIDAD 1 */}
+                        {person.travel_event_info && (
+                          <div className="mt-2 p-2 bg-green-600 text-white rounded shadow-sm">
+                            <p className="font-bold text-[11px]">✈️ EN COMISIÓN</p>
+                            <p className="text-[10px] uppercase">{person.travel_event_info.evento}</p>
+                            <p className="text-[10px]">📍 {person.travel_event_info.destino}</p>
+                            {person.travel_event_info.liveu && (
+                              <p className="text-[10px]">📡 {person.travel_event_info.liveu}</p>
+                            )}
+                            {person.travel_event_info.hora_salida && (
+                              <p className="text-[10px]">🕐 Salida: {person.travel_event_info.hora_salida}</p>
+                            )}
                           </div>
                         )}
 
-                        {person.en_viaje && person.novedad_info && (
+                        {/* Información de despacho - PRIORIDAD 2 */}
+                        {!person.travel_event_info && person.en_despacho && person.despacho_info && (
+                          <div className="mt-2 p-2 bg-blue-100 border-l-4 border-blue-500 rounded">
+                            <p className="text-xs font-bold text-blue-700">
+                              <Truck size={14} className="inline mr-1" />
+                              EN DESPACHO
+                            </p>
+                            <p className="text-[10px] text-blue-600">Destino: {person.despacho_info.destino}</p>
+                            <p className="text-[10px] text-blue-600">Vehículo: {person.despacho_info.vehiculo}</p>
+                            {person.despacho_info.hora_salida && (
+                              <p className="text-[10px] text-blue-600">Salida: {person.despacho_info.hora_salida}</p>
+                            )}
+                          </div>
+                        )}
+
+                        {person.en_viaje && person.novedad_info && !person.travel_event_info && (
                           <div className="mt-3 bg-purple-100 border border-purple-300 rounded-lg p-3">
                             <p className="text-xs font-bold text-purple-900 mb-1">
                               <Plane size={14} className="inline mr-1" />

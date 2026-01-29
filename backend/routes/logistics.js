@@ -320,6 +320,18 @@ router.get('/liveu/stats', async (req, res) => {
 
     const liveuEnTerreno = despachosHoy.rows.map(d => d.liveu_id);
 
+    // NUEVO: Obtener LiveU en comisiones de viaje/eventos para esta fecha
+    const comisionesQuery = await pool.query(`
+      SELECT COUNT(DISTINCT tee.equipment_reference) as count
+      FROM travel_events te
+      JOIN travel_event_equipment tee ON te.id = tee.travel_event_id
+      WHERE $1 BETWEEN te.start_date AND te.end_date
+        AND te.status != 'CANCELADO'
+        AND tee.equipment_type = 'LIVEU'
+    `, [fecha]);
+
+    const liveuEnComisiones = parseInt(comisionesQuery.rows[0].count || 0);
+
     // Obtener total de equipos y en reparación
     const equiposResult = await pool.query(`
       SELECT
@@ -330,7 +342,7 @@ router.get('/liveu/stats', async (req, res) => {
     `);
 
     const { total, en_reparacion } = equiposResult.rows[0];
-    const en_terreno = liveuEnTerreno.length;
+    const en_terreno = liveuEnTerreno.length + liveuEnComisiones; // Sumar despachos + comisiones
     const disponibles = parseInt(total) - en_terreno - parseInt(en_reparacion);
 
     res.json({

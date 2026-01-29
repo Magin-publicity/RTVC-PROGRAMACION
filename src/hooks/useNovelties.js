@@ -128,7 +128,8 @@ export const useNovelties = () => {
   }, []);
 
   useEffect(() => {
-    loadNovelties();
+    // DESHABILITADO TEMPORALMENTE PARA EVITAR BUCLES
+    // loadNovelties();
   }, [loadNovelties]);
 
   return {

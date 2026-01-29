@@ -8,6 +8,9 @@ export const useNotifications = (novelties = [], personnel = []) => {
 
   // Verificar novedades que terminan hoy o mañana
   useEffect(() => {
+    // DESHABILITADO TEMPORALMENTE PARA EVITAR BUCLES
+    return;
+
     const checkExpiringNovelties = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);

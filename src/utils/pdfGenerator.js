@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { classifyPersonnel, getResourceForPersonnel } from './personnelClassification';
 
-export const generateSchedulePDF = (personnel, programs, assignments, callTimes, selectedDate, programMappings = {}) => {
+export const generateSchedulePDF = (personnel, programs, assignments, callTimes, selectedDate, programMappings = {}, novelties = [], assignmentNotes = {}, endTimes = {}) => {
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
@@ -15,7 +15,10 @@ export const generateSchedulePDF = (personnel, programs, assignments, callTimes,
     blue800: [30, 64, 175],     // bg-blue-800 - headers de área
     blue700: [29, 78, 216],     // bg-blue-700 - headers de columnas
     white: [255, 255, 255],
-    orange: [249, 115, 22]      // bg-orange-500 - ASIGNADO (naranja brillante como la interfaz)
+    black: [0, 0, 0],
+    corporateOrange: [255, 108, 0],  // RGB(255, 108, 0) - Naranja corporativo para asignaciones
+    travelGreen: [0, 251, 58],       // RGB(0, 251, 58) - Verde para viajes
+    noveltyRed: [239, 68, 68]        // #EF4444 - Rojo para otras novedades
   };
 
   // Título
@@ -88,12 +91,36 @@ export const generateSchedulePDF = (personnel, programs, assignments, callTimes,
     ] : [128, 128, 128];
   };
 
-  // Preparar datos con separadores por departamento
-  const tableData = [];
+  // Función auxiliar para verificar si una persona tiene novedad en la fecha seleccionada
+  const hasNoveltyOnDate = (personId) => {
+    const todayStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+
+    return novelties?.find(n => {
+      if (Number(n.personnel_id) !== Number(personId)) return false;
+
+      if (n.start_date && n.end_date) {
+        const startStr = n.start_date.split('T')[0];
+        const endStr = n.end_date.split('T')[0];
+        return todayStr >= startStr && todayStr <= endStr;
+      }
+
+      if (n.date) {
+        return n.date.split('T')[0] === todayStr;
+      }
+
+      return false;
+    });
+  };
+
+  // Variable para rastrear la posición Y actual
+  let currentY = 25;
 
   sortedDepts.forEach(([dept, deptPersonnel]) => {
+    // Preparar datos para esta área específica
+    const areaTableData = [];
+
     // Fila de encabezado de departamento (bg-blue-800)
-    tableData.push([
+    areaTableData.push([
       { content: dept, colSpan: 3 + programs.length, styles: {
         fillColor: colors.blue800,
         textColor: colors.white,
@@ -125,7 +152,7 @@ export const generateSchedulePDF = (personnel, programs, assignments, callTimes,
       });
     });
 
-    tableData.push(columnHeaderRow);
+    areaTableData.push(columnHeaderRow);
 
     // ORDENAR PERSONAL POR HORA DE LLAMADO (igual que la interfaz)
     const sortedByTime = [...deptPersonnel].sort((a, b) => {
@@ -136,16 +163,38 @@ export const generateSchedulePDF = (personnel, programs, assignments, callTimes,
 
     // Filas de personal
     sortedByTime.forEach(person => {
+      // Verificar si la persona tiene novedad para determinar la hora de llamado
+      const novelty = hasNoveltyOnDate(person.id);
+      const hasNoContract = novelty && novelty.type === 'SIN_CONTRATO';
+
       const row = [
         person.name,
         person.role,
-        callTimes[person.id] || person.current_shift || ''
+        hasNoContract ? '' : (callTimes[person.id] || person.current_shift || '')
       ];
 
       // Agregar celdas de programas
       programs.forEach(program => {
         const key = `${person.id}_${program.id}`;
-        if (assignments[key]) {
+
+        if (novelty) {
+          // Si hay novedad, mostrarla con metadata para colorear después
+          if (novelty.type === 'SIN_CONTRATO') {
+            row.push('');
+          } else {
+            const noveltyText = novelty.description || novelty.type;
+            row.push({
+              content: noveltyText,
+              styles: {
+                fillColor: novelty.type === 'VIAJE' ? colors.travelGreen : colors.noveltyRed,
+                textColor: colors.black,
+                fontStyle: 'bold',
+                halign: 'center',
+                fontSize: 6
+              }
+            });
+          }
+        } else if (assignments[key]) {
           // Obtener el grupo del personal para determinar si va a Master o Estudio
           const personnelGroup = classifyPersonnel(person.role);
 
@@ -155,55 +204,52 @@ export const generateSchedulePDF = (personnel, programs, assignments, callTimes,
           // Obtener el nombre del recurso (Master X o Estudio Y)
           const resource = getResourceForPersonnel(programMapping, personnelGroup);
 
-          // Usar el recurso si existe, sino mostrar "ASIGNADO"
-          row.push(resource || 'ASIGNADO');
+          // Si hay nota personalizada, usarla
+          const cellText = assignmentNotes[key] || resource || 'ASIGNADO';
+
+          // Usar objeto con metadata para colorear después con naranja corporativo
+          row.push({
+            content: cellText,
+            styles: {
+              fillColor: colors.corporateOrange,
+              textColor: colors.white,
+              fontStyle: 'bold',
+              halign: 'center',
+              fontSize: 6
+            }
+          });
         } else {
           row.push('');
         }
       });
 
-      tableData.push(row);
+      areaTableData.push(row);
     });
-  });
 
-  // Tabla sin encabezado global (cada área tiene su propio encabezado)
-  autoTable(doc, {
-    body: tableData,
-    startY: 25,
-    theme: 'grid',
-    styles: {
-      fontSize: 7,
-      cellPadding: 1.5,
-      lineColor: [200, 200, 200],
-      lineWidth: 0.1,
-      halign: 'center',
-      valign: 'middle'
-    },
-    columnStyles: {
-      0: { cellWidth: 35, fontStyle: 'bold', halign: 'left' },
-      1: { cellWidth: 30, fontSize: 7, halign: 'left' },
-      2: { cellWidth: 15, halign: 'center', fontSize: 7 }
-    },
-    didParseCell: function(data) {
-      // Colorear celdas de asignaciones con el color del programa
-      if (data.column.index >= 3) {
-        const cellText = data.cell.text[0];
-        if (cellText && cellText !== '') {
-          // El índice de columna 3+ corresponde a programas
-          const programIndex = data.column.index - 3;
-          const program = programs[programIndex];
+    // Renderizar tabla para esta área (cada área es una tabla separada)
+    autoTable(doc, {
+      body: areaTableData,
+      startY: currentY,
+      theme: 'grid',
+      styles: {
+        fontSize: 7,
+        cellPadding: 1.5,
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1,
+        halign: 'center',
+        valign: 'middle'
+      },
+      columnStyles: {
+        0: { cellWidth: 35, fontStyle: 'bold', halign: 'left' },     // NOMBRE
+        1: { cellWidth: 30, fontSize: 7, halign: 'left' },           // ACTIVIDAD
+        2: { cellWidth: 15, halign: 'center', fontSize: 7 }          // HORA LLAMADO
+      },
+      // Esto hace que la tabla completa se mueva a la siguiente página si no cabe
+      pageBreak: 'avoid'
+    });
 
-          // Usar el color del programa si existe, sino usar naranja por defecto
-          const programColor = program && program.color ? hexToRgb(program.color) : colors.orange;
-
-          data.cell.styles.fillColor = programColor;
-          data.cell.styles.textColor = colors.white;
-          data.cell.styles.fontStyle = 'bold';
-          data.cell.styles.halign = 'center';
-          data.cell.styles.fontSize = 6;
-        }
-      }
-    }
+    // Actualizar la posición Y para la próxima tabla
+    currentY = doc.lastAutoTable.finalY + 2; // +2mm de espacio entre áreas
   });
 
   // Descargar

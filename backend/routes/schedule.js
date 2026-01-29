@@ -733,51 +733,52 @@ router.get('/auto-shifts/:date', async (req, res) => {
         }
 
         // 🔄 ROTACIÓN SEMANAL DE GRUPOS COMPLETOS
-        // Los grupos se desplazan cada semana: T1→T2, T2→T3, T3→T4, T4→T1
-        // Usamos weeksDiff como offset para rotar los turnos
+        // Las personas rotan entre los turnos cada semana, manteniendo el orden alfabético
         const sortedPeople = availablePeople.slice().sort((a, b) => a.name.localeCompare(b.name));
 
-        // Crear grupos base según la distribución (sin rotación)
-        const gruposBase = [];
-        let personIndex = 0;
+        // Identificar turnos únicos desde distribucion (compactar)
+        const turnosUnicos = [];
         distribucion.forEach(turno => {
-          const grupo = [];
-          for (let i = 0; i < turno.cupos && personIndex < sortedPeople.length; i++) {
-            grupo.push(sortedPeople[personIndex]);
-            personIndex++;
+          const existe = turnosUnicos.find(t => t.id === turno.id);
+          if (!existe) {
+            turnosUnicos.push(turno);
           }
-          gruposBase.push({
-            turno: turno,
-            personas: grupo
-          });
         });
 
         console.log(`   🔄 Rotación semanal: weeksDiff = ${weeksDiff} (offset de turnos)`);
+        console.log(`   📊 Turnos únicos detectados: ${turnosUnicos.length} (${turnosUnicos.map(t => t.id).join(', ')})`);
 
-        // Aplicar rotación: desplazar los turnos según weeksDiff
-        // El grupo 0 va al turno (0 + weeksDiff) % numTurnos
-        gruposBase.forEach((grupo, grupoIndex) => {
-          // Calcular a qué turno le toca este grupo esta semana
-          const turnoRotadoIndex = (grupoIndex + weeksDiff) % distribucion.length;
-          const turnoRotado = distribucion[turnoRotadoIndex];
+        // Rotar el array de turnos según weeksDiff
+        const turnosRotados = turnosUnicos.map((_, index) => {
+          const rotatedIndex = (index + weeksDiff) % turnosUnicos.length;
+          return turnosUnicos[rotatedIndex];
+        });
 
-          console.log(`   Grupo ${grupoIndex + 1} (${grupo.personas.length} personas) → ${turnoRotado.id} ${turnoRotado.label} (rotación +${weeksDiff})`);
+        console.log(`   📍 Turnos rotados: ${turnosRotados.map(t => `${t.id}(${t.cupos})`).join(' → ')}`);
 
-          // Asignar cada persona del grupo al turno rotado
-          grupo.personas.forEach(person => {
+        // Asignar personas a los turnos rotados manteniendo el orden alfabético
+        let personIndex = 0;
+        turnosRotados.forEach((turno, turnoIndex) => {
+          console.log(`   Posición ${turnoIndex + 1} → Turno ${turno.id} ${turno.label} (${turno.cupos} cupos)`);
+
+          // Asignar las siguientes N personas a este turno
+          for (let i = 0; i < turno.cupos && personIndex < sortedPeople.length; i++) {
+            const person = sortedPeople[personIndex];
+            personIndex++;
+
             shifts.push({
               personnel_id: person.id,
               name: person.name,
               area: person.area,
-              shift_start: turnoRotado.start,
-              shift_end: turnoRotado.end,
+              shift_start: turno.start,
+              shift_end: turno.end,
               week_number: currentWeek,
-              original_shift: turnoRotado.label,
-              turno_descripcion: `${turnoRotado.id} - Estudio/Redacción`
+              original_shift: turno.label,
+              turno_descripcion: `${turno.id} - Estudio/Redacción`
             });
 
-            console.log(`      ✅ ${person.name} → ${turnoRotado.id} ${turnoRotado.label}`);
-          });
+            console.log(`      ✅ ${person.name} → ${turno.id} ${turno.label}`);
+          }
         });
 
         return; // Salir para no usar la lógica estándar
@@ -990,42 +991,57 @@ router.get('/auto-shifts/:date', async (req, res) => {
       if (area === 'CAMARÓGRAFOS DE REPORTERÍA') {
         console.log(`📹 ${area}: Sistema de duplas con relevo T1 → T2`);
 
-        // Definir duplas de relevo por equipo
+        // 📋 DUPLAS DE CÁMARAS PORTÁTILES - 12 DUPLAS = 24 PERSONAS
+        // Cada dupla tiene: T1 (06:00-13:00) ↔ T2 (13:00-20:00)
+        // Colores de la tabla: Verde=Propias destacadas, Azul=RTVC, Amarillo=Propias X3/SONY
         const DUPLAS_REPORTERIA = [
-          // X3 - Cámaras Propias
-          { t1: 'Floresmiro Luna', t2: 'Julián Luna', equipo: 'X3', tipo: 'propias' },
-          { t1: 'Leonel Cifuentes', t2: 'Andrés Ramírez', equipo: 'X3', tipo: 'propias' },
-          // SONY 300 - Cámaras Propias
-          { t1: 'Edgar Nieto', t2: 'Didier Buitrago', equipo: 'SONY 300', tipo: 'propias' },
-          { t1: 'William Uribe', t2: 'Marco Solórzano', equipo: 'SONY 300', tipo: 'propias' },
-          // Cámaras RTVC
-          { t1: 'Erick Velázquez', t2: 'Cesar Morales', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+          // Dupla 1 (Verde): Cámaras Propias
+          { t1: 'Erick Velásquez', t2: 'Cesar Morales', equipo: 'Cámara RTVC', tipo: 'propias' },
+          // Duplas 2-5 (Azul): Cámaras RTVC
           { t1: 'William Ruiz', t2: 'Álvaro Díaz', equipo: 'Cámara RTVC', tipo: 'rtvc' },
           { t1: 'Carlos Wilches', t2: 'Victor Vargas', equipo: 'Cámara RTVC', tipo: 'rtvc' },
           { t1: 'Enrique Muñoz', t2: 'Edgar Castillo', equipo: 'Cámara RTVC', tipo: 'rtvc' },
-          { t1: 'John Ruiz', t2: 'Ramiro Balaguera', equipo: 'Cámara RTVC', tipo: 'rtvc' }
+          { t1: 'John Ruiz B', t2: 'Ramiro Balaguera', equipo: 'Cámara RTVC', tipo: 'rtvc' },
+          // Dupla 6 (Amarillo): X3 - Leonel Cifuentes (T1) no está en base de datos
+          { t1: 'Floresmiro Luna', t2: 'Leonel Cifuentes', equipo: 'X3', tipo: 'propias' },
+          // Dupla 7 (Verde/Amarillo): SONY 300
+          { t1: 'Edgar Nieto', t2: 'Didier Buitrago', equipo: 'SONY 300', tipo: 'propias' },
+          // Dupla 8 (Amarillo): X3
+          { t1: 'Julián Luna', t2: 'Andrés Ramírez', equipo: 'X3', tipo: 'propias' },
+          // Dupla 9 (Amarillo): SONY 300
+          { t1: 'William Uribe', t2: 'Marco Solórzano', equipo: 'SONY 300', tipo: 'propias' }
         ];
 
-        // Filtrar personal disponible (excluir novedades bloqueantes)
-        const availablePeople = people.filter(person => {
-          const novelty = noveltiesMap[person.id];
-          if (!novelty) return true;
-          const blockingTypes = ['VIAJE', 'VIAJE MÓVIL', 'LIBRE', 'SIN_CONTRATO', 'INCAPACIDAD'];
-          return !blockingTypes.includes(novelty.type);
+        console.log(`   📋 Total duplas definidas: ${DUPLAS_REPORTERIA.length} (${DUPLAS_REPORTERIA.length * 2} personas)`);
+
+        // Crear mapa de personas por nombre para acceso rápido
+        const personnelByName = {};
+        people.forEach(person => {
+          personnelByName[person.name] = person;
         });
 
-        const availableNames = new Set(availablePeople.map(p => p.name));
-        console.log(`   Personal disponible: ${availablePeople.length}/${people.length}`);
+        // Función para verificar si una persona tiene novedad bloqueante
+        const hasBlockingNovelty = (person) => {
+          if (!person) return false;
+          const novelty = noveltiesMap[person.id];
+          if (!novelty) return false;
+          const blockingTypes = ['VIAJE', 'VIAJE MÓVIL', 'LIBRE', 'SIN_CONTRATO', 'INCAPACIDAD'];
+          return blockingTypes.includes(novelty.type);
+        };
 
-        // Asignar duplas completas
-        let duplasAsignadas = 0;
-        DUPLAS_REPORTERIA.forEach(dupla => {
-          const t1Person = availablePeople.find(p => p.name === dupla.t1);
-          const t2Person = availablePeople.find(p => p.name === dupla.t2);
+        // Asignar TODAS las duplas (disponibles o no)
+        let duplasCompletas = 0;
+        let duplasIncompletas = 0;
 
-          // Solo asignar si AMBOS están disponibles (relevo completo)
-          if (t1Person && t2Person) {
-            // T1: Mañana 06:00-13:00
+        DUPLAS_REPORTERIA.forEach((dupla, index) => {
+          const t1Person = personnelByName[dupla.t1];
+          const t2Person = personnelByName[dupla.t2];
+
+          const t1Available = t1Person && !hasBlockingNovelty(t1Person);
+          const t2Available = t2Person && !hasBlockingNovelty(t2Person);
+
+          // SIEMPRE asignar T1 si la persona existe en la base de datos
+          if (t1Person) {
             shifts.push({
               personnel_id: t1Person.id,
               name: t1Person.name,
@@ -1035,10 +1051,13 @@ router.get('/auto-shifts/:date', async (req, res) => {
               week_number: currentWeek,
               original_shift: 'T1',
               dupla_equipo: dupla.equipo,
-              dupla_relevo: dupla.t2
+              dupla_relevo: dupla.t2,
+              has_novelty: !t1Available
             });
+          }
 
-            // T2: Tarde 13:00-20:00
+          // SIEMPRE asignar T2 si la persona existe en la base de datos
+          if (t2Person) {
             shifts.push({
               personnel_id: t2Person.id,
               name: t2Person.name,
@@ -1048,19 +1067,29 @@ router.get('/auto-shifts/:date', async (req, res) => {
               week_number: currentWeek,
               original_shift: 'T2',
               dupla_equipo: dupla.equipo,
-              dupla_relevo: dupla.t1
+              dupla_relevo: dupla.t1,
+              has_novelty: !t2Available
             });
+          }
 
-            console.log(`   ✅ Dupla ${dupla.equipo}: ${dupla.t1} (T1) ↔ ${dupla.t2} (T2)`);
-            duplasAsignadas++;
-          } else if (t1Person && !t2Person) {
-            console.log(`   ⚠️ Dupla incompleta: ${dupla.t1} disponible pero ${dupla.t2} no disponible (${dupla.equipo})`);
-          } else if (!t1Person && t2Person) {
-            console.log(`   ⚠️ Dupla incompleta: ${dupla.t2} disponible pero ${dupla.t1} no disponible (${dupla.equipo})`);
+          // Logging según estado de la dupla
+          if (t1Available && t2Available) {
+            console.log(`   ✅ Dupla ${index + 1} (${dupla.equipo}): ${dupla.t1} (T1) ↔ ${dupla.t2} (T2)`);
+            duplasCompletas++;
+          } else if (t1Available && !t2Available) {
+            console.log(`   ⚠️ Dupla ${index + 1} (${dupla.equipo}): ${dupla.t1} (T1) ✓ | ${dupla.t2} (T2) ✗ NOVEDAD`);
+            duplasIncompletas++;
+          } else if (!t1Available && t2Available) {
+            console.log(`   ⚠️ Dupla ${index + 1} (${dupla.equipo}): ${dupla.t1} (T1) ✗ NOVEDAD | ${dupla.t2} (T2) ✓`);
+            duplasIncompletas++;
+          } else {
+            console.log(`   ❌ Dupla ${index + 1} (${dupla.equipo}): ${dupla.t1} (T1) ✗ | ${dupla.t2} (T2) ✗ AMBOS CON NOVEDAD`);
+            duplasIncompletas++;
           }
         });
 
-        console.log(`   📊 Total duplas asignadas: ${duplasAsignadas}/${DUPLAS_REPORTERIA.length}`);
+        console.log(`   📊 Duplas completas: ${duplasCompletas}/${DUPLAS_REPORTERIA.length}`);
+        console.log(`   📊 Duplas con novedades: ${duplasIncompletas}/${DUPLAS_REPORTERIA.length}`);
         return; // Salir para no usar la lógica estándar
       }
 
@@ -2293,6 +2322,46 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
       console.log('ℹ️  Tabla fleet_dispatches no disponible');
     }
 
+    // 5.5. NUEVO: Obtener comisiones de viaje/eventos activas
+    let travelEventsMap = {};
+    try {
+      const travelEventsResult = await pool.query(`
+        SELECT
+          tep.personnel_id,
+          te.event_name,
+          te.event_type,
+          te.destination,
+          te.departure_time,
+          te.estimated_return,
+          te.start_date,
+          te.end_date,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'equipment_type', tee.equipment_type,
+                'equipment_reference', tee.equipment_reference
+              )
+            ) FILTER (WHERE tee.id IS NOT NULL),
+            '[]'
+          ) as equipment
+        FROM travel_events te
+        JOIN travel_event_personnel tep ON te.id = tep.travel_event_id
+        LEFT JOIN travel_event_equipment tee ON te.id = tee.travel_event_id
+        WHERE tep.personnel_id = ANY($1::int[])
+          AND $2::date BETWEEN te.start_date AND te.end_date
+          AND te.status != 'CANCELADO'
+        GROUP BY tep.personnel_id, te.event_name, te.event_type, te.destination,
+                 te.departure_time, te.estimated_return, te.start_date, te.end_date
+      `, [personnelResult.rows.map(p => p.id), date]);
+
+      travelEventsResult.rows.forEach(t => {
+        travelEventsMap[t.personnel_id] = t;
+      });
+      console.log(`   🚗 Obtenidas ${travelEventsResult.rows.length} comisiones de viaje/eventos`);
+    } catch (error) {
+      console.log('ℹ️  Error al obtener comisiones de viaje:', error.message);
+    }
+
     // 6. Función para determinar el nombre del turno según la hora
     const getTurnoNombre = (shiftStart) => {
       if (!shiftStart) return null;
@@ -2307,6 +2376,7 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
       const autoShift = autoShiftsMap[person.id];
       const novelty = noveltiesMap[person.id];
       const dispatch = dispatchesMap[person.id];
+      const travelEvent = travelEventsMap[person.id];
 
       // Usar hora de llamado del turno automático, o del guardado como fallback
       let callTime = savedCallTimes[person.id];
@@ -2338,11 +2408,20 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
       const currentTime = currentHour * 60 + currentMinutes;
 
       let enCanal = false;
-      if (callTime && !dispatch && !novelty) {
+      if (callTime && !dispatch && !novelty && !travelEvent) {
         const callTimeStr = String(callTime || '00:00');
         const [callHour, callMinutes] = callTimeStr.split(':').map(Number);
         const callTimeMinutes = callHour * 60 + callMinutes;
         enCanal = currentTime >= callTimeMinutes;
+      }
+
+      // NUEVO: Extraer LiveU de equipos de la comisión
+      let liveuEquipment = null;
+      if (travelEvent && travelEvent.equipment) {
+        const liveus = travelEvent.equipment.filter(eq => eq.equipment_type === 'LIVEU');
+        if (liveus.length > 0) {
+          liveuEquipment = liveus.map(l => l.equipment_reference).join(', ');
+        }
       }
 
       return {
@@ -2355,8 +2434,8 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
         turno_horario: turnoHorario,
         en_canal: enCanal,
         en_despacho: !!dispatch,
-        en_viaje: novelty?.type.toLowerCase().includes('viaje') || false,
-        en_terreno: !!dispatch,
+        en_viaje: (novelty?.type.toLowerCase().includes('viaje') || !!travelEvent) || false,
+        en_terreno: !!dispatch || !!travelEvent,
         despacho_info: dispatch ? {
           destino: dispatch.destination,
           vehiculo: dispatch.license_plate,
@@ -2365,6 +2444,16 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
         novedad_info: novelty ? {
           tipo: novelty.type,
           descripcion: novelty.description
+        } : null,
+        // NUEVO: Información de comisión de viaje/evento
+        travel_event_info: travelEvent ? {
+          evento: travelEvent.event_name,
+          tipo: travelEvent.event_type,
+          destino: travelEvent.destination,
+          hora_salida: travelEvent.departure_time,
+          hora_regreso: travelEvent.estimated_return,
+          liveu: liveuEquipment,
+          fechas: `${travelEvent.start_date} - ${travelEvent.end_date}`
         } : null
       };
     });

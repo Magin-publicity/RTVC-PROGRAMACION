@@ -45,7 +45,12 @@
       "Bash(ipconfig:*)",
       "Bash(git reset:*)",
       "Bash(jq:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(cmd //c taskkill //PID 29232 //F)",
+      "Bash(grep:*)",
+      "Bash(start http://localhost:5174)",
+      "Bash(cat:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []
