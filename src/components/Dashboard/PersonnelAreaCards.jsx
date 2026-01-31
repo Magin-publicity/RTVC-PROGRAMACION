@@ -268,15 +268,6 @@ export const PersonnelAreaCards = ({ currentDate }) => {
 
       if (response.ok) {
         const data = await response.json();
-
-        // DEBUG TEMPORAL: Verificar datos de Guillermo
-        const guillermo = data.find(p => p.nombre && p.nombre.includes('Guillermo'));
-        if (guillermo) {
-          console.log('🔍 GUILLERMO DATOS RECIBIDOS:', guillermo);
-          console.log('🔍 travel_event_info existe?:', !!guillermo.travel_event_info);
-          console.log('🔍 travel_event_info contenido:', guillermo.travel_event_info);
-        }
-
         setDetailedPersonnel(data);
         setSelectedArea(areaName);
       } else {

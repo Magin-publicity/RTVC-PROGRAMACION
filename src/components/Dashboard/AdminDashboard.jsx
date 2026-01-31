@@ -78,44 +78,6 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         console.log('🎯 Seteando camarógrafos:', JSON.stringify(camarografosData, null, 2));
         console.log('🎯 Seteando asistentes:', JSON.stringify(asistentesData, null, 2));
 
-        // NUEVO: Cargar estadísticas de VIAJES & EVENTOS y ajustar antes de setear estados
-        try {
-          console.log('🚗 Consultando viajes & eventos para fecha:', fecha);
-          const travelResponse = await fetch(`/api/travel-events/stats/${fecha}`, {
-            cache: 'no-cache',
-            headers: {
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache'
-            }
-          });
-
-          if (!travelResponse.ok) {
-            throw new Error(`HTTP error! status: ${travelResponse.status}`);
-          }
-
-          const travelStats = await travelResponse.json();
-          console.log('📊 Estadísticas de viajes & eventos:', travelStats);
-
-          // Ajustar contadores excluyendo personal en comisiones (con validaciones de seguridad)
-          if (travelStats && travelStats.total_personnel > 0) {
-            // Reducir disponibilidad según personal en comisiones
-            if (travelStats.cameras_count > 0 && camarografosData && typeof camarografosData.disponibles === 'number') {
-              camarografosData.disponibles = Math.max(0, camarografosData.disponibles - parseInt(travelStats.cameras_count));
-              camarografosData.ocupados = (camarografosData.ocupados || 0) + parseInt(travelStats.cameras_count);
-            }
-            if (travelStats.assistants_count > 0 && asistentesData && typeof asistentesData.disponibles === 'number') {
-              asistentesData.disponibles = Math.max(0, asistentesData.disponibles - parseInt(travelStats.assistants_count));
-              asistentesData.ocupados = (asistentesData.ocupados || 0) + parseInt(travelStats.assistants_count);
-            }
-          }
-
-          console.log('🎯 Camarógrafos después de viajes:', JSON.stringify(camarografosData, null, 2));
-          console.log('🎯 Asistentes después de viajes:', JSON.stringify(asistentesData, null, 2));
-        } catch (error) {
-          console.error('❌ Error al cargar estadísticas de viajes & eventos:', error);
-          // No fallar silenciosamente - continuar sin ajustar por viajes
-        }
-
         setDisponibilidadCamarografos(camarografosData);
         setDisponibilidadAsistentes(asistentesData);
 
@@ -124,37 +86,9 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         console.error('❌ Error al cargar disponibilidad reportería:', error);
       }
 
-      // Cargar disponibilidad de realizadores y ajustar por viajes
+      // Cargar disponibilidad de realizadores
       try {
         let realizadoresData = await getDisponibilidadRealizadores(fecha);
-
-        // NUEVO: Ajustar realizadores según viajes & eventos
-        try {
-          const travelResponse = await fetch(`/api/travel-events/stats/${fecha}`, {
-            cache: 'no-cache',
-            headers: {
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache'
-            }
-          });
-
-          if (!travelResponse.ok) {
-            throw new Error(`HTTP error! status: ${travelResponse.status}`);
-          }
-
-          const travelStats = await travelResponse.json();
-
-          if (travelStats && travelStats.directors_count > 0 && realizadoresData && typeof realizadoresData.disponibles === 'number') {
-            realizadoresData.disponibles = Math.max(0, realizadoresData.disponibles - parseInt(travelStats.directors_count));
-            realizadoresData.ocupados = (realizadoresData.ocupados || 0) + parseInt(travelStats.directors_count);
-          }
-
-          console.log('🎯 Realizadores después de viajes:', JSON.stringify(realizadoresData, null, 2));
-        } catch (error) {
-          console.error('❌ Error al ajustar realizadores por viajes:', error);
-          // No fallar silenciosamente - continuar sin ajustar por viajes
-        }
-
         setDisponibilidadRealizadores(realizadoresData);
       } catch (error) {
         console.error('Error al cargar disponibilidad realizadores:', error);

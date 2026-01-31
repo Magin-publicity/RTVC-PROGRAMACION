@@ -145,7 +145,6 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
   const [lastSaved, setLastSaved] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // 🚨 Indica si hay cambios sin guardar
   const isUpdatingFromSocket = useRef(false);
-  const [travelEvents, setTravelEvents] = useState([]); // 🚗 Eventos de viaje para esta fecha
 
   // 🚨 Refs para detectar cambios REALES (no solo carga de datos)
   const previousAssignments = useRef(null);
@@ -301,19 +300,6 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         // PASO 3: Obtener turnos
         const shiftsRes = await fetch(`${API_URL}/schedule/auto-shifts/${dateStr}`);
         const shiftsData = await shiftsRes.json();
-
-        if (isCancelled) return;
-
-        // PASO 3.5: Cargar eventos de viaje para esta fecha
-        try {
-          const travelEventsRes = await fetch(`${API_URL}/travel-events/date/${dateStr}`);
-          const travelEventsData = await travelEventsRes.json();
-          setTravelEvents(travelEventsData || []);
-          console.log(`🚗 [TRAVEL EVENTS] ${travelEventsData?.length || 0} eventos cargados para ${dateStr}`);
-        } catch (error) {
-          console.error('Error al cargar eventos de viaje:', error);
-          setTravelEvents([]);
-        }
 
         if (isCancelled) return;
 
@@ -2226,21 +2212,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                         let textColor = '#000000';
                         let isSinContrato = false;
 
-                        // 🚗 VERIFICAR SI ESTÁ EN UN EVENTO DE VIAJE (prioridad sobre novedades normales)
-                        const travelEvent = travelEvents.find(event => {
-                          if (event.status === 'CANCELADO') return false;
-                          return event.personnel && event.personnel.some(p => p.personnel_id === person.id);
-                        });
-
-                        if (travelEvent) {
-                          // Persona está en comisión de viaje/evento
-                          const eventType = travelEvent.event_type === 'VIAJE_FUERA_CIUDAD' ? 'VIAJE' :
-                                          travelEvent.event_type === 'VIAJE_LOCAL' ? 'VIAJE LOCAL' :
-                                          'EVENTO';
-                          cellText = `${eventType}: ${travelEvent.event_name}`;
-                          bgColor = 'rgb(0, 251, 58)'; // Verde (igual que viajes en novedades)
-                          textColor = '#000000'; // Texto negro para mejor contraste
-                        } else if (todayNovelty) {
+                        if (todayNovelty) {
                           // Verificar si la novedad es "SIN_CONTRATO"
                           if (todayNovelty.type === 'SIN_CONTRATO') {
                             // Si es sin contrato, dejar todo en blanco

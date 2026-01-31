@@ -1026,49 +1026,24 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
     status: dispatch?.status || 'PROGRAMADO',
   });
 
-  // NUEVO: Estado para personal en comisiones de viaje
-  const [personnelInTravelEvents, setPersonnelInTravelEvents] = useState([]);
-
-  // NUEVO: Cargar personal en comisiones de viaje/eventos
-  useEffect(() => {
-    const loadPersonnelInTravelEvents = async () => {
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        const response = await fetch(`/api/travel-events/personnel-in-event/${today}`);
-        const data = await response.json();
-        setPersonnelInTravelEvents(data || []);
-        console.log('🚗 Personal en comisiones de viaje:', data);
-      } catch (error) {
-        console.error('Error al cargar personal en viajes:', error);
-        setPersonnelInTravelEvents([]);
-      }
-    };
-
-    loadPersonnelInTravelEvents();
-  }, []);
 
   // IDs de recursos ya en uso en despachos activos (excluir el despacho actual si es edición)
   const currentDispatchId = dispatch?.id;
   const usedVehicleIds = new Set(activeDispatches.filter(d => d.id !== currentDispatchId).map(d => d.vehicle_id));
 
-  // NUEVO: Agregar personal en comisiones de viaje a los usedIds
-  const usedCameramanIds = new Set([
-    ...activeDispatches.filter(d => d.id !== currentDispatchId && d.cameraman_id).map(d => d.cameraman_id),
-    ...personnelInTravelEvents
-  ]);
-  const usedAssistantIds = new Set([
-    ...activeDispatches.filter(d => d.id !== currentDispatchId && d.assistant_id).map(d => d.assistant_id),
-    ...personnelInTravelEvents
-  ]);
-  const usedDirectorIds = new Set([
-    ...activeDispatches.filter(d => d.id !== currentDispatchId && d.director_id).map(d => d.director_id),
-    ...personnelInTravelEvents
-  ]);
+  const usedCameramanIds = new Set(
+    activeDispatches.filter(d => d.id !== currentDispatchId && d.cameraman_id).map(d => d.cameraman_id)
+  );
+  const usedAssistantIds = new Set(
+    activeDispatches.filter(d => d.id !== currentDispatchId && d.assistant_id).map(d => d.assistant_id)
+  );
+  const usedDirectorIds = new Set(
+    activeDispatches.filter(d => d.id !== currentDispatchId && d.director_id).map(d => d.director_id)
+  );
   const usedLiveuIds = new Set(activeDispatches.filter(d => d.id !== currentDispatchId && d.liveu_id).map(d => d.liveu_id));
-  const usedJournalistIds = new Set([
-    ...activeDispatches.filter(d => d.id !== currentDispatchId && d.journalist_id).map(d => d.journalist_id),
-    ...personnelInTravelEvents
-  ]);
+  const usedJournalistIds = new Set(
+    activeDispatches.filter(d => d.id !== currentDispatchId && d.journalist_id).map(d => d.journalist_id)
+  );
 
   // Filtrar vehículos disponibles (solo los marcados como disponibles del día Y no en uso)
   const availableVehicleIds = new Set(availability.map(a => a.vehicle_id));

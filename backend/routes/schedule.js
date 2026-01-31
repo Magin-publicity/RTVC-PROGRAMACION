@@ -2322,49 +2322,6 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
       console.log('ℹ️  Tabla fleet_dispatches no disponible');
     }
 
-    // 5.5. NUEVO: Obtener comisiones de viaje/eventos activas
-    let travelEventsMap = {};
-    try {
-      const travelEventsResult = await pool.query(`
-        SELECT
-          tep.personnel_id,
-          te.event_name,
-          te.event_type,
-          te.destination,
-          te.departure_time,
-          te.estimated_return,
-          te.start_date,
-          te.end_date,
-          COALESCE(
-            json_agg(
-              json_build_object(
-                'equipment_type', tee.equipment_type,
-                'equipment_reference', tee.equipment_reference
-              )
-            ) FILTER (WHERE tee.id IS NOT NULL),
-            '[]'
-          ) as equipment
-        FROM travel_events te
-        JOIN travel_event_personnel tep ON te.id = tep.travel_event_id
-        LEFT JOIN travel_event_equipment tee ON te.id = tee.travel_event_id
-        WHERE tep.personnel_id = ANY($1::int[])
-          AND $2::date BETWEEN te.start_date AND te.end_date
-          AND te.status != 'CANCELADO'
-        GROUP BY tep.personnel_id, te.event_name, te.event_type, te.destination,
-                 te.departure_time, te.estimated_return, te.start_date, te.end_date
-      `, [personnelResult.rows.map(p => p.id), date]);
-
-      console.log('🔍 DEBUG SQL - TRAVEL EVENTS QUERY RESULT:', travelEventsResult.rows);
-
-      travelEventsResult.rows.forEach(t => {
-        travelEventsMap[t.personnel_id] = t;
-        console.log(`   📌 Mapeando travel event para personnel_id ${t.personnel_id}:`, t);
-      });
-      console.log(`   🚗 Obtenidas ${travelEventsResult.rows.length} comisiones de viaje/eventos`);
-      console.log('🔍 DEBUG - travelEventsMap completo:', travelEventsMap);
-    } catch (error) {
-      console.log('ℹ️  Error al obtener comisiones de viaje:', error.message);
-    }
 
     // 6. Función para determinar el nombre del turno según la hora
     const getTurnoNombre = (shiftStart) => {
@@ -2380,16 +2337,6 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
       const autoShift = autoShiftsMap[person.id];
       const novelty = noveltiesMap[person.id];
       const dispatch = dispatchesMap[person.id];
-      const travelEvent = travelEventsMap[person.id];
-
-      // DEBUG: Log para cada persona
-      if (person.name && person.name.includes('Guillermo')) {
-        console.log('🔍 DEBUG - Construyendo objeto para Guillermo Solarte:');
-        console.log('   - person.id:', person.id);
-        console.log('   - person.name:', person.name);
-        console.log('   - travelEvent desde map:', travelEvent);
-        console.log('   - ¿travelEvent existe?:', !!travelEvent);
-      }
 
       // Usar hora de llamado del turno automático, o del guardado como fallback
       let callTime = savedCallTimes[person.id];
@@ -2421,20 +2368,11 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
       const currentTime = currentHour * 60 + currentMinutes;
 
       let enCanal = false;
-      if (callTime && !dispatch && !novelty && !travelEvent) {
+      if (callTime && !dispatch && !novelty) {
         const callTimeStr = String(callTime || '00:00');
         const [callHour, callMinutes] = callTimeStr.split(':').map(Number);
         const callTimeMinutes = callHour * 60 + callMinutes;
         enCanal = currentTime >= callTimeMinutes;
-      }
-
-      // NUEVO: Extraer LiveU de equipos de la comisión
-      let liveuEquipment = null;
-      if (travelEvent && travelEvent.equipment) {
-        const liveus = travelEvent.equipment.filter(eq => eq.equipment_type === 'LIVEU');
-        if (liveus.length > 0) {
-          liveuEquipment = liveus.map(l => l.equipment_reference).join(', ');
-        }
       }
 
       return {
@@ -2447,8 +2385,8 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
         turno_horario: turnoHorario,
         en_canal: enCanal,
         en_despacho: !!dispatch,
-        en_viaje: (novelty?.type.toLowerCase().includes('viaje') || !!travelEvent) || false,
-        en_terreno: !!dispatch || !!travelEvent,
+        en_viaje: (novelty?.type.toLowerCase().includes('viaje')) || false,
+        en_terreno: !!dispatch,
         despacho_info: dispatch ? {
           destino: dispatch.destination,
           vehiculo: dispatch.license_plate,
@@ -2457,16 +2395,6 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
         novedad_info: novelty ? {
           tipo: novelty.type,
           descripcion: novelty.description
-        } : null,
-        // NUEVO: Información de comisión de viaje/evento
-        travel_event_info: travelEvent ? {
-          evento: travelEvent.event_name,
-          tipo: travelEvent.event_type,
-          destino: travelEvent.destination,
-          hora_salida: travelEvent.departure_time,
-          hora_regreso: travelEvent.estimated_return,
-          liveu: liveuEquipment,
-          fechas: `${travelEvent.start_date} - ${travelEvent.end_date}`
         } : null
       };
     });
@@ -2487,29 +2415,6 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
     });
 
     console.log(`✅ Detalles obtenidos para ${sortedPersonnel.length} personas de ${decodedAreaName} con turno programado`);
-
-    // 🔴 HARDCODE DE PRUEBA - FORZAR travel_event_info para Guillermo
-    sortedPersonnel.forEach(p => {
-      if (p.nombre === 'Guillermo Solarte') {
-        console.log('🔴 HARDCODE: Forzando travel_event_info para Guillermo Solarte');
-        p.travel_event_info = {
-          evento: 'PRUEBA FORZADA',
-          destino: 'BOGOTA',
-          liveu: 'LIVEU-01',
-          hora_salida: '08:00',
-          hora_regreso: '18:00',
-          tipo: 'VIAJE',
-          fechas: '2026-01-29 - 2026-01-29'
-        };
-      }
-    });
-
-    // DEBUG: Verificar datos de Guillermo en respuesta final
-    const guillermoFinal = sortedPersonnel.find(p => p.nombre && p.nombre.includes('Guillermo'));
-    if (guillermoFinal) {
-      console.log('🔍 DEBUG - GUILLERMO EN RESPUESTA FINAL (DESPUÉS DEL HARDCODE):');
-      console.log(JSON.stringify(guillermoFinal, null, 2));
-    }
 
     res.json(sortedPersonnel);
 

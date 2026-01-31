@@ -21,7 +21,6 @@ import { PersonalLogistico } from './components/Personnel/PersonalLogistico';
 import { RoutesManagement } from './components/Routes/RoutesManagement';
 import FleetManagement from './components/Fleet/FleetManagement';
 import MealManagement from './components/Meals/MealManagement';
-import TravelEventList from './components/TravelEvents/TravelEventList';
 import { InstallPrompt } from './components/PWA/InstallPrompt';
 import { usePersonnel } from './hooks/usePersonnel';
 import { useSchedule } from './hooks/useSchedule';
@@ -233,14 +232,6 @@ function App() {
 
       case 'meal-management':
         return <MealManagement />;
-
-      case 'travel-events':
-        return (
-          <TravelEventList
-            selectedDate={currentDate.toISOString().split('T')[0]}
-            personnel={personnel}
-          />
-        );
 
       default:
         return (
