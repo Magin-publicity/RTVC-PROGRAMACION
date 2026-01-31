@@ -740,6 +740,7 @@ function DispatchesTab({ date, onDateChange, dispatches, onAdd, onEdit, onDelete
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Conductor</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Placa</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Destino</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fechas</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora Salida</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
@@ -773,7 +774,12 @@ function DispatchesTab({ date, onDateChange, dispatches, onAdd, onEdit, onDelete
                     {dispatch.vehicle_plate}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
-                    {dispatch.destination}
+                    {dispatch.destino || dispatch.destination}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {dispatch.fecha_inicio === dispatch.fecha_fin
+                      ? dispatch.fecha_inicio
+                      : `${dispatch.fecha_inicio} → ${dispatch.fecha_fin}`}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {dispatch.departure_time}
@@ -1022,6 +1028,8 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
     destination: dispatch?.destination || '',
     departureTime: dispatch?.departure_time || '09:00',
     estimatedReturn: dispatch?.estimated_return || '',
+    fechaInicio: dispatch?.fecha_inicio || selectedDate,
+    fechaFin: dispatch?.fecha_fin || selectedDate,
     notes: dispatch?.notes || '',
     status: dispatch?.status || 'PROGRAMADO',
   });
@@ -1188,8 +1196,14 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (!formData.vehicleId || !formData.destination || !formData.departureTime) {
-      alert('Vehículo, destino y hora de salida son campos requeridos');
+    if (!formData.vehicleId || !formData.destination || !formData.departureTime || !formData.fechaInicio || !formData.fechaFin) {
+      alert('Vehículo, destino, hora de salida y fechas son campos requeridos');
+      return;
+    }
+
+    // Validar que fecha_fin >= fecha_inicio
+    if (formData.fechaFin < formData.fechaInicio) {
+      alert('La fecha de fin no puede ser anterior a la fecha de inicio');
       return;
     }
 
@@ -1552,6 +1566,43 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
                 value={formData.estimatedReturn}
                 onChange={(e) => setFormData({ ...formData, estimatedReturn: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            {/* Fecha de Inicio */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Fecha de Inicio <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={formData.fechaInicio}
+                onChange={(e) => {
+                  const newFechaInicio = e.target.value;
+                  setFormData({
+                    ...formData,
+                    fechaInicio: newFechaInicio,
+                    // Si la fecha de fin es anterior a la nueva fecha de inicio, actualizarla
+                    fechaFin: newFechaInicio > formData.fechaFin ? newFechaInicio : formData.fechaFin
+                  });
+                }}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            {/* Fecha de Fin */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Fecha de Fin <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={formData.fechaFin}
+                onChange={(e) => setFormData({ ...formData, fechaFin: e.target.value })}
+                min={formData.fechaInicio}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
               />
             </div>
 

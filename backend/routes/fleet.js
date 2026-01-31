@@ -139,6 +139,7 @@ router.delete('/availability/:id', async (req, res) => {
 /**
  * GET /api/fleet/dispatches/:date
  * Obtiene los despachos de prensa para una fecha específica
+ * ACTUALIZADO: Ahora verifica rangos de fechas (fecha_inicio y fecha_fin)
  */
 router.get('/dispatches/:date', async (req, res) => {
   try {
@@ -152,7 +153,7 @@ router.get('/dispatches/:date', async (req, res) => {
         fv.capacity
       FROM press_dispatches pd
       JOIN fleet_vehicles fv ON fv.id = pd.vehicle_id
-      WHERE pd.date = $1
+      WHERE $1::date BETWEEN pd.fecha_inicio AND pd.fecha_fin
       ORDER BY pd.departure_time, pd.id
     `, [date]);
 
@@ -187,11 +188,13 @@ router.post('/dispatches', async (req, res) => {
       destination,
       departureTime,
       estimatedReturn,
+      fechaInicio,
+      fechaFin,
       notes
     } = req.body;
 
-    if (!date || !vehicleId || !driverName || !vehiclePlate || !destination || !departureTime) {
-      return res.status(400).json({ error: 'Faltan parámetros requeridos: fecha, vehículo, conductor, placa, destino y hora de salida' });
+    if (!date || !vehicleId || !driverName || !vehiclePlate || !destination || !departureTime || !fechaInicio || !fechaFin) {
+      return res.status(400).json({ error: 'Faltan parámetros requeridos: fecha, vehículo, conductor, placa, destino, hora de salida y fechas de inicio/fin' });
     }
 
     const result = await pool.query(`
@@ -199,14 +202,16 @@ router.post('/dispatches', async (req, res) => {
         date, vehicle_id, journalist_id, journalist_name, cameraman_id, cameraman_name,
         assistant_id, assistant_name, director_id, director_name,
         liveu_id, liveu_code,
-        driver_name, vehicle_plate, destination, departure_time, estimated_return, notes, status
+        driver_name, vehicle_plate, destination, departure_time, estimated_return,
+        fecha_inicio, fecha_fin, destino, notes, status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'PROGRAMADO')
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $15, $20, 'PROGRAMADO')
       RETURNING *
     `, [date, vehicleId, journalistId, journalistName, cameramanId, cameramanName,
         assistantId, assistantName, directorId, directorName,
         liveuId, liveuCode,
-        driverName, vehiclePlate, destination, departureTime, estimatedReturn, notes]);
+        driverName, vehiclePlate, destination, departureTime, estimatedReturn,
+        fechaInicio, fechaFin, notes]);
 
     console.log(`✅ Despacho creado: ${journalistName} → ${destination} a las ${departureTime}${liveuCode ? ` [LiveU: ${liveuCode}]` : ''}`);
     res.status(201).json(result.rows[0]);
@@ -239,6 +244,8 @@ router.put('/dispatches/:id', async (req, res) => {
       departureTime,
       estimatedReturn,
       actualReturn,
+      fechaInicio,
+      fechaFin,
       status,
       notes
     } = req.body;
@@ -258,16 +265,19 @@ router.put('/dispatches/:id', async (req, res) => {
         driver_name = COALESCE($10, driver_name),
         vehicle_plate = COALESCE($11, vehicle_plate),
         destination = COALESCE($12, destination),
+        destino = COALESCE($12, destino),
         departure_time = COALESCE($13, departure_time),
         estimated_return = COALESCE($14, estimated_return),
         actual_return = COALESCE($15, actual_return),
-        status = COALESCE($16, status),
-        notes = COALESCE($17, notes),
+        fecha_inicio = COALESCE($16, fecha_inicio),
+        fecha_fin = COALESCE($17, fecha_fin),
+        status = COALESCE($18, status),
+        notes = COALESCE($19, notes),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $18
+      WHERE id = $20
       RETURNING *
     `, [journalistName, cameramanId, cameramanName, assistantId, assistantName, directorId, directorName, liveuId, liveuCode, driverName, vehiclePlate, destination,
-        departureTime, estimatedReturn, actualReturn, status, notes, id]);
+        departureTime, estimatedReturn, actualReturn, fechaInicio, fechaFin, status, notes, id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Despacho no encontrado' });

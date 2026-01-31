@@ -2143,7 +2143,10 @@ router.get('/personnel-by-area/:date', async (req, res) => {
           v.license_plate
         FROM fleet_dispatches fd
         LEFT JOIN fleet_vehicles v ON fd.vehicle_id = v.id
-        WHERE fd.date = $1
+        WHERE (
+            (fd.fecha_inicio IS NOT NULL AND fd.fecha_fin IS NOT NULL AND $1::date BETWEEN fd.fecha_inicio AND fd.fecha_fin)
+            OR (fd.fecha_inicio IS NULL AND fd.date = $1)
+          )
           AND fd.status IN ('PROGRAMADO', 'EN_RUTA')
       `, [date]);
 
@@ -2311,7 +2314,10 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
         FROM fleet_dispatches fd
         LEFT JOIN fleet_vehicles v ON fd.vehicle_id = v.id
         WHERE fd.personnel_id = ANY($1::int[])
-          AND fd.date = $2
+          AND (
+            (fd.fecha_inicio IS NOT NULL AND fd.fecha_fin IS NOT NULL AND $2::date BETWEEN fd.fecha_inicio AND fd.fecha_fin)
+            OR (fd.fecha_inicio IS NULL AND fd.date = $2)
+          )
           AND fd.status IN ('PROGRAMADO', 'EN_RUTA')
       `, [personnelResult.rows.map(p => p.id), date]);
 
