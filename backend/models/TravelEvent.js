@@ -61,11 +61,26 @@ class TravelEvent {
    */
   static async create(data, personnelList = [], equipmentList = []) {
     const client = await db.connect();
+    let travelEvent = null;
 
     try {
       await client.query('BEGIN');
 
-      // 1. Crear el registro principal de la comisión
+      // 🔹 PASO 0: LIMPIEZA PREVIA - Eliminar asignaciones duplicadas
+      console.log('🧹 Limpiando asignaciones previas para evitar errores...');
+
+      // Limpiar novelties duplicadas del mismo evento/fecha/personal
+      for (const person of personnelList) {
+        await client.query(`
+          DELETE FROM novelties
+          WHERE personnel_id = $1
+            AND start_date = $2
+            AND end_date = $3
+            AND description LIKE $4
+        `, [person.personnel_id, data.start_date, data.end_date, `%${data.event_name}%`]);
+      }
+
+      // 1. Crear el registro principal de la comisión (SIEMPRE SE GUARDA)
       const eventQuery = `
         INSERT INTO travel_events (
           start_date, end_date, event_name, event_type, destination,
@@ -87,115 +102,138 @@ class TravelEvent {
         data.created_by || null
       ];
       const eventResult = await client.query(eventQuery, eventValues);
-      const travelEvent = eventResult.rows[0];
+      travelEvent = eventResult.rows[0];
+      console.log(`✅ Evento creado con ID: ${travelEvent.id}`);
 
-      // 2. Asignar personal a la comisión
-      if (personnelList && personnelList.length > 0) {
-        for (const person of personnelList) {
-          const personnelQuery = `
-            INSERT INTO travel_event_personnel (
-              travel_event_id, personnel_id, personnel_name, role, notes
-            )
-            VALUES ($1, $2, $3, $4, $5)
-          `;
-          await client.query(personnelQuery, [
-            travelEvent.id,
-            person.personnel_id,
-            person.personnel_name,
-            person.role,
-            person.notes || null
-          ]);
-
-          // 3. Si es una Dupla de Reportería, crear relevo automático
-          if (person.role.includes('Dupla') || person.assignment_type) {
-            const reliefQuery = `
-              INSERT INTO travel_event_reliefs (
-                travel_event_id, original_personnel_id, original_assignment_type, notes
+      // 2. Asignar personal a la comisión (INDEPENDIENTE - No bloquea el guardado)
+      try {
+        if (personnelList && personnelList.length > 0) {
+          for (const person of personnelList) {
+            const personnelQuery = `
+              INSERT INTO travel_event_personnel (
+                travel_event_id, personnel_id, personnel_name, role, notes
               )
-              VALUES ($1, $2, $3, $4)
+              VALUES ($1, $2, $3, $4, $5)
             `;
-            await client.query(reliefQuery, [
+            await client.query(personnelQuery, [
               travelEvent.id,
               person.personnel_id,
-              person.assignment_type || 'REPORTERIA_DUPLA',
-              `Relevo automático por viaje: ${data.event_name}`
+              person.personnel_name,
+              person.role,
+              person.notes || null
             ]);
+
+            // 3. Si es una Dupla de Reportería, crear relevo automático
+            if (person.role.includes('Dupla') || person.assignment_type) {
+              try {
+                const reliefQuery = `
+                  INSERT INTO travel_event_reliefs (
+                    travel_event_id, original_personnel_id, original_assignment_type, notes
+                  )
+                  VALUES ($1, $2, $3, $4)
+                `;
+                await client.query(reliefQuery, [
+                  travelEvent.id,
+                  person.personnel_id,
+                  person.assignment_type || 'REPORTERIA_DUPLA',
+                  `Relevo automático por viaje: ${data.event_name}`
+                ]);
+              } catch (reliefError) {
+                console.warn(`⚠️ No se pudo crear relevo para ${person.personnel_name}:`, reliefError.message);
+              }
+            }
+
+            // 4. Insertar novelty (con manejo de errores independiente)
+            try {
+              let noveltyType = 'VIAJE';
+              if (data.event_type === 'EVENTO') {
+                noveltyType = 'EVENTO';
+              }
+
+              const noveltyQuery = `
+                INSERT INTO novelties (
+                  personnel_id, date, type, description, start_date, end_date
+                )
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (personnel_id, date, type) DO UPDATE
+                SET description = EXCLUDED.description,
+                    start_date = EXCLUDED.start_date,
+                    end_date = EXCLUDED.end_date
+              `;
+
+              await client.query(noveltyQuery, [
+                person.personnel_id,
+                data.start_date,
+                noveltyType,
+                `${data.event_name} - ${data.destination}`,
+                data.start_date,
+                data.end_date
+              ]);
+
+              console.log(`✅ Novelty insertada para ${person.personnel_name}`);
+            } catch (novError) {
+              console.warn(`⚠️ Error al insertar novelty para ${person.personnel_name}:`, novError.message);
+            }
           }
-
-          // 4. NUEVO: Insertar UNA SOLA novelty por persona (no múltiples)
-          let noveltyType = 'VIAJE';
-          if (data.event_type === 'EVENTO') {
-            noveltyType = 'EVENTO';
-          }
-
-          const noveltyQuery = `
-            INSERT INTO novelties (
-              personnel_id, date, type, description, start_date, end_date
-            )
-            VALUES ($1, $2, $3, $4, $5, $6)
-          `;
-
-          // Insertar UNA SOLA novelty
-          await client.query(noveltyQuery, [
-            person.personnel_id,
-            data.start_date,
-            noveltyType,
-            `${data.event_name} - ${data.destination}`,
-            data.start_date,
-            data.end_date
-          ]);
-
-          console.log(`✅ Novelty insertada para ${person.personnel_name}: ${data.start_date} - ${data.end_date}`);
         }
+      } catch (personnelError) {
+        console.error('⚠️ Error al asignar personal, pero el viaje se guardó:', personnelError.message);
       }
 
-      // 4. Asignar equipos a la comisión
-      if (equipmentList && equipmentList.length > 0) {
-        console.log('🔧 Procesando equipos:', JSON.stringify(equipmentList, null, 2));
+      // 5. Asignar equipos a la comisión (INDEPENDIENTE - No bloquea el guardado)
+      try {
+        if (equipmentList && equipmentList.length > 0) {
+          console.log('🔧 Procesando equipos...');
 
-        for (const equipment of equipmentList) {
-          console.log(`📦 Insertando equipo: ${equipment.equipment_type} - ${equipment.equipment_reference}, liveu_id: ${equipment.liveu_id}`);
+          for (const equipment of equipmentList) {
+            try {
+              const equipmentQuery = `
+                INSERT INTO travel_event_equipment (
+                  travel_event_id, equipment_type, equipment_reference, liveu_id, notes
+                )
+                VALUES ($1, $2, $3, $4, $5)
+              `;
 
-          const equipmentQuery = `
-            INSERT INTO travel_event_equipment (
-              travel_event_id, equipment_type, equipment_reference, liveu_id, notes
-            )
-            VALUES ($1, $2, $3, $4, $5)
-          `;
+              await client.query(equipmentQuery, [
+                travelEvent.id,
+                equipment.equipment_type,
+                equipment.equipment_reference || null,
+                equipment.liveu_id || null,
+                equipment.notes || null
+              ]);
+              console.log(`✅ Equipo ${equipment.equipment_type} insertado`);
 
-          try {
-            await client.query(equipmentQuery, [
-              travelEvent.id,
-              equipment.equipment_type,
-              equipment.equipment_reference || null,
-              equipment.liveu_id || null,
-              equipment.notes || null
-            ]);
-            console.log(`✅ Equipo insertado correctamente`);
-          } catch (equipError) {
-            console.error('❌ Error al insertar equipo:', equipError.message);
-            throw equipError;
-          }
-
-          // 5. Si es un LiveU, actualizar su estado
-          if (equipment.liveu_id) {
-            const updateLiveUQuery = `
-              UPDATE liveu_equipment
-              SET status = 'EN_TERRENO'
-              WHERE id = $1
-            `;
-            await client.query(updateLiveUQuery, [equipment.liveu_id]);
-            console.log(`✅ Estado de LiveU ${equipment.liveu_id} actualizado a EN_TERRENO`);
+              // Actualizar estado de LiveU
+              if (equipment.liveu_id) {
+                try {
+                  const updateLiveUQuery = `
+                    UPDATE liveu_equipment
+                    SET status = 'EN_TERRENO'
+                    WHERE id = $1
+                  `;
+                  await client.query(updateLiveUQuery, [equipment.liveu_id]);
+                  console.log(`✅ LiveU ${equipment.liveu_id} actualizado a EN_TERRENO`);
+                } catch (liveUError) {
+                  console.warn(`⚠️ No se pudo actualizar estado de LiveU:`, liveUError.message);
+                }
+              }
+            } catch (equipError) {
+              console.warn(`⚠️ Error al insertar equipo ${equipment.equipment_type}:`, equipError.message);
+            }
           }
         }
+      } catch (equipmentError) {
+        console.error('⚠️ Error al asignar equipos, pero el viaje se guardó:', equipmentError.message);
       }
 
       await client.query('COMMIT');
+      console.log(`✅ Comisión guardada exitosamente con ID: ${travelEvent.id}`);
 
       // Retornar la comisión completa con detalles
       return await this.getById(travelEvent.id);
     } catch (error) {
       await client.query('ROLLBACK');
+      console.error('❌ Error fatal al crear comisión:', error);
       throw error;
     } finally {
       client.release();

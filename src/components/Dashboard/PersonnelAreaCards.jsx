@@ -2,8 +2,86 @@ import { useState, useEffect } from 'react';
 import {
   Camera, Video, Users, Mic, Sparkles, Clapperboard,
   Eye, Package, Shirt, Headphones, Laptop, Radio,
-  MapPin, UserCircle, Clock, Truck, Plane, ChevronRight, X
+  MapPin, UserCircle, Clock, Truck, Plane, ChevronRight, X, Anchor
 } from 'lucide-react';
+
+// 🏗️ OPERADORES DE GRÚA - Organizados en 4 grupos por horario para facilitar relevos
+const CRANE_OPERATORS_GROUPS = {
+  GRUPO_1_MADRUGADA: {
+    name: 'Grupo 1 - Madrugada',
+    timeRange: '05:00 - 11:00',
+    shift: '05:00',
+    operators: ['John Loaiza'],
+    icon: '🌅',
+    color: 'purple'
+  },
+  GRUPO_2_MAÑANA: {
+    name: 'Grupo 2 - Mañana',
+    timeRange: '09:00 - 15:00',
+    shift: '09:00',
+    operators: ['Carlos García'],
+    icon: '☀️',
+    color: 'amber'
+  },
+  GRUPO_3_TARDE: {
+    name: 'Grupo 3 - Tarde',
+    timeRange: '13:00 - 19:00',
+    shift: '13:00',
+    operators: ['Jefferson Pérez', 'Raul Ramírez'],
+    icon: '🌤️',
+    color: 'orange'
+  },
+  GRUPO_4_NOCHE: {
+    name: 'Grupo 4 - Noche',
+    timeRange: '16:00 - 22:00',
+    shift: '16:00',
+    operators: ['Carlos A. López', 'Luis Bernal'],
+    icon: '🌆',
+    color: 'indigo'
+  }
+};
+
+// Lista plana de todos los operadores (para compatibilidad)
+const CRANE_OPERATORS = [
+  'Carlos García',
+  'John Loaiza',
+  'Jhon Loaiza',
+  'Luis Bernal',
+  'Jefferson Pérez',
+  'Raul Ramírez',
+  'Carlos A. López'
+];
+
+// Helper para identificar operadores de grúa
+const isCraneOperator = (personName) => {
+  if (!personName) return false;
+  const normalizedName = personName.trim().toLowerCase();
+  return CRANE_OPERATORS.some(craneName =>
+    normalizedName === craneName.toLowerCase() ||
+    normalizedName.includes(craneName.toLowerCase().replace('john', 'jhon')) ||
+    normalizedName.includes(craneName.toLowerCase().replace('jhon', 'john')) ||
+    normalizedName.replace(/\s+/g, ' ').includes(craneName.replace('A. ', '').toLowerCase())
+  );
+};
+
+// Obtener el grupo de un operador de grúa
+const getCraneOperatorGroup = (personName) => {
+  if (!isCraneOperator(personName)) return null;
+
+  for (const [groupKey, groupData] of Object.entries(CRANE_OPERATORS_GROUPS)) {
+    if (groupData.operators.some(op =>
+      personName.toLowerCase().includes(op.toLowerCase().replace('a. ', '')) ||
+      op.toLowerCase().includes(personName.toLowerCase().replace('a. ', ''))
+    )) {
+      return {
+        key: groupKey,
+        ...groupData
+      };
+    }
+  }
+
+  return null;
+};
 
 // Mapeo de áreas a iconos y colores
 const AREA_CONFIG = {
@@ -214,6 +292,10 @@ export const PersonnelAreaCards = ({ currentDate }) => {
   };
 
   const getStatusIcon = (person) => {
+    // PRIORIDAD 1: Si tiene novedad de viaje, mostrar EN TERRENO naranja
+    if (person.novedad_info && person.novedad_info.tipo === 'VIAJE') {
+      return { icon: Plane, text: 'En Terreno', color: 'text-orange-600' };
+    }
     if (person.en_despacho) return { icon: Truck, text: 'En Despacho', color: 'text-blue-600' };
     if (person.en_viaje) return { icon: Plane, text: 'En Viaje', color: 'text-purple-600' };
     if (person.en_terreno) return { icon: MapPin, text: 'En Terreno', color: 'text-orange-600' };
@@ -354,124 +436,105 @@ export const PersonnelAreaCards = ({ currentDate }) => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {detailedPersonnel.map((person) => {
-                    // DEBUG TEMPORAL: Log en renderizado
-                    if (person.nombre && person.nombre.includes('Guillermo')) {
-                      console.log('🎨 RENDER GUILLERMO:', {
-                        nombre: person.nombre,
-                        travel_event_info: person.travel_event_info,
-                        tiene: !!person.travel_event_info
-                      });
-                    }
+                  {/* 🚨 SUBCATEGORÍA: Operadores de Grúa (solo si es área de Camarógrafos de Estudio) */}
+                  {selectedArea === 'CAMARÓGRAFOS DE ESTUDIO' && (() => {
+                    const craneOps = detailedPersonnel.filter(p => isCraneOperator(p.nombre));
+                    const regularCameras = detailedPersonnel.filter(p => !isCraneOperator(p.nombre));
 
-                    const status = getStatusIcon(person);
-                    const StatusIcon = status.icon;
-                    const llamadoPasado = person.hora_llamado && new Date(`${currentDate.toISOString().split('T')[0]}T${person.hora_llamado}`) < new Date();
+                    // Agrupar operadores de grúa por horario
+                    const groupedCraneOps = {};
+                    Object.keys(CRANE_OPERATORS_GROUPS).forEach(groupKey => {
+                      groupedCraneOps[groupKey] = [];
+                    });
+
+                    craneOps.forEach(person => {
+                      const group = getCraneOperatorGroup(person.nombre);
+                      if (group) {
+                        groupedCraneOps[group.key].push(person);
+                      }
+                    });
 
                     return (
-                      <div
-                        key={person.id}
-                        className={`border-2 rounded-lg p-4 transition-all ${
-                          person.en_canal
-                            ? 'border-green-300 bg-green-50'
-                            : llamadoPasado
-                            ? 'border-yellow-300 bg-yellow-50'
-                            : 'border-gray-200 bg-white'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
-                              {person.nombre}
-                              {llamadoPasado && !person.en_canal && (
-                                <span className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse" title="Hora de llamado ya pasó"></span>
-                              )}
-                              {person.en_canal && (
-                                <span className="w-3 h-3 bg-green-500 rounded-full" title="En canal"></span>
-                              )}
-                            </h3>
-                            {person.role && (
-                              <p className="text-sm text-gray-600">{person.role}</p>
-                            )}
-                          </div>
-                          <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${
-                            person.en_canal ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'
-                          }`}>
-                            <StatusIcon size={14} />
-                            {status.text}
-                          </div>
-                        </div>
+                      <>
+                        {/* Sección: Operadores de Grúa por Grupos */}
+                        {craneOps.length > 0 && (
+                          <div className="mb-8">
+                            <div className="flex items-center gap-2 mb-4 pb-2 border-b-4 border-cyan-500">
+                              <Anchor size={24} className="text-cyan-700" />
+                              <h2 className="text-lg font-bold text-cyan-900">
+                                🏗️ OPERADORES DE GRÚA ({craneOps.length})
+                              </h2>
+                            </div>
 
-                        <div className="bg-gray-50 rounded-lg p-3 mt-2">
-                          <div className="flex items-center justify-between">
-                            {person.turno && (
-                              <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                                  person.turno === 'MAÑANA' ? 'bg-amber-100 text-amber-700' :
-                                  person.turno === 'TARDE' ? 'bg-blue-100 text-blue-700' :
-                                  'bg-purple-100 text-purple-700'
-                                }`}>
-                                  {person.turno}
-                                </span>
-                                {person.turno_horario && (
-                                  <span className="text-xs text-gray-500">
-                                    {person.turno_horario}
-                                  </span>
-                                )}
-                              </div>
-                            )}
+                            {/* Grupos por horario */}
+                            <div className="space-y-4 pl-2">
+                              {Object.entries(CRANE_OPERATORS_GROUPS).map(([groupKey, groupData]) => {
+                                const groupPersonnel = groupedCraneOps[groupKey] || [];
+                                if (groupPersonnel.length === 0) return null;
 
-                            {person.hora_llamado && (
-                              <div className="flex items-center gap-1">
-                                <Clock size={14} className={llamadoPasado ? 'text-orange-500' : 'text-gray-500'} />
-                                <span className={`font-bold ${llamadoPasado ? 'text-orange-600' : 'text-gray-700'}`}>
-                                  Llamado: {person.hora_llamado}
-                                </span>
-                                {llamadoPasado && !person.en_canal && (
-                                  <span className="text-xs text-orange-500">(pendiente)</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                                const colorClasses = {
+                                  purple: 'border-purple-300 bg-purple-50',
+                                  amber: 'border-amber-300 bg-amber-50',
+                                  orange: 'border-orange-300 bg-orange-50',
+                                  indigo: 'border-indigo-300 bg-indigo-50'
+                                };
 
-                        {/* Información de VIAJE (desde novedad_info) - PRIORIDAD 1 */}
-                        {person.en_viaje && person.novedad_info && person.novedad_info.tipo === 'VIAJE' && (
-                          <div className="mt-2 p-2 bg-green-600 text-white rounded shadow-sm">
-                            <p className="font-bold text-[11px]">✈️ EN COMISIÓN DE VIAJE</p>
-                            <p className="text-[10px]">{person.novedad_info.descripcion}</p>
+                                const textColorClasses = {
+                                  purple: 'text-purple-800',
+                                  amber: 'text-amber-800',
+                                  orange: 'text-orange-800',
+                                  indigo: 'text-indigo-800'
+                                };
+
+                                return (
+                                  <div key={groupKey} className={`border-2 rounded-lg p-3 ${colorClasses[groupData.color]}`}>
+                                    <div className="flex items-center gap-2 mb-3">
+                                      <span className="text-2xl">{groupData.icon}</span>
+                                      <div className="flex-1">
+                                        <h3 className={`text-sm font-bold ${textColorClasses[groupData.color]}`}>
+                                          {groupData.name} ({groupPersonnel.length})
+                                        </h3>
+                                        <p className="text-xs text-gray-600">
+                                          Horario: {groupData.timeRange}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                      {groupPersonnel.map((person) => (
+                                        <PersonCard key={person.id} person={person} currentDate={currentDate} compact={true} />
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
 
-                        {/* Información de despacho - PRIORIDAD 2 */}
-                        {!person.en_viaje && person.en_despacho && person.despacho_info && (
-                          <div className="mt-2 p-2 bg-blue-100 border-l-4 border-blue-500 rounded">
-                            <p className="text-xs font-bold text-blue-700">
-                              <Truck size={14} className="inline mr-1" />
-                              EN DESPACHO
-                            </p>
-                            <p className="text-[10px] text-blue-600">Destino: {person.despacho_info.destino}</p>
-                            <p className="text-[10px] text-blue-600">Vehículo: {person.despacho_info.vehiculo}</p>
-                            {person.despacho_info.hora_salida && (
-                              <p className="text-[10px] text-blue-600">Salida: {person.despacho_info.hora_salida}</p>
-                            )}
+                        {/* Grupo: Camarógrafos Regulares */}
+                        {regularCameras.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-blue-400">
+                              <Camera size={20} className="text-blue-600" />
+                              <h3 className="text-md font-bold text-blue-900">
+                                Camarógrafos de Estudio ({regularCameras.length})
+                              </h3>
+                            </div>
+                            <div className="space-y-3 pl-2">
+                              {regularCameras.map((person) => (
+                                <PersonCard key={person.id} person={person} currentDate={currentDate} />
+                              ))}
+                            </div>
                           </div>
                         )}
-
-                        {/* Otras novedades (no viaje) - PRIORIDAD 3 */}
-                        {person.novedad_info && person.novedad_info.tipo !== 'VIAJE' && !person.en_despacho && (
-                          <div className="mt-2 p-2 bg-purple-100 border border-purple-300 rounded">
-                            <p className="text-xs font-bold text-purple-900">
-                              {person.novedad_info.tipo}
-                            </p>
-                            <p className="text-[10px] text-gray-700">
-                              {person.novedad_info.descripcion}
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                      </>
                     );
-                  })}
+                  })()}
+
+                  {/* Para otras áreas, mostrar lista normal */}
+                  {selectedArea !== 'CAMARÓGRAFOS DE ESTUDIO' && detailedPersonnel.map((person) => (
+                    <PersonCard key={person.id} person={person} currentDate={currentDate} />
+                  ))}
                 </div>
               )}
             </div>
@@ -494,5 +557,166 @@ export const PersonnelAreaCards = ({ currentDate }) => {
         }
       `}</style>
     </>
+  );
+};
+
+// 🆕 Componente extraído para renderizar cada tarjeta de persona
+const PersonCard = ({ person, currentDate, compact = false }) => {
+  const getStatusIcon = (person) => {
+    if (person.novedad_info && person.novedad_info.tipo === 'VIAJE') {
+      return { icon: Plane, text: 'En Terreno', color: 'text-orange-600' };
+    }
+    if (person.en_despacho) return { icon: Truck, text: 'En Despacho', color: 'text-blue-600' };
+    if (person.en_viaje) return { icon: Plane, text: 'En Viaje', color: 'text-purple-600' };
+    if (person.en_terreno) return { icon: MapPin, text: 'En Terreno', color: 'text-orange-600' };
+    if (person.en_canal) return { icon: UserCircle, text: 'En Canal', color: 'text-green-600' };
+    return { icon: Clock, text: 'Pendiente', color: 'text-gray-500' };
+  };
+
+  const status = getStatusIcon(person);
+  const StatusIcon = status.icon;
+  const llamadoPasado = person.hora_llamado && new Date(`${currentDate.toISOString().split('T')[0]}T${person.hora_llamado}`) < new Date();
+
+  // Modo compacto para operadores de grúa dentro de sus grupos
+  if (compact) {
+    return (
+      <div
+        className={`border rounded-lg p-2 transition-all ${
+          person.en_canal
+            ? 'border-green-300 bg-green-50/50'
+            : llamadoPasado
+            ? 'border-yellow-300 bg-yellow-50/50'
+            : 'border-gray-200 bg-white'
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-1">
+            <Anchor size={14} className="text-cyan-600" />
+            <span className="font-bold text-sm text-gray-900">{person.nombre}</span>
+            {person.en_canal && (
+              <span className="w-2 h-2 bg-green-500 rounded-full" title="En canal"></span>
+            )}
+            {llamadoPasado && !person.en_canal && (
+              <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" title="Hora de llamado ya pasó"></span>
+            )}
+          </div>
+          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            person.en_canal ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'
+          }`}>
+            <StatusIcon size={10} />
+            <span className="hidden sm:inline">{status.text}</span>
+          </div>
+        </div>
+        {person.hora_llamado && (
+          <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-600">
+            <Clock size={10} />
+            <span>Llamado: {person.hora_llamado}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Modo normal para camarógrafos regulares
+  return (
+    <div
+      className={`border-2 rounded-lg p-4 transition-all ${
+        person.en_canal
+          ? 'border-green-300 bg-green-50'
+          : llamadoPasado
+          ? 'border-yellow-300 bg-yellow-50'
+          : 'border-gray-200 bg-white'
+      }`}
+    >
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex-1">
+          <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
+            {person.nombre}
+            {llamadoPasado && !person.en_canal && (
+              <span className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse" title="Hora de llamado ya pasó"></span>
+            )}
+            {person.en_canal && (
+              <span className="w-3 h-3 bg-green-500 rounded-full" title="En canal"></span>
+            )}
+          </h3>
+          {person.role && (
+            <p className="text-sm text-gray-600">{person.role}</p>
+          )}
+        </div>
+        <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${
+          person.en_canal ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'
+        }`}>
+          <StatusIcon size={14} />
+          {status.text}
+        </div>
+      </div>
+
+      <div className="bg-gray-50 rounded-lg p-3 mt-2">
+        <div className="flex items-center justify-between">
+          {person.turno && (
+            <div className="flex items-center gap-2">
+              <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                person.turno === 'MAÑANA' ? 'bg-amber-100 text-amber-700' :
+                person.turno === 'TARDE' ? 'bg-blue-100 text-blue-700' :
+                'bg-purple-100 text-purple-700'
+              }`}>
+                {person.turno}
+              </span>
+              {person.turno_horario && (
+                <span className="text-xs text-gray-500">
+                  {person.turno_horario}
+                </span>
+              )}
+            </div>
+          )}
+
+          {person.hora_llamado && (
+            <div className="flex items-center gap-1">
+              <Clock size={14} className={llamadoPasado ? 'text-orange-500' : 'text-gray-500'} />
+              <span className={`font-bold ${llamadoPasado ? 'text-orange-600' : 'text-gray-700'}`}>
+                Llamado: {person.hora_llamado}
+              </span>
+              {llamadoPasado && !person.en_canal && (
+                <span className="text-xs text-orange-500">(pendiente)</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Información de VIAJE (desde novedad_info) - PRIORIDAD 1 */}
+      {person.novedad_info && person.novedad_info.tipo === 'VIAJE' && (
+        <div className="mt-2 p-2 bg-orange-500 text-white rounded shadow-sm">
+          <p className="font-bold text-[11px]">✈️ EN TERRENO (VIAJE/EVENTO)</p>
+        </div>
+      )}
+
+      {/* Información de despacho - PRIORIDAD 2 */}
+      {!person.en_viaje && person.en_despacho && person.despacho_info && (
+        <div className="mt-2 p-2 bg-blue-100 border-l-4 border-blue-500 rounded">
+          <p className="text-xs font-bold text-blue-700">
+            <Truck size={14} className="inline mr-1" />
+            EN DESPACHO
+          </p>
+          <p className="text-[10px] text-blue-600">Destino: {person.despacho_info.destino}</p>
+          <p className="text-[10px] text-blue-600">Vehículo: {person.despacho_info.vehiculo}</p>
+          {person.despacho_info.hora_salida && (
+            <p className="text-[10px] text-blue-600">Salida: {person.despacho_info.hora_salida}</p>
+          )}
+        </div>
+      )}
+
+      {/* Otras novedades (no viaje) - PRIORIDAD 3 */}
+      {person.novedad_info && person.novedad_info.tipo !== 'VIAJE' && !person.en_despacho && (
+        <div className="mt-2 p-2 bg-purple-100 border border-purple-300 rounded">
+          <p className="text-xs font-bold text-purple-900">
+            {person.novedad_info.tipo}
+          </p>
+          <p className="text-[10px] text-gray-700">
+            {person.novedad_info.descripcion}
+          </p>
+        </div>
+      )}
+    </div>
   );
 };

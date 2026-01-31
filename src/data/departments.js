@@ -30,6 +30,16 @@ export const DEPARTMENTS = {
     minStaff: 2,
     maxStaff: 4
   },
+
+  REALIZADORES: {
+    id: 'realizadores',
+    name: 'REALIZADORES',
+    color: '#7C3AED',
+    icon: '🎬',
+    roles: ['Realizador'],
+    minStaff: 4,
+    maxStaff: 8
+  },
   
   VTR: {
     id: 'vtr',
