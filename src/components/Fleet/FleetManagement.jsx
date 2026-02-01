@@ -1015,10 +1015,8 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
     vehicleId: dispatch?.vehicle_id || '',
     journalistId: dispatch?.journalist_id || '',
     journalistName: dispatch?.journalist_name || '',
-    cameramanId: dispatch?.cameraman_id || '',
-    cameramanName: dispatch?.cameraman_name || '',
-    assistantId: dispatch?.assistant_id || '',
-    assistantName: dispatch?.assistant_name || '',
+    cameramanIds: dispatch?.cameraman_ids || (dispatch?.cameraman_id ? [dispatch.cameraman_id] : []), // Array de IDs
+    assistantIds: dispatch?.assistant_ids || (dispatch?.assistant_id ? [dispatch.assistant_id] : []), // Array de IDs
     directorId: dispatch?.director_id || '',
     directorName: dispatch?.director_name || '',
     liveuId: dispatch?.liveu_id || '',
@@ -1030,6 +1028,7 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
     estimatedReturn: dispatch?.estimated_return || '',
     fechaInicio: dispatch?.fecha_inicio || selectedDate,
     fechaFin: dispatch?.fecha_fin || selectedDate,
+    conductorRetorna: dispatch?.conductor_retorna || false,
     notes: dispatch?.notes || '',
     status: dispatch?.status || 'PROGRAMADO',
   });
@@ -1039,11 +1038,24 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
   const currentDispatchId = dispatch?.id;
   const usedVehicleIds = new Set(activeDispatches.filter(d => d.id !== currentDispatchId).map(d => d.vehicle_id));
 
+  // Considerar tanto IDs individuales como arrays de IDs
   const usedCameramanIds = new Set(
-    activeDispatches.filter(d => d.id !== currentDispatchId && d.cameraman_id).map(d => d.cameraman_id)
+    activeDispatches
+      .filter(d => d.id !== currentDispatchId)
+      .flatMap(d => {
+        if (d.cameraman_ids && Array.isArray(d.cameraman_ids)) return d.cameraman_ids;
+        if (d.cameraman_id) return [d.cameraman_id];
+        return [];
+      })
   );
   const usedAssistantIds = new Set(
-    activeDispatches.filter(d => d.id !== currentDispatchId && d.assistant_id).map(d => d.assistant_id)
+    activeDispatches
+      .filter(d => d.id !== currentDispatchId)
+      .flatMap(d => {
+        if (d.assistant_ids && Array.isArray(d.assistant_ids)) return d.assistant_ids;
+        if (d.assistant_id) return [d.assistant_id];
+        return [];
+      })
   );
   const usedDirectorIds = new Set(
     activeDispatches.filter(d => d.id !== currentDispatchId && d.director_id).map(d => d.director_id)
@@ -1211,8 +1223,8 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
     const cleanedData = {
       ...formData,
       journalistId: formData.journalistId || null,
-      cameramanId: formData.cameramanId || null,
-      assistantId: formData.assistantId || null,
+      cameramanIds: formData.cameramanIds.length > 0 ? formData.cameramanIds : [],
+      assistantIds: formData.assistantIds.length > 0 ? formData.assistantIds : [],
       directorId: formData.directorId || null,
       liveuId: formData.liveuId || null,
     };
@@ -1324,106 +1336,160 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
               <p className="text-xs text-gray-500 mt-1">🌅 AM / 🌆 PM según rotación del día | 🔒 Bloqueados en despachos activos</p>
             </div>
 
-            {/* Camarógrafo (opcional) */}
+            {/* Camarógrafos (multiselección) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Camarógrafo (Opcional)
+                Camarógrafos (Multiselección)
               </label>
-              <select
-                value={formData.cameramanId}
-                onChange={(e) => handleCameramanChange(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Sin camarógrafo</option>
+              <div className="border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
                 {cameramenCombined.onDutyAM.length > 0 && (
-                  <optgroup label="🌅 EN TURNO AM">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🌅 EN TURNO AM</p>
                     {cameramenCombined.onDutyAM.map((cameraman) => (
-                      <option key={cameraman.id} value={cameraman.id}>{cameraman.full_name}</option>
+                      <label key={cameraman.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.cameramanIds.includes(cameraman.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.cameramanIds, cameraman.id]
+                              : formData.cameramanIds.filter(id => id !== cameraman.id);
+                            setFormData({ ...formData, cameramanIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{cameraman.full_name}</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
                 {cameramenCombined.onDutyPM.length > 0 && (
-                  <optgroup label="🌆 EN TURNO PM">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🌆 EN TURNO PM</p>
                     {cameramenCombined.onDutyPM.map((cameraman) => (
-                      <option key={cameraman.id} value={cameraman.id}>{cameraman.full_name}</option>
+                      <label key={cameraman.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.cameramanIds.includes(cameraman.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.cameramanIds, cameraman.id]
+                              : formData.cameramanIds.filter(id => id !== cameraman.id);
+                            setFormData({ ...formData, cameramanIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{cameraman.full_name}</span>
+                      </label>
                     ))}
-                  </optgroup>
-                )}
-                {cameramenCombined.onDutyOther.length > 0 && (
-                  <optgroup label="🟢 EN TURNO (Otros)">
-                    {cameramenCombined.onDutyOther.map((cameraman) => (
-                      <option key={cameraman.id} value={cameraman.id}>{cameraman.full_name}</option>
-                    ))}
-                  </optgroup>
+                  </div>
                 )}
                 {cameramenCombined.others.length > 0 && (
-                  <optgroup label="⚪ Eventuales">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">⚪ Otros Disponibles</p>
                     {cameramenCombined.others.map((cameraman) => (
-                      <option key={cameraman.id} value={cameraman.id}>{cameraman.full_name}</option>
+                      <label key={cameraman.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.cameramanIds.includes(cameraman.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.cameramanIds, cameraman.id]
+                              : formData.cameramanIds.filter(id => id !== cameraman.id);
+                            setFormData({ ...formData, cameramanIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{cameraman.full_name}</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
-                {cameramenCombined.inUse.length > 0 && (
-                  <optgroup label="🔒 EN USO (Bloqueados)">
-                    {cameramenCombined.inUse.map((cameraman) => (
-                      <option key={cameraman.id} value={cameraman.id} disabled>
-                        {cameraman.full_name} - EN DESPACHO ACTIVO
-                      </option>
-                    ))}
-                  </optgroup>
+                {formData.cameramanIds.length === 0 && (
+                  <p className="text-sm text-gray-500 italic">Ningún camarógrafo seleccionado</p>
                 )}
-              </select>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Seleccionados: {formData.cameramanIds.length}
+              </p>
             </div>
 
-            {/* Asistente de Reportería (opcional) */}
+            {/* Asistentes de Reportería (multiselección) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Asistente de Reportería (Opcional)
+                Asistentes de Reportería (Multiselección)
               </label>
-              <select
-                value={formData.assistantId}
-                onChange={(e) => handleAssistantChange(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Sin asistente</option>
+              <div className="border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
                 {assistantsCombined.onDutyAM.length > 0 && (
-                  <optgroup label="🌅 EN TURNO AM">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🌅 EN TURNO AM</p>
                     {assistantsCombined.onDutyAM.map((assistant) => (
-                      <option key={assistant.id} value={assistant.id}>{assistant.full_name}</option>
+                      <label key={assistant.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.assistantIds.includes(assistant.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.assistantIds, assistant.id]
+                              : formData.assistantIds.filter(id => id !== assistant.id);
+                            setFormData({ ...formData, assistantIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{assistant.full_name}</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
                 {assistantsCombined.onDutyPM.length > 0 && (
-                  <optgroup label="🌆 EN TURNO PM">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🌆 EN TURNO PM</p>
                     {assistantsCombined.onDutyPM.map((assistant) => (
-                      <option key={assistant.id} value={assistant.id}>{assistant.full_name}</option>
+                      <label key={assistant.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.assistantIds.includes(assistant.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.assistantIds, assistant.id]
+                              : formData.assistantIds.filter(id => id !== assistant.id);
+                            setFormData({ ...formData, assistantIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{assistant.full_name}</span>
+                      </label>
                     ))}
-                  </optgroup>
-                )}
-                {assistantsCombined.onDutyOther.length > 0 && (
-                  <optgroup label="🟢 EN TURNO (Otros)">
-                    {assistantsCombined.onDutyOther.map((assistant) => (
-                      <option key={assistant.id} value={assistant.id}>{assistant.full_name}</option>
-                    ))}
-                  </optgroup>
+                  </div>
                 )}
                 {assistantsCombined.others.length > 0 && (
-                  <optgroup label="⚪ Eventuales">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">⚪ Otros Disponibles</p>
                     {assistantsCombined.others.map((assistant) => (
-                      <option key={assistant.id} value={assistant.id}>{assistant.full_name}</option>
+                      <label key={assistant.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.assistantIds.includes(assistant.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.assistantIds, assistant.id]
+                              : formData.assistantIds.filter(id => id !== assistant.id);
+                            setFormData({ ...formData, assistantIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{assistant.full_name}</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
-                {assistantsCombined.inUse.length > 0 && (
-                  <optgroup label="🔒 EN USO (Bloqueados)">
-                    {assistantsCombined.inUse.map((assistant) => (
-                      <option key={assistant.id} value={assistant.id} disabled>
-                        {assistant.full_name} - EN DESPACHO ACTIVO
-                      </option>
-                    ))}
-                  </optgroup>
+                {formData.assistantIds.length === 0 && (
+                  <p className="text-sm text-gray-500 italic">Ningún asistente seleccionado</p>
                 )}
-              </select>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Seleccionados: {formData.assistantIds.length}
+              </p>
             </div>
 
             {/* Realizador (opcional) */}
@@ -1621,6 +1687,23 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
                 <option value="FINALIZADO">Finalizado</option>
                 <option value="CANCELADO">Cancelado</option>
               </select>
+            </div>
+
+            {/* Switch: Conductor Retorna */}
+            <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <input
+                type="checkbox"
+                id="conductorRetorna"
+                checked={formData.conductorRetorna}
+                onChange={(e) => setFormData({ ...formData, conductorRetorna: e.target.checked })}
+                className="w-5 h-5 text-blue-600"
+              />
+              <label htmlFor="conductorRetorna" className="text-sm font-medium text-gray-700 cursor-pointer">
+                🚗 ¿Conductor y vehículo retornan al canal?
+                <p className="text-xs text-gray-600 mt-1">
+                  Si se marca, el conductor y vehículo quedarán disponibles tras 1 hora de la salida
+                </p>
+              </label>
             </div>
           </div>
 

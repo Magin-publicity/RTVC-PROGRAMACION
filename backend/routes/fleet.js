@@ -150,7 +150,16 @@ router.get('/dispatches/:date', async (req, res) => {
         pd.*,
         fv.vehicle_code,
         fv.vehicle_type,
-        fv.capacity
+        fv.capacity,
+        -- Arrays de IDs de personal
+        COALESCE(
+          (SELECT array_agg(personnel_id) FROM press_dispatch_personnel WHERE dispatch_id = pd.id AND role = 'CAMERAMAN'),
+          ARRAY[]::integer[]
+        ) as cameraman_ids,
+        COALESCE(
+          (SELECT array_agg(personnel_id) FROM press_dispatch_personnel WHERE dispatch_id = pd.id AND role = 'ASSISTANT'),
+          ARRAY[]::integer[]
+        ) as assistant_ids
       FROM press_dispatches pd
       JOIN fleet_vehicles fv ON fv.id = pd.vehicle_id
       WHERE $1::date BETWEEN pd.fecha_inicio AND pd.fecha_fin
@@ -175,10 +184,8 @@ router.post('/dispatches', async (req, res) => {
       vehicleId,
       journalistId,
       journalistName,
-      cameramanId,
-      cameramanName,
-      assistantId,
-      assistantName,
+      cameramanIds = [], // Array de IDs
+      assistantIds = [],  // Array de IDs
       directorId,
       directorName,
       liveuId,
@@ -190,6 +197,7 @@ router.post('/dispatches', async (req, res) => {
       estimatedReturn,
       fechaInicio,
       fechaFin,
+      conductorRetorna = false,
       notes
     } = req.body;
 
@@ -197,23 +205,48 @@ router.post('/dispatches', async (req, res) => {
       return res.status(400).json({ error: 'Faltan parámetros requeridos: fecha, vehículo, conductor, placa, destino, hora de salida y fechas de inicio/fin' });
     }
 
+    // Calcular hora de retorno del conductor (1 hora después de la salida)
+    const [hora, minuto] = departureTime.split(':');
+    const horaRetorno = new Date();
+    horaRetorno.setHours(parseInt(hora) + 1, parseInt(minuto));
+    const horaRetornoConductor = `${String(horaRetorno.getHours()).padStart(2, '0')}:${String(horaRetorno.getMinutes()).padStart(2, '0')}`;
+
+    // Insertar despacho principal
     const result = await pool.query(`
       INSERT INTO press_dispatches (
-        date, vehicle_id, journalist_id, journalist_name, cameraman_id, cameraman_name,
-        assistant_id, assistant_name, director_id, director_name,
+        date, vehicle_id, journalist_id, journalist_name,
+        director_id, director_name,
         liveu_id, liveu_code,
         driver_name, vehicle_plate, destination, departure_time, estimated_return,
-        fecha_inicio, fecha_fin, destino, notes, status
+        fecha_inicio, fecha_fin, destino, conductor_retorna, hora_retorno_conductor, notes, status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $15, $20, 'PROGRAMADO')
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $11, $16, $17, $18, 'PROGRAMADO')
       RETURNING *
-    `, [date, vehicleId, journalistId, journalistName, cameramanId, cameramanName,
-        assistantId, assistantName, directorId, directorName,
+    `, [date, vehicleId, journalistId, journalistName,
+        directorId, directorName,
         liveuId, liveuCode,
         driverName, vehiclePlate, destination, departureTime, estimatedReturn,
-        fechaInicio, fechaFin, notes]);
+        fechaInicio, fechaFin, conductorRetorna, horaRetornoConductor, notes]);
 
-    console.log(`✅ Despacho creado: ${journalistName} → ${destination} a las ${departureTime}${liveuCode ? ` [LiveU: ${liveuCode}]` : ''}`);
+    const dispatchId = result.rows[0].id;
+
+    // Insertar relaciones de camarógrafos
+    for (const cameramanId of cameramanIds) {
+      await pool.query(`
+        INSERT INTO press_dispatch_personnel (dispatch_id, personnel_id, role)
+        VALUES ($1, $2, 'CAMERAMAN')
+      `, [dispatchId, cameramanId]);
+    }
+
+    // Insertar relaciones de asistentes
+    for (const assistantId of assistantIds) {
+      await pool.query(`
+        INSERT INTO press_dispatch_personnel (dispatch_id, personnel_id, role)
+        VALUES ($1, $2, 'ASSISTANT')
+      `, [dispatchId, assistantId]);
+    }
+
+    console.log(`✅ Despacho creado: ${journalistName} → ${destination} [${cameramanIds.length} camarógrafos, ${assistantIds.length} asistentes]`);
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error creando despacho:', error);
@@ -230,10 +263,8 @@ router.put('/dispatches/:id', async (req, res) => {
     const { id } = req.params;
     const {
       journalistName,
-      cameramanId,
-      cameramanName,
-      assistantId,
-      assistantName,
+      cameramanIds = [],
+      assistantIds = [],
       directorId,
       directorName,
       liveuId,
@@ -246,38 +277,68 @@ router.put('/dispatches/:id', async (req, res) => {
       actualReturn,
       fechaInicio,
       fechaFin,
+      conductorRetorna,
       status,
       notes
     } = req.body;
+
+    // Calcular hora de retorno del conductor si se proporciona departureTime
+    let horaRetornoConductor = null;
+    if (departureTime) {
+      const [hora, minuto] = departureTime.split(':');
+      const horaRetorno = new Date();
+      horaRetorno.setHours(parseInt(hora) + 1, parseInt(minuto));
+      horaRetornoConductor = `${String(horaRetorno.getHours()).padStart(2, '0')}:${String(horaRetorno.getMinutes()).padStart(2, '0')}`;
+    }
 
     const result = await pool.query(`
       UPDATE press_dispatches
       SET
         journalist_name = COALESCE($1, journalist_name),
-        cameraman_id = COALESCE($2, cameraman_id),
-        cameraman_name = COALESCE($3, cameraman_name),
-        assistant_id = COALESCE($4, assistant_id),
-        assistant_name = COALESCE($5, assistant_name),
-        director_id = COALESCE($6, director_id),
-        director_name = COALESCE($7, director_name),
-        liveu_id = COALESCE($8, liveu_id),
-        liveu_code = COALESCE($9, liveu_code),
-        driver_name = COALESCE($10, driver_name),
-        vehicle_plate = COALESCE($11, vehicle_plate),
-        destination = COALESCE($12, destination),
-        destino = COALESCE($12, destino),
-        departure_time = COALESCE($13, departure_time),
-        estimated_return = COALESCE($14, estimated_return),
-        actual_return = COALESCE($15, actual_return),
-        fecha_inicio = COALESCE($16, fecha_inicio),
-        fecha_fin = COALESCE($17, fecha_fin),
-        status = COALESCE($18, status),
-        notes = COALESCE($19, notes),
+        director_id = COALESCE($2, director_id),
+        director_name = COALESCE($3, director_name),
+        liveu_id = COALESCE($4, liveu_id),
+        liveu_code = COALESCE($5, liveu_code),
+        driver_name = COALESCE($6, driver_name),
+        vehicle_plate = COALESCE($7, vehicle_plate),
+        destination = COALESCE($8, destination),
+        destino = COALESCE($8, destino),
+        departure_time = COALESCE($9, departure_time),
+        estimated_return = COALESCE($10, estimated_return),
+        actual_return = COALESCE($11, actual_return),
+        fecha_inicio = COALESCE($12, fecha_inicio),
+        fecha_fin = COALESCE($13, fecha_fin),
+        conductor_retorna = COALESCE($14, conductor_retorna),
+        hora_retorno_conductor = COALESCE($15, hora_retorno_conductor),
+        status = COALESCE($16, status),
+        notes = COALESCE($17, notes),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $20
+      WHERE id = $18
       RETURNING *
-    `, [journalistName, cameramanId, cameramanName, assistantId, assistantName, directorId, directorName, liveuId, liveuCode, driverName, vehiclePlate, destination,
-        departureTime, estimatedReturn, actualReturn, fechaInicio, fechaFin, status, notes, id]);
+    `, [journalistName, directorId, directorName, liveuId, liveuCode, driverName, vehiclePlate, destination,
+        departureTime, estimatedReturn, actualReturn, fechaInicio, fechaFin, conductorRetorna, horaRetornoConductor, status, notes, id]);
+
+    // Actualizar relaciones de personal: eliminar las antiguas e insertar las nuevas
+    if (cameramanIds.length >= 0 || assistantIds.length >= 0) {
+      // Eliminar relaciones antiguas
+      await pool.query('DELETE FROM press_dispatch_personnel WHERE dispatch_id = $1', [id]);
+
+      // Insertar nuevas relaciones de camarógrafos
+      for (const cameramanId of cameramanIds) {
+        await pool.query(`
+          INSERT INTO press_dispatch_personnel (dispatch_id, personnel_id, role)
+          VALUES ($1, $2, 'CAMERAMAN')
+        `, [id, cameramanId]);
+      }
+
+      // Insertar nuevas relaciones de asistentes
+      for (const assistantId of assistantIds) {
+        await pool.query(`
+          INSERT INTO press_dispatch_personnel (dispatch_id, personnel_id, role)
+          VALUES ($1, $2, 'ASSISTANT')
+        `, [id, assistantId]);
+      }
+    }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Despacho no encontrado' });
