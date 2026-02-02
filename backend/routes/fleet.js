@@ -548,7 +548,7 @@ router.post('/vehicles', async (req, res) => {
 router.put('/vehicles/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, status } = req.body;
+    const { vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, status, notes } = req.body;
 
     const result = await pool.query(`
       UPDATE fleet_vehicles
@@ -560,16 +560,17 @@ router.put('/vehicles/:id', async (req, res) => {
         driver_phone = COALESCE($5, driver_phone),
         plate = COALESCE($6, plate),
         status = COALESCE($7, status),
+        notes = COALESCE($8, notes),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $8 AND is_active = true
+      WHERE id = $9 AND is_active = true
       RETURNING *
-    `, [vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, status, id]);
+    `, [vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, status, notes, id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Vehículo no encontrado' });
     }
 
-    console.log(`✅ Vehículo actualizado: ${result.rows[0].vehicle_code}`);
+    console.log(`✅ Vehículo actualizado: ${result.rows[0].vehicle_code} - Status: ${status || 'sin cambio'}`);
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error actualizando vehículo:', error);

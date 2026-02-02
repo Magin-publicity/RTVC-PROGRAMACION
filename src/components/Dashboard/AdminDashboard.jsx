@@ -23,6 +23,10 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
   const [showRealizadoresModal, setShowRealizadoresModal] = useState(false);
   const [showAsistentesModal, setShowAsistentesModal] = useState(false);
   const [showFlotaModal, setShowFlotaModal] = useState(false);
+  const [showQuickStatusModal, setShowQuickStatusModal] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [targetStatus, setTargetStatus] = useState(null);
+  const [statusObservation, setStatusObservation] = useState('');
   const [camarografosDetalle, setCamarografosDetalle] = useState([]);
   const [realizadoresDetalle, setRealizadoresDetalle] = useState([]);
   const [asistentesDetalle, setAsistentesDetalle] = useState([]);
@@ -292,6 +296,67 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
     } catch (error) {
       console.error('Error al editar LiveU:', error);
       alert('Error al editar equipo LiveU');
+    }
+  };
+
+  // Función para cambio rápido de estado de vehículo
+  const handleQuickStatusChange = (vehiculo, status) => {
+    setSelectedVehicle(vehiculo);
+    setTargetStatus(status);
+    setStatusObservation('');
+    setShowQuickStatusModal(true);
+  };
+
+  // Función para confirmar cambio de estado
+  const confirmQuickStatusChange = async () => {
+    if (!selectedVehicle || !targetStatus) return;
+
+    try {
+      const response = await fetch(`/api/fleet/vehicles/${selectedVehicle.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: targetStatus,
+          notes: statusObservation || 'Cambio rápido de estado desde dashboard'
+        }),
+      });
+
+      if (response.ok) {
+        // Recargar datos de flota
+        const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+
+        // Recargar estadísticas
+        const statsResponse = await fetch(`/api/fleet/stats?date=${fecha}&t=${Date.now()}`);
+        const statsData = await statsResponse.json();
+        setFleetStats(statsData);
+
+        // Recargar vehículos
+        const vehiclesResponse = await fetch(`/api/fleet/vehicles?t=${Date.now()}`, {
+          cache: 'no-cache',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        const vehiclesData = await vehiclesResponse.json();
+        setFleetVehicles(vehiclesData);
+
+        // Cerrar modales
+        setShowQuickStatusModal(false);
+        setSelectedVehicle(null);
+        setTargetStatus(null);
+        setStatusObservation('');
+
+        alert('Estado del vehículo actualizado correctamente');
+      } else {
+        const error = await response.json();
+        alert(`Error al actualizar estado: ${error.error || 'Error desconocido'}`);
+      }
+    } catch (error) {
+      console.error('Error al cambiar estado del vehículo:', error);
+      alert('Error al actualizar estado del vehículo');
     }
   };
 
@@ -1768,6 +1833,34 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
                             <p className="text-sm text-gray-700">{vehiculo.notes}</p>
                           </div>
                         )}
+
+                        {/* Acciones Rápidas */}
+                        <div className="mt-3 pt-3 border-t border-gray-200 flex gap-2">
+                          {vehiculo.status === 'DISPONIBLE' && (
+                            <button
+                              onClick={() => handleQuickStatusChange(vehiculo, 'EN_RUTA')}
+                              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium py-2 px-3 rounded transition-all"
+                            >
+                              🚗 Marcar En Ruta
+                            </button>
+                          )}
+                          {vehiculo.status === 'EN_RUTA' && (
+                            <button
+                              onClick={() => handleQuickStatusChange(vehiculo, 'DISPONIBLE')}
+                              className="flex-1 bg-green-500 hover:bg-green-600 text-white text-xs font-medium py-2 px-3 rounded transition-all"
+                            >
+                              ✅ Volver a Canal
+                            </button>
+                          )}
+                          {vehiculo.status === 'DISPONIBLE' && (
+                            <button
+                              onClick={() => handleQuickStatusChange(vehiculo, 'MANTENIMIENTO')}
+                              className="flex-1 bg-red-500 hover:bg-red-600 text-white text-xs font-medium py-2 px-3 rounded transition-all"
+                            >
+                              🔧 Mantenimiento
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1782,6 +1875,82 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
                 className="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-6 rounded-lg transition-all"
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Observación para Cambio Rápido de Estado */}
+      {showQuickStatusModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 rounded-t-lg">
+              <h3 className="text-lg font-bold">
+                {targetStatus === 'EN_RUTA' && '🚗 Marcar Vehículo En Ruta'}
+                {targetStatus === 'DISPONIBLE' && '✅ Volver Vehículo a Canal'}
+                {targetStatus === 'MANTENIMIENTO' && '🔧 Enviar a Mantenimiento'}
+              </h3>
+              <p className="text-sm text-blue-100 mt-1">
+                {selectedVehicle?.plate} - {selectedVehicle?.driver_name}
+              </p>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Observación {targetStatus === 'EN_RUTA' ? '(requerida)' : '(opcional)'}
+              </label>
+              <textarea
+                value={statusObservation}
+                onChange={(e) => setStatusObservation(e.target.value)}
+                placeholder={
+                  targetStatus === 'EN_RUTA'
+                    ? 'Ej: Comisión urgente a Tunja - Cobertura emergencia'
+                    : targetStatus === 'MANTENIMIENTO'
+                    ? 'Ej: Cambio de aceite programado'
+                    : 'Observación opcional'
+                }
+                className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                rows="4"
+              />
+
+              {targetStatus === 'EN_RUTA' && (
+                <p className="mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                  ⚠️ <strong>Nota:</strong> Este cambio manual no crea un despacho oficial.
+                  Use el módulo de Despachos para registro completo con destino y hora de retorno.
+                </p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-4 rounded-b-lg flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowQuickStatusModal(false);
+                  setSelectedVehicle(null);
+                  setTargetStatus(null);
+                  setStatusObservation('');
+                }}
+                className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmQuickStatusChange}
+                disabled={targetStatus === 'EN_RUTA' && !statusObservation.trim()}
+                className={`font-medium py-2 px-4 rounded-lg transition-all ${
+                  targetStatus === 'EN_RUTA' && !statusObservation.trim()
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : targetStatus === 'EN_RUTA'
+                    ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                    : targetStatus === 'MANTENIMIENTO'
+                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                    : 'bg-green-500 hover:bg-green-600 text-white'
+                }`}
+              >
+                Confirmar
               </button>
             </div>
           </div>
