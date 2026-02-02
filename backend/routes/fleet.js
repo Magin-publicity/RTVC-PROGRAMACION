@@ -706,24 +706,17 @@ router.get('/detalle/:fecha', async (req, res) => {
     const detalle = vehiculos.map(veh => {
       const despacho = despachos.find(d => d.vehicle_id === veh.id);
 
-      // Mapear estados
-      const estadoMap = {
-        'AVAILABLE': 'DISPONIBLE',
-        'IN_ROUTE': 'EN_RUTA',
-        'MAINTENANCE': 'MANTENIMIENTO',
-        'REPORTING': 'EN_REPORTERIA'
-      };
-
       return {
         id: veh.id,
         vehicle_code: veh.vehicle_code,
         plate_number: veh.vehicle_code, // Usar vehicle_code como placa
         type: veh.type,
         capacity: veh.capacity,
-        status: despacho ? 'EN_RUTA' : (estadoMap[veh.status] || veh.status),
+        status: despacho ? 'IN_ROUTE' : veh.status, // Mantener valores en inglés
         driver_name: veh.driver_name,
         driver_phone: veh.driver_phone,
         current_location: veh.current_location,
+        notes: veh.notes,
         despacho: despacho ? {
           periodista: despacho.journalist_name,
           destino: despacho.destination,

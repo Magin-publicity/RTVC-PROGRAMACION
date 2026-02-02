@@ -111,7 +111,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
           }
         });
         const allVehicles = await vehiclesResponse.json();
-        const totalVehicles = allVehicles.filter(v => v.is_active && v.status === 'DISPONIBLE').length;
+        const totalVehicles = allVehicles.filter(v => v.is_active && v.status === 'AVAILABLE').length;
         console.log('📋 Total vehículos activos:', totalVehicles);
 
         // Obtener despachos del día
