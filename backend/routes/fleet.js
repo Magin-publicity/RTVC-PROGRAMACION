@@ -186,9 +186,11 @@ router.post('/dispatches', async (req, res) => {
       journalistName,
       cameramanIds = [], // Array de IDs
       assistantIds = [],  // Array de IDs
-      directorId,
+      directorIds = [], // Array de IDs (nuevo)
+      liveuIds = [], // Array de IDs (nuevo)
+      directorId, // Mantener compatibilidad
       directorName,
-      liveuId,
+      liveuId, // Mantener compatibilidad
       liveuCode,
       driverName,
       vehiclePlate,
@@ -201,6 +203,10 @@ router.post('/dispatches', async (req, res) => {
       notes
     } = req.body;
 
+    // Convertir IDs únicos a arrays si vienen en formato antiguo
+    const finalDirectorIds = directorIds.length > 0 ? directorIds : (directorId ? [directorId] : []);
+    const finalLiveuIds = liveuIds.length > 0 ? liveuIds : (liveuId ? [liveuId] : []);
+
     if (!date || !vehicleId || !driverName || !vehiclePlate || !destination || !departureTime || !fechaInicio || !fechaFin) {
       return res.status(400).json({ error: 'Faltan parámetros requeridos: fecha, vehículo, conductor, placa, destino, hora de salida y fechas de inicio/fin' });
     }
@@ -211,7 +217,7 @@ router.post('/dispatches', async (req, res) => {
     horaRetorno.setHours(parseInt(hora) + 1, parseInt(minuto));
     const horaRetornoConductor = `${String(horaRetorno.getHours()).padStart(2, '0')}:${String(horaRetorno.getMinutes()).padStart(2, '0')}`;
 
-    // Insertar despacho principal
+    // Insertar despacho principal (usar primer director/liveu para compatibilidad)
     const result = await pool.query(`
       INSERT INTO press_dispatches (
         date, vehicle_id, journalist_id, journalist_name,
@@ -223,8 +229,8 @@ router.post('/dispatches', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $11, $16, $17, $18, 'PROGRAMADO')
       RETURNING *
     `, [date, vehicleId, journalistId, journalistName,
-        directorId, directorName,
-        liveuId, liveuCode,
+        finalDirectorIds[0] || null, directorName,
+        finalLiveuIds[0] || null, liveuCode,
         driverName, vehiclePlate, destination, departureTime, estimatedReturn,
         fechaInicio, fechaFin, conductorRetorna, horaRetornoConductor, notes]);
 
@@ -246,7 +252,23 @@ router.post('/dispatches', async (req, res) => {
       `, [dispatchId, assistantId]);
     }
 
-    console.log(`✅ Despacho creado: ${journalistName} → ${destination} [${cameramanIds.length} camarógrafos, ${assistantIds.length} asistentes]`);
+    // Insertar relaciones de realizadores
+    for (const directorId of finalDirectorIds) {
+      await pool.query(`
+        INSERT INTO press_dispatch_personnel (dispatch_id, personnel_id, role)
+        VALUES ($1, $2, 'DIRECTOR')
+      `, [dispatchId, directorId]);
+    }
+
+    // Insertar relaciones de LiveU (guardar como EQUIPMENT)
+    for (const liveuId of finalLiveuIds) {
+      await pool.query(`
+        INSERT INTO press_dispatch_personnel (dispatch_id, personnel_id, role)
+        VALUES ($1, $2, 'LIVEU')
+      `, [dispatchId, liveuId]);
+    }
+
+    console.log(`✅ Despacho creado: ${journalistName} → ${destination} [${cameramanIds.length} camarógrafos, ${assistantIds.length} asistentes, ${finalDirectorIds.length} realizadores, ${finalLiveuIds.length} LiveU]`);
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error creando despacho:', error);
@@ -265,9 +287,11 @@ router.put('/dispatches/:id', async (req, res) => {
       journalistName,
       cameramanIds = [],
       assistantIds = [],
-      directorId,
+      directorIds = [], // Array nuevo
+      liveuIds = [], // Array nuevo
+      directorId, // Compatibilidad
       directorName,
-      liveuId,
+      liveuId, // Compatibilidad
       liveuCode,
       driverName,
       vehiclePlate,
@@ -281,6 +305,10 @@ router.put('/dispatches/:id', async (req, res) => {
       status,
       notes
     } = req.body;
+
+    // Convertir IDs únicos a arrays si vienen en formato antiguo
+    const finalDirectorIds = directorIds.length > 0 ? directorIds : (directorId ? [directorId] : []);
+    const finalLiveuIds = liveuIds.length > 0 ? liveuIds : (liveuId ? [liveuId] : []);
 
     // Calcular hora de retorno del conductor si se proporciona departureTime
     let horaRetornoConductor = null;
@@ -315,7 +343,7 @@ router.put('/dispatches/:id', async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $18
       RETURNING *
-    `, [journalistName, directorId, directorName, liveuId, liveuCode, driverName, vehiclePlate, destination,
+    `, [journalistName, finalDirectorIds[0] || null, directorName, finalLiveuIds[0] || null, liveuCode, driverName, vehiclePlate, destination,
         departureTime, estimatedReturn, actualReturn, fechaInicio, fechaFin, conductorRetorna, horaRetornoConductor, status, notes, id]);
 
     // Actualizar relaciones de personal: eliminar las antiguas e insertar las nuevas
@@ -338,13 +366,29 @@ router.put('/dispatches/:id', async (req, res) => {
           VALUES ($1, $2, 'ASSISTANT')
         `, [id, assistantId]);
       }
+
+      // Insertar nuevas relaciones de realizadores
+      for (const directorId of finalDirectorIds) {
+        await pool.query(`
+          INSERT INTO press_dispatch_personnel (dispatch_id, personnel_id, role)
+          VALUES ($1, $2, 'DIRECTOR')
+        `, [id, directorId]);
+      }
+
+      // Insertar nuevas relaciones de LiveU
+      for (const liveuId of finalLiveuIds) {
+        await pool.query(`
+          INSERT INTO press_dispatch_personnel (dispatch_id, personnel_id, role)
+          VALUES ($1, $2, 'LIVEU')
+        `, [id, liveuId]);
+      }
     }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Despacho no encontrado' });
     }
 
-    console.log(`✅ Despacho ${id} actualizado`);
+    console.log(`✅ Despacho ${id} actualizado [${cameramanIds.length} camarógrafos, ${assistantIds.length} asistentes, ${finalDirectorIds.length} realizadores, ${finalLiveuIds.length} LiveU]`);
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error actualizando despacho:', error);

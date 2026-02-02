@@ -1017,10 +1017,9 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
     journalistName: dispatch?.journalist_name || '',
     cameramanIds: dispatch?.cameraman_ids || (dispatch?.cameraman_id ? [dispatch.cameraman_id] : []), // Array de IDs
     assistantIds: dispatch?.assistant_ids || (dispatch?.assistant_id ? [dispatch.assistant_id] : []), // Array de IDs
-    directorId: dispatch?.director_id || '',
-    directorName: dispatch?.director_name || '',
-    liveuId: dispatch?.liveu_id || '',
-    liveuCode: dispatch?.liveu_code || '',
+    directorIds: dispatch?.director_ids || (dispatch?.director_id ? [dispatch.director_id] : []), // Array de IDs
+    liveuIds: dispatch?.liveu_ids || (dispatch?.liveu_id ? [dispatch.liveu_id] : []), // Array de IDs
+    driverIds: dispatch?.driver_ids || [], // Array de IDs de conductores
     driverName: dispatch?.driver_name || '',
     vehiclePlate: dispatch?.vehicle_plate || '',
     destination: dispatch?.destination || '',
@@ -1492,89 +1491,168 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
               </p>
             </div>
 
-            {/* Realizador (opcional) */}
+            {/* Realizadores (opcional, multiselección) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Realizador (Opcional)
+                Realizadores (Opcional, puedes seleccionar varios)
               </label>
-              <select
-                value={formData.directorId}
-                onChange={(e) => handleDirectorChange(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Sin realizador</option>
+              <div className="border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
                 {directorsCombined.onDutyAM.length > 0 && (
-                  <optgroup label="🌅 EN TURNO AM">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🌅 EN TURNO AM</p>
                     {directorsCombined.onDutyAM.map((director) => (
-                      <option key={director.id} value={director.id}>{director.full_name}</option>
+                      <label key={director.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.directorIds.includes(director.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.directorIds, director.id]
+                              : formData.directorIds.filter(id => id !== director.id);
+                            setFormData({ ...formData, directorIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{director.full_name}</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
                 {directorsCombined.onDutyPM.length > 0 && (
-                  <optgroup label="🌆 EN TURNO PM">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🌆 EN TURNO PM</p>
                     {directorsCombined.onDutyPM.map((director) => (
-                      <option key={director.id} value={director.id}>{director.full_name}</option>
+                      <label key={director.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.directorIds.includes(director.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.directorIds, director.id]
+                              : formData.directorIds.filter(id => id !== director.id);
+                            setFormData({ ...formData, directorIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{director.full_name}</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
                 {directorsCombined.onDutyOther.length > 0 && (
-                  <optgroup label="🟢 EN TURNO (Otros)">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🟢 EN TURNO (Otros)</p>
                     {directorsCombined.onDutyOther.map((director) => (
-                      <option key={director.id} value={director.id}>{director.full_name}</option>
+                      <label key={director.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.directorIds.includes(director.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.directorIds, director.id]
+                              : formData.directorIds.filter(id => id !== director.id);
+                            setFormData({ ...formData, directorIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{director.full_name}</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
                 {directorsCombined.others.length > 0 && (
-                  <optgroup label="⚪ Eventuales">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">⚪ Eventuales</p>
                     {directorsCombined.others.map((director) => (
-                      <option key={director.id} value={director.id}>{director.full_name}</option>
+                      <label key={director.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.directorIds.includes(director.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.directorIds, director.id]
+                              : formData.directorIds.filter(id => id !== director.id);
+                            setFormData({ ...formData, directorIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{director.full_name}</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
                 {directorsCombined.inUse.length > 0 && (
-                  <optgroup label="🔒 EN USO (Bloqueados)">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🔒 EN USO</p>
                     {directorsCombined.inUse.map((director) => (
-                      <option key={director.id} value={director.id} disabled>
-                        {director.full_name} - EN DESPACHO ACTIVO
-                      </option>
+                      <label key={director.id} className="flex items-center gap-2 py-1 opacity-50 cursor-not-allowed">
+                        <input
+                          type="checkbox"
+                          disabled
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{director.full_name} - EN DESPACHO</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
-              </select>
+                {directorsCombined.onDutyAM.length === 0 && directorsCombined.onDutyPM.length === 0 && directorsCombined.onDutyOther.length === 0 && directorsCombined.others.length === 0 && (
+                  <p className="text-sm text-gray-500 italic">Ningún realizador disponible</p>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Seleccionados: {formData.directorIds.length}
+              </p>
             </div>
 
-            {/* LiveU Equipment */}
+            {/* LiveU Equipment (multiselección) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Equipo LiveU (Opcional)
+                Equipos LiveU (Opcional, puedes seleccionar varios)
               </label>
-              <select
-                value={formData.liveuId}
-                onChange={(e) => handleLiveuChange(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Sin LiveU</option>
+              <div className="border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
                 {availableLiveu.length > 0 && (
-                  <optgroup label="✅ DISPONIBLES">
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">✅ DISPONIBLES</p>
                     {availableLiveu.map((liveu) => (
-                      <option key={liveu.id} value={liveu.id}>
-                        📡 {liveu.equipment_code}
-                      </option>
+                      <label key={liveu.id} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.liveuIds.includes(liveu.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.liveuIds, liveu.id]
+                              : formData.liveuIds.filter(id => id !== liveu.id);
+                            setFormData({ ...formData, liveuIds: newIds });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">📡 {liveu.equipment_code}</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
                 {usedLiveuIds.size > 0 && liveuEquipment.filter(l => usedLiveuIds.has(l.id)).length > 0 && (
-                  <optgroup label="🔒 EN USO (Bloqueados)">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-1">🔒 EN USO</p>
                     {liveuEquipment.filter(l => usedLiveuIds.has(l.id)).map((liveu) => (
-                      <option key={liveu.id} value={liveu.id} disabled>
-                        📡 {liveu.equipment_code} - EN DESPACHO ACTIVO
-                      </option>
+                      <label key={liveu.id} className="flex items-center gap-2 py-1 opacity-50 cursor-not-allowed">
+                        <input
+                          type="checkbox"
+                          disabled
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">📡 {liveu.equipment_code} - EN DESPACHO</span>
+                      </label>
                     ))}
-                  </optgroup>
+                  </div>
                 )}
-              </select>
+                {availableLiveu.length === 0 && usedLiveuIds.size === 0 && (
+                  <p className="text-sm text-gray-500 italic">Ningún equipo LiveU disponible</p>
+                )}
+              </div>
               <p className="text-xs text-gray-500 mt-1">
-                {availableLiveu.length} de {liveuEquipment.length} equipos disponibles
+                Seleccionados: {formData.liveuIds.length} | Disponibles: {availableLiveu.length} de {liveuEquipment.length}
               </p>
             </div>
 
