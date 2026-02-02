@@ -550,12 +550,20 @@ router.put('/vehicles/:id', async (req, res) => {
     const { id } = req.params;
     const { vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, status, notes } = req.body;
 
+    // Primero obtener el vehículo actual para comparar vehicle_code
+    const currentVehicle = await pool.query('SELECT * FROM fleet_vehicles WHERE id = $1 AND is_active = true', [id]);
+
+    if (currentVehicle.rows.length === 0) {
+      return res.status(404).json({ error: 'Vehículo no encontrado' });
+    }
+
     // Construir la consulta dinámicamente solo con campos presentes
     const updates = [];
     const values = [];
     let paramCount = 1;
 
-    if (vehicleCode !== undefined) {
+    // Solo actualizar vehicle_code si cambió
+    if (vehicleCode !== undefined && vehicleCode !== currentVehicle.rows[0].vehicle_code) {
       updates.push(`vehicle_code = $${paramCount++}`);
       values.push(vehicleCode);
     }
@@ -575,7 +583,8 @@ router.put('/vehicles/:id', async (req, res) => {
       updates.push(`driver_phone = $${paramCount++}`);
       values.push(driverPhone);
     }
-    if (plate !== undefined) {
+    // Solo actualizar plate si cambió
+    if (plate !== undefined && plate !== currentVehicle.rows[0].plate) {
       updates.push(`plate = $${paramCount++}`);
       values.push(plate);
     }
@@ -604,10 +613,6 @@ router.put('/vehicles/:id', async (req, res) => {
     `;
 
     const result = await pool.query(query, values);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Vehículo no encontrado' });
-    }
 
     console.log(`✅ Vehículo actualizado: ${result.rows[0].vehicle_code} - Status: ${status || 'sin cambio'}`);
     res.json(result.rows[0]);
