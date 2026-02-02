@@ -98,16 +98,17 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
       try {
         console.log('🚐 Consultando flota para fecha:', fecha);
 
-        // Obtener vehículos disponibles
-        const availabilityResponse = await fetch(`/api/fleet/availability/${fecha}?t=${Date.now()}`, {
+        // Obtener TODOS los vehículos activos
+        const vehiclesResponse = await fetch(`/api/fleet/vehicles?t=${Date.now()}`, {
           cache: 'no-cache',
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
           }
         });
-        const availabilityData = await availabilityResponse.json();
-        console.log('📋 Availability data:', availabilityData);
+        const allVehicles = await vehiclesResponse.json();
+        const totalVehicles = allVehicles.filter(v => v.is_active && v.status === 'DISPONIBLE').length;
+        console.log('📋 Total vehículos activos:', totalVehicles);
 
         // Obtener despachos del día
         const dispatchesResponse = await fetch(`/api/fleet/dispatches/${fecha}?t=${Date.now()}`, {
@@ -119,9 +120,6 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         });
         const dispatchesData = await dispatchesResponse.json();
         console.log('📋 Dispatches data:', dispatchesData);
-
-        // Calcular estadísticas considerando retorno de conductores
-        const available = availabilityData.filter(a => a.status === 'DISPONIBLE').length;
 
         // Filtrar despachos que aún están activos (considerar hora de retorno)
         const now = new Date();
@@ -141,12 +139,12 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         const dispatched = activeDispatches.length;
 
         setFleetStats({
-          enCanal: available - dispatched, // Restar los despachados activos de los disponibles
+          enCanal: totalVehicles - dispatched, // Total vehículos menos los despachados
           despachados: dispatched,
-          total: available
+          total: totalVehicles
         });
 
-        console.log('🚐 Estadísticas de flota:', { fecha, available, dispatched, availabilityCount: availabilityData.length, dispatchesCount: dispatchesData.length });
+        console.log('🚐 Estadísticas de flota:', { fecha, totalVehicles, dispatched, dispatchesCount: dispatchesData.length });
       } catch (error) {
         console.error('❌ Error al cargar estadísticas de flota:', error);
         setFleetStats({
