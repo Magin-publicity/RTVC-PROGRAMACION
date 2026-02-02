@@ -2142,7 +2142,7 @@ router.get('/personnel-by-area/:date', async (req, res) => {
           pd.departure_time,
           pd.conductor_retorna,
           pd.hora_retorno_conductor,
-          v.license_plate,
+          v.plate as license_plate,
           pdp.role
         FROM press_dispatches pd
         JOIN press_dispatch_personnel pdp ON pd.id = pdp.dispatch_id
@@ -2313,7 +2313,7 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
           pd.departure_time,
           pd.conductor_retorna,
           pd.hora_retorno_conductor,
-          v.license_plate,
+          v.plate as license_plate,
           pdp.role
         FROM press_dispatches pd
         JOIN press_dispatch_personnel pdp ON pd.id = pdp.dispatch_id
