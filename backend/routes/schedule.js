@@ -2132,30 +2132,31 @@ router.get('/personnel-by-area/:date', async (req, res) => {
       noveltiesMap[n.personnel_id] = n;
     });
 
-    // 4. Obtener despachos activos del día (si existe la tabla)
+    // 4. Obtener despachos activos del día (con lógica de retorno de conductor)
     let dispatchesMap = {};
     try {
       const dispatchesResult = await pool.query(`
-        SELECT
-          fd.personnel_id,
-          fd.destination,
-          fd.departure_time,
-          v.license_plate
-        FROM fleet_dispatches fd
-        LEFT JOIN fleet_vehicles v ON fd.vehicle_id = v.id
-        WHERE (
-            (fd.fecha_inicio IS NOT NULL AND fd.fecha_fin IS NOT NULL AND $1::date BETWEEN fd.fecha_inicio AND fd.fecha_fin)
-            OR (fd.fecha_inicio IS NULL AND fd.date = $1)
-          )
-          AND fd.status IN ('PROGRAMADO', 'EN_RUTA')
+        SELECT DISTINCT
+          pdp.personnel_id,
+          pd.destination,
+          pd.departure_time,
+          pd.conductor_retorna,
+          pd.hora_retorno_conductor,
+          v.license_plate,
+          pdp.role
+        FROM press_dispatches pd
+        JOIN press_dispatch_personnel pdp ON pd.id = pdp.dispatch_id
+        LEFT JOIN fleet_vehicles v ON pd.vehicle_id = v.id
+        WHERE $1::date BETWEEN pd.fecha_inicio AND pd.fecha_fin
+          AND pd.status IN ('PROGRAMADO', 'EN_RUTA')
       `, [date]);
 
       dispatchesResult.rows.forEach(d => {
         dispatchesMap[d.personnel_id] = d;
       });
+      console.log(`   🚗 Obtenidos ${dispatchesResult.rows.length} despachos de personal (personnel-by-area)`);
     } catch (error) {
-      // Tabla fleet_dispatches no existe aún, continuar sin despachos
-      console.log('ℹ️  Tabla fleet_dispatches no disponible, continuando sin información de despachos');
+      console.log('ℹ️  Error al obtener despachos (personnel-by-area):', error.message);
     }
 
     // 5. Agrupar por área y calcular estadísticas
