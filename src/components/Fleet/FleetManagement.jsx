@@ -1021,6 +1021,7 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
     liveuIds: dispatch?.liveu_ids || (dispatch?.liveu_id ? [dispatch.liveu_id] : []), // Array de IDs
     driverIds: dispatch?.driver_ids || [], // Array de IDs de conductores
     driverName: dispatch?.driver_name || '',
+    driverPhone: dispatch?.driver_phone || '',
     vehiclePlate: dispatch?.vehicle_plate || '',
     destination: dispatch?.destination || '',
     departureTime: dispatch?.departure_time || '09:00',
@@ -1670,22 +1671,43 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
                     return <p className="text-sm text-gray-500 italic">No hay conductores disponibles</p>;
                   }
 
-                  return uniqueDrivers.map((driverName, index) => (
-                    <label key={index} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.driverIds.includes(driverName)}
-                        onChange={(e) => {
-                          const newIds = e.target.checked
-                            ? [...formData.driverIds, driverName]
-                            : formData.driverIds.filter(id => id !== driverName);
-                          setFormData({ ...formData, driverIds: newIds });
-                        }}
-                        className="w-4 h-4"
-                      />
-                      <span className="text-sm">{driverName}</span>
-                    </label>
-                  ));
+                  return uniqueDrivers.map((driverName, index) => {
+                    // Buscar vehículo asociado a este conductor
+                    const driverVehicle = vehicles.find(v => v.driver_name === driverName);
+
+                    return (
+                      <label key={index} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.driverIds.includes(driverName)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.driverIds, driverName]
+                              : formData.driverIds.filter(id => id !== driverName);
+
+                            // Si es el primer conductor seleccionado, autocompletar placa y teléfono
+                            if (e.target.checked && newIds.length === 1 && driverVehicle) {
+                              setFormData({
+                                ...formData,
+                                driverIds: newIds,
+                                vehiclePlate: driverVehicle.plate || '',
+                                driverPhone: driverVehicle.driver_phone || ''
+                              });
+                            } else {
+                              setFormData({ ...formData, driverIds: newIds });
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{driverName}</span>
+                        {driverVehicle && (
+                          <span className="text-xs text-gray-500 ml-auto">
+                            {driverVehicle.plate} • {driverVehicle.driver_phone || 'Sin teléfono'}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  });
                 })()}
               </div>
               <p className="text-xs text-gray-500 mt-1">
@@ -1705,7 +1727,22 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
                 placeholder="Placa"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
               />
-              <p className="text-xs text-gray-500 mt-1">Se autocompletó del vehículo, puede modificarlo</p>
+              <p className="text-xs text-gray-500 mt-1">Se autocompletó del conductor seleccionado</p>
+            </div>
+
+            {/* Teléfono del Conductor */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Teléfono del Conductor
+              </label>
+              <input
+                type="tel"
+                value={formData.driverPhone}
+                onChange={(e) => setFormData({ ...formData, driverPhone: e.target.value })}
+                placeholder="Teléfono"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
+              />
+              <p className="text-xs text-gray-500 mt-1">Se autocompletó del conductor seleccionado</p>
             </div>
 
             {/* Hora de Salida */}
