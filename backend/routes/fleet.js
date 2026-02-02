@@ -188,11 +188,12 @@ router.post('/dispatches', async (req, res) => {
       assistantIds = [],  // Array de IDs
       directorIds = [], // Array de IDs (nuevo)
       liveuIds = [], // Array de IDs (nuevo)
+      driverIds = [], // Array de nombres de conductores
       directorId, // Mantener compatibilidad
       directorName,
       liveuId, // Mantener compatibilidad
       liveuCode,
-      driverName,
+      driverName, // Mantener compatibilidad
       vehiclePlate,
       destination,
       departureTime,
@@ -206,8 +207,12 @@ router.post('/dispatches', async (req, res) => {
     // Convertir IDs únicos a arrays si vienen en formato antiguo
     const finalDirectorIds = directorIds.length > 0 ? directorIds : (directorId ? [directorId] : []);
     const finalLiveuIds = liveuIds.length > 0 ? liveuIds : (liveuId ? [liveuId] : []);
+    const finalDriverNames = driverIds.length > 0 ? driverIds : (driverName ? [driverName] : []);
 
-    if (!date || !vehicleId || !driverName || !vehiclePlate || !destination || !departureTime || !fechaInicio || !fechaFin) {
+    // Concatenar conductores para campo principal (separados por coma)
+    const primaryDriverName = finalDriverNames.join(', ');
+
+    if (!date || !vehicleId || !primaryDriverName || !vehiclePlate || !destination || !departureTime || !fechaInicio || !fechaFin) {
       return res.status(400).json({ error: 'Faltan parámetros requeridos: fecha, vehículo, conductor, placa, destino, hora de salida y fechas de inicio/fin' });
     }
 
@@ -231,7 +236,7 @@ router.post('/dispatches', async (req, res) => {
     `, [date, vehicleId, journalistId, journalistName,
         finalDirectorIds[0] || null, directorName,
         finalLiveuIds[0] || null, liveuCode,
-        driverName, vehiclePlate, destination, departureTime, estimatedReturn,
+        primaryDriverName, vehiclePlate, destination, departureTime, estimatedReturn,
         fechaInicio, fechaFin, conductorRetorna, horaRetornoConductor, notes]);
 
     const dispatchId = result.rows[0].id;
@@ -289,11 +294,12 @@ router.put('/dispatches/:id', async (req, res) => {
       assistantIds = [],
       directorIds = [], // Array nuevo
       liveuIds = [], // Array nuevo
+      driverIds = [], // Array de conductores
       directorId, // Compatibilidad
       directorName,
       liveuId, // Compatibilidad
       liveuCode,
-      driverName,
+      driverName, // Compatibilidad
       vehiclePlate,
       destination,
       departureTime,
@@ -309,6 +315,10 @@ router.put('/dispatches/:id', async (req, res) => {
     // Convertir IDs únicos a arrays si vienen en formato antiguo
     const finalDirectorIds = directorIds.length > 0 ? directorIds : (directorId ? [directorId] : []);
     const finalLiveuIds = liveuIds.length > 0 ? liveuIds : (liveuId ? [liveuId] : []);
+    const finalDriverNames = driverIds.length > 0 ? driverIds : (driverName ? [driverName] : []);
+
+    // Concatenar conductores
+    const primaryDriverName = finalDriverNames.join(', ');
 
     // Calcular hora de retorno del conductor si se proporciona departureTime
     let horaRetornoConductor = null;
@@ -343,7 +353,7 @@ router.put('/dispatches/:id', async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $18
       RETURNING *
-    `, [journalistName, finalDirectorIds[0] || null, directorName, finalLiveuIds[0] || null, liveuCode, driverName, vehiclePlate, destination,
+    `, [journalistName, finalDirectorIds[0] || null, directorName, finalLiveuIds[0] || null, liveuCode, primaryDriverName, vehiclePlate, destination,
         departureTime, estimatedReturn, actualReturn, fechaInicio, fechaFin, conductorRetorna, horaRetornoConductor, status, notes, id]);
 
     // Actualizar relaciones de personal: eliminar las antiguas e insertar las nuevas

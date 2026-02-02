@@ -1656,19 +1656,41 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
               </p>
             </div>
 
-            {/* Conductor */}
+            {/* Conductores (multiselección) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Conductor
+                Conductores (puedes seleccionar varios)
               </label>
-              <input
-                type="text"
-                value={formData.driverName}
-                onChange={(e) => setFormData({ ...formData, driverName: e.target.value })}
-                placeholder="Nombre del conductor"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
-              />
-              <p className="text-xs text-gray-500 mt-1">Se autocompletó del vehículo, puede modificarlo</p>
+              <div className="border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
+                {(() => {
+                  // Extraer conductores únicos de los vehículos
+                  const uniqueDrivers = [...new Set(vehicles.filter(v => v.driver_name).map(v => v.driver_name))].sort();
+
+                  if (uniqueDrivers.length === 0) {
+                    return <p className="text-sm text-gray-500 italic">No hay conductores disponibles</p>;
+                  }
+
+                  return uniqueDrivers.map((driverName, index) => (
+                    <label key={index} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.driverIds.includes(driverName)}
+                        onChange={(e) => {
+                          const newIds = e.target.checked
+                            ? [...formData.driverIds, driverName]
+                            : formData.driverIds.filter(id => id !== driverName);
+                          setFormData({ ...formData, driverIds: newIds });
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm">{driverName}</span>
+                    </label>
+                  ));
+                })()}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Seleccionados: {formData.driverIds.length}
+              </p>
             </div>
 
             {/* Placa */}
