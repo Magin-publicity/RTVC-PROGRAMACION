@@ -550,21 +550,60 @@ router.put('/vehicles/:id', async (req, res) => {
     const { id } = req.params;
     const { vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, status, notes } = req.body;
 
-    const result = await pool.query(`
+    // Construir la consulta dinámicamente solo con campos presentes
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
+
+    if (vehicleCode !== undefined) {
+      updates.push(`vehicle_code = $${paramCount++}`);
+      values.push(vehicleCode);
+    }
+    if (vehicleType !== undefined) {
+      updates.push(`vehicle_type = $${paramCount++}`);
+      values.push(vehicleType);
+    }
+    if (capacity !== undefined) {
+      updates.push(`capacity = $${paramCount++}`);
+      values.push(capacity);
+    }
+    if (driverName !== undefined) {
+      updates.push(`driver_name = $${paramCount++}`);
+      values.push(driverName);
+    }
+    if (driverPhone !== undefined) {
+      updates.push(`driver_phone = $${paramCount++}`);
+      values.push(driverPhone);
+    }
+    if (plate !== undefined) {
+      updates.push(`plate = $${paramCount++}`);
+      values.push(plate);
+    }
+    if (status !== undefined) {
+      updates.push(`status = $${paramCount++}`);
+      values.push(status);
+    }
+    if (notes !== undefined) {
+      updates.push(`notes = $${paramCount++}`);
+      values.push(notes);
+    }
+
+    // Siempre actualizar updated_at
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+
+    if (updates.length === 1) {
+      return res.status(400).json({ error: 'No hay campos para actualizar' });
+    }
+
+    values.push(id);
+    const query = `
       UPDATE fleet_vehicles
-      SET
-        vehicle_code = COALESCE($1, vehicle_code),
-        vehicle_type = COALESCE($2, vehicle_type),
-        capacity = COALESCE($3, capacity),
-        driver_name = COALESCE($4, driver_name),
-        driver_phone = COALESCE($5, driver_phone),
-        plate = COALESCE($6, plate),
-        status = COALESCE($7, status),
-        notes = COALESCE($8, notes),
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $9 AND is_active = true
+      SET ${updates.join(', ')}
+      WHERE id = $${paramCount} AND is_active = true
       RETURNING *
-    `, [vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, status, notes, id]);
+    `;
+
+    const result = await pool.query(query, values);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Vehículo no encontrado' });
