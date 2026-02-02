@@ -145,6 +145,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
   const [lastSaved, setLastSaved] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // 🚨 Indica si hay cambios sin guardar
   const isUpdatingFromSocket = useRef(false);
+  const [dispatches, setDispatches] = useState([]); // 🚗 Despachos activos para la fecha
 
   // 🚨 Refs para detectar cambios REALES (no solo carga de datos)
   const previousAssignments = useRef(null);
@@ -314,6 +315,52 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
           setIsFromSnapshot(false);
           setSnapshotMetadata(null);
           setAutoShifts(shiftsData);
+        }
+
+        // PASO 4: Cargar despachos activos para la fecha
+        try {
+          const dispatchesRes = await fetch(`${API_URL}/fleet/dispatches/${dateStr}`);
+          const dispatchesData = await dispatchesRes.json();
+
+          if (isCancelled) return;
+
+          // Crear un mapa de personnel_id -> dispatch info
+          const dispatchMap = {};
+
+          dispatchesData.forEach(dispatch => {
+            const dispatchInfo = {
+              destino: dispatch.destino || dispatch.destination,
+              fecha_inicio: dispatch.fecha_inicio,
+              fecha_fin: dispatch.fecha_fin,
+              departure_time: dispatch.departure_time
+            };
+
+            // Agregar camarógrafos
+            (dispatch.cameraman_ids || []).forEach(id => {
+              dispatchMap[id] = { ...dispatchInfo, role: 'CAMERAMAN' };
+            });
+
+            // Agregar asistentes
+            (dispatch.assistant_ids || []).forEach(id => {
+              dispatchMap[id] = { ...dispatchInfo, role: 'ASSISTANT' };
+            });
+
+            // Agregar periodista si existe
+            if (dispatch.journalist_id) {
+              dispatchMap[dispatch.journalist_id] = { ...dispatchInfo, role: 'JOURNALIST' };
+            }
+
+            // Agregar director si existe
+            if (dispatch.director_id) {
+              dispatchMap[dispatch.director_id] = { ...dispatchInfo, role: 'DIRECTOR' };
+            }
+          });
+
+          setDispatches(dispatchMap);
+          console.log('✅ [ScheduleTable] Despachos cargados:', Object.keys(dispatchMap).length, 'personas en despacho');
+        } catch (error) {
+          console.error('❌ Error cargando despachos:', error);
+          setDispatches({});
         }
 
         // NO usar programas de BD - siempre usar programs.js
@@ -2212,7 +2259,15 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                         let textColor = '#000000';
                         let isSinContrato = false;
 
-                        if (todayNovelty) {
+                        // Verificar si esta persona tiene un despacho activo
+                        const personDispatch = dispatches[person.id];
+
+                        if (personDispatch) {
+                          // Persona está en despacho - pintar en verde con destino
+                          cellText = personDispatch.destino || 'EN TERRENO';
+                          bgColor = 'rgb(0, 251, 58)'; // Verde (igual que viajes)
+                          textColor = '#000000';
+                        } else if (todayNovelty) {
                           // Verificar si la novedad es "SIN_CONTRATO"
                           if (todayNovelty.type === 'SIN_CONTRATO') {
                             // Si es sin contrato, dejar todo en blanco

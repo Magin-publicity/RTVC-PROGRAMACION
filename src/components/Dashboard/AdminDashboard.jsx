@@ -120,12 +120,28 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         const dispatchesData = await dispatchesResponse.json();
         console.log('📋 Dispatches data:', dispatchesData);
 
-        // Calcular estadísticas
+        // Calcular estadísticas considerando retorno de conductores
         const available = availabilityData.filter(a => a.status === 'DISPONIBLE').length;
-        const dispatched = dispatchesData.filter(d => d.status === 'EN_RUTA' || d.status === 'PROGRAMADO').length;
+
+        // Filtrar despachos que aún están activos (considerar hora de retorno)
+        const now = new Date();
+        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+        const activeDispatches = dispatchesData.filter(d => {
+          if (d.status !== 'EN_RUTA' && d.status !== 'PROGRAMADO') return false;
+
+          // Si el conductor retorna y ya pasó la hora, el vehículo ya no está despachado
+          if (d.conductor_retorna && d.hora_retorno_conductor && currentTime >= d.hora_retorno_conductor) {
+            return false;
+          }
+
+          return true;
+        });
+
+        const dispatched = activeDispatches.length;
 
         setFleetStats({
-          enCanal: available - dispatched, // 🆕 Restar los despachados de los disponibles
+          enCanal: available - dispatched, // Restar los despachados activos de los disponibles
           despachados: dispatched,
           total: available
         });

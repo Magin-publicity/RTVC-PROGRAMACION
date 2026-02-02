@@ -2302,30 +2302,32 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
       noveltiesMap[n.personnel_id] = n;
     });
 
-    // 5. Obtener despachos activos (si existe la tabla)
+    // 5. Obtener despachos activos (con lógica de retorno de conductor)
     let dispatchesMap = {};
     try {
       const dispatchesResult = await pool.query(`
-        SELECT
-          fd.personnel_id,
-          fd.destination,
-          fd.departure_time,
-          v.license_plate
-        FROM fleet_dispatches fd
-        LEFT JOIN fleet_vehicles v ON fd.vehicle_id = v.id
-        WHERE fd.personnel_id = ANY($1::int[])
-          AND (
-            (fd.fecha_inicio IS NOT NULL AND fd.fecha_fin IS NOT NULL AND $2::date BETWEEN fd.fecha_inicio AND fd.fecha_fin)
-            OR (fd.fecha_inicio IS NULL AND fd.date = $2)
-          )
-          AND fd.status IN ('PROGRAMADO', 'EN_RUTA')
+        SELECT DISTINCT
+          pdp.personnel_id,
+          pd.destination,
+          pd.departure_time,
+          pd.conductor_retorna,
+          pd.hora_retorno_conductor,
+          v.license_plate,
+          pdp.role
+        FROM press_dispatches pd
+        JOIN press_dispatch_personnel pdp ON pd.id = pdp.dispatch_id
+        LEFT JOIN fleet_vehicles v ON pd.vehicle_id = v.id
+        WHERE pdp.personnel_id = ANY($1::int[])
+          AND $2::date BETWEEN pd.fecha_inicio AND pd.fecha_fin
+          AND pd.status IN ('PROGRAMADO', 'EN_RUTA')
       `, [personnelResult.rows.map(p => p.id), date]);
 
       dispatchesResult.rows.forEach(d => {
         dispatchesMap[d.personnel_id] = d;
       });
+      console.log(`   🚗 Obtenidos ${dispatchesResult.rows.length} despachos de personal`);
     } catch (error) {
-      console.log('ℹ️  Tabla fleet_dispatches no disponible');
+      console.log('ℹ️  Error al obtener despachos:', error.message);
     }
 
 
@@ -2392,7 +2394,22 @@ router.get('/area-personnel-details/:date/:areaName', async (req, res) => {
         en_canal: enCanal,
         en_despacho: !!dispatch,
         en_viaje: (novelty?.type.toLowerCase().includes('viaje')) || false,
-        en_terreno: !!dispatch,
+        en_terreno: (() => {
+          if (!dispatch) return false;
+
+          // Si el conductor retorna y ya pasó la hora de retorno, verificar el rol
+          if (dispatch.conductor_retorna && dispatch.hora_retorno_conductor && dispatch.role === 'DRIVER') {
+            const now = new Date();
+            const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            // Si ya pasó la hora de retorno, el conductor NO está en terreno
+            if (currentTime >= dispatch.hora_retorno_conductor) {
+              return false;
+            }
+          }
+
+          return true; // Sigue en terreno
+        })(),
         despacho_info: dispatch ? {
           destino: dispatch.destination,
           vehiculo: dispatch.license_plate,
