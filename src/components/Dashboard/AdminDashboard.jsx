@@ -1759,23 +1759,23 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {flotaDetalle.map((vehiculo) => {
                     const estadoColors = {
-                      'DISPONIBLE': 'bg-green-50 border-green-300',
-                      'EN_RUTA': 'bg-orange-50 border-orange-300',
-                      'MANTENIMIENTO': 'bg-red-50 border-red-300',
+                      'AVAILABLE': 'bg-green-50 border-green-300',
+                      'IN_ROUTE': 'bg-orange-50 border-orange-300',
+                      'MAINTENANCE': 'bg-red-50 border-red-300',
                       'FUERA_DE_SERVICIO': 'bg-gray-50 border-gray-300'
                     };
 
                     const estadoBadge = {
-                      'DISPONIBLE': 'bg-green-500 text-white',
-                      'EN_RUTA': 'bg-orange-500 text-white',
-                      'MANTENIMIENTO': 'bg-red-500 text-white',
+                      'AVAILABLE': 'bg-green-500 text-white',
+                      'IN_ROUTE': 'bg-orange-500 text-white',
+                      'MAINTENANCE': 'bg-red-500 text-white',
                       'FUERA_DE_SERVICIO': 'bg-gray-500 text-white'
                     };
 
                     const estadoText = {
-                      'DISPONIBLE': '🟢 En Canal',
-                      'EN_RUTA': '🟠 En Ruta',
-                      'MANTENIMIENTO': '🔴 Mantenimiento',
+                      'AVAILABLE': '🟢 En Canal',
+                      'IN_ROUTE': '🟠 En Ruta',
+                      'MAINTENANCE': '🔴 Mantenimiento',
                       'FUERA_DE_SERVICIO': '⚫ Fuera de Servicio'
                     };
 
@@ -1811,7 +1811,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
                         </div>
 
                         {/* Información de despacho si está en ruta */}
-                        {vehiculo.status === 'EN_RUTA' && vehiculo.despacho && (
+                        {vehiculo.status === 'IN_ROUTE' && vehiculo.despacho && (
                           <div className="bg-white bg-opacity-70 rounded p-3 border-l-4 border-orange-500">
                             <p className="text-xs font-semibold text-orange-900 mb-1">🚗 Despacho Activo:</p>
                             <p className="text-sm text-gray-700">
@@ -1827,7 +1827,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
                         )}
 
                         {/* Notas de mantenimiento */}
-                        {vehiculo.status === 'MANTENIMIENTO' && vehiculo.notes && (
+                        {vehiculo.status === 'MAINTENANCE' && vehiculo.notes && (
                           <div className="bg-white bg-opacity-70 rounded p-3 border-l-4 border-red-500">
                             <p className="text-xs font-semibold text-red-900 mb-1">🔧 En Mantenimiento:</p>
                             <p className="text-sm text-gray-700">{vehiculo.notes}</p>
@@ -1836,25 +1836,25 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
 
                         {/* Acciones Rápidas */}
                         <div className="mt-3 pt-3 border-t border-gray-200 flex gap-2">
-                          {vehiculo.status === 'DISPONIBLE' && (
+                          {vehiculo.status === 'AVAILABLE' && (
                             <button
-                              onClick={() => handleQuickStatusChange(vehiculo, 'EN_RUTA')}
+                              onClick={() => handleQuickStatusChange(vehiculo, 'IN_ROUTE')}
                               className="flex-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium py-2 px-3 rounded transition-all"
                             >
                               🚗 Marcar En Ruta
                             </button>
                           )}
-                          {vehiculo.status === 'EN_RUTA' && (
+                          {vehiculo.status === 'IN_ROUTE' && (
                             <button
-                              onClick={() => handleQuickStatusChange(vehiculo, 'DISPONIBLE')}
+                              onClick={() => handleQuickStatusChange(vehiculo, 'AVAILABLE')}
                               className="flex-1 bg-green-500 hover:bg-green-600 text-white text-xs font-medium py-2 px-3 rounded transition-all"
                             >
                               ✅ Volver a Canal
                             </button>
                           )}
-                          {vehiculo.status === 'DISPONIBLE' && (
+                          {vehiculo.status === 'AVAILABLE' && (
                             <button
-                              onClick={() => handleQuickStatusChange(vehiculo, 'MANTENIMIENTO')}
+                              onClick={() => handleQuickStatusChange(vehiculo, 'MAINTENANCE')}
                               className="flex-1 bg-red-500 hover:bg-red-600 text-white text-xs font-medium py-2 px-3 rounded transition-all"
                             >
                               🔧 Mantenimiento
@@ -1888,9 +1888,9 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
             {/* Header */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 rounded-t-lg">
               <h3 className="text-lg font-bold">
-                {targetStatus === 'EN_RUTA' && '🚗 Marcar Vehículo En Ruta'}
-                {targetStatus === 'DISPONIBLE' && '✅ Volver Vehículo a Canal'}
-                {targetStatus === 'MANTENIMIENTO' && '🔧 Enviar a Mantenimiento'}
+                {targetStatus === 'IN_ROUTE' && '🚗 Marcar Vehículo En Ruta'}
+                {targetStatus === 'AVAILABLE' && '✅ Volver Vehículo a Canal'}
+                {targetStatus === 'MAINTENANCE' && '🔧 Enviar a Mantenimiento'}
               </h3>
               <p className="text-sm text-blue-100 mt-1">
                 {selectedVehicle?.plate} - {selectedVehicle?.driver_name}
@@ -1900,15 +1900,15 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
             {/* Body */}
             <div className="p-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Observación {targetStatus === 'EN_RUTA' ? '(requerida)' : '(opcional)'}
+                Observación {targetStatus === 'IN_ROUTE' ? '(requerida)' : '(opcional)'}
               </label>
               <textarea
                 value={statusObservation}
                 onChange={(e) => setStatusObservation(e.target.value)}
                 placeholder={
-                  targetStatus === 'EN_RUTA'
+                  targetStatus === 'IN_ROUTE'
                     ? 'Ej: Comisión urgente a Tunja - Cobertura emergencia'
-                    : targetStatus === 'MANTENIMIENTO'
+                    : targetStatus === 'MAINTENANCE'
                     ? 'Ej: Cambio de aceite programado'
                     : 'Observación opcional'
                 }
@@ -1916,7 +1916,7 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
                 rows="4"
               />
 
-              {targetStatus === 'EN_RUTA' && (
+              {targetStatus === 'IN_ROUTE' && (
                 <p className="mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
                   ⚠️ <strong>Nota:</strong> Este cambio manual no crea un despacho oficial.
                   Use el módulo de Despachos para registro completo con destino y hora de retorno.
@@ -1939,13 +1939,13 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
               </button>
               <button
                 onClick={confirmQuickStatusChange}
-                disabled={targetStatus === 'EN_RUTA' && !statusObservation.trim()}
+                disabled={targetStatus === 'IN_ROUTE' && !statusObservation.trim()}
                 className={`font-medium py-2 px-4 rounded-lg transition-all ${
-                  targetStatus === 'EN_RUTA' && !statusObservation.trim()
+                  targetStatus === 'IN_ROUTE' && !statusObservation.trim()
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : targetStatus === 'EN_RUTA'
+                    : targetStatus === 'IN_ROUTE'
                     ? 'bg-orange-500 hover:bg-orange-600 text-white'
-                    : targetStatus === 'MANTENIMIENTO'
+                    : targetStatus === 'MAINTENANCE'
                     ? 'bg-red-500 hover:bg-red-600 text-white'
                     : 'bg-green-500 hover:bg-green-600 text-white'
                 }`}

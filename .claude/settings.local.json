@@ -50,7 +50,8 @@
       "Bash(grep:*)",
       "Bash(start http://localhost:5174)",
       "Bash(cat:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(lsof:*)"
     ],
     "deny": [],
     "ask": []
