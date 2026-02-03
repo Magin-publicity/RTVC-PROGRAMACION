@@ -17,7 +17,10 @@ const LOGISTICS_AREAS = [
   { value: 'INGENIEROS MASTER', label: '🎛️ Ingenieros Master', icon: '🎛️' },
   { value: 'ALMACEN', label: '📦 Almacén', icon: '📦' },
   { value: 'PRODUCTORES', label: '🎬 Productores', icon: '🎬' },
-  { value: 'DIRECTORES', label: '👔 Directores', icon: '👔' }
+  { value: 'DIRECTORES', label: '👔 Directores', icon: '👔' },
+  { value: 'ARCHIVO', label: '🗄️ Archivo', icon: '🗄️' },
+  { value: 'GRAFICADOR', label: '🎨 Graficador', icon: '🎨' },
+  { value: 'EDITOR', label: '✂️ Editor', icon: '✂️' }
 ];
 
 // Componente de tarjeta para personal logístico (idéntico a PersonnelCard pero sin turno)

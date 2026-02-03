@@ -327,11 +327,6 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         // Recargar datos de flota
         const fecha = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
 
-        // Recargar estadísticas
-        const statsResponse = await fetch(`/api/fleet/stats?date=${fecha}&t=${Date.now()}`);
-        const statsData = await statsResponse.json();
-        setFleetStats(statsData);
-
         // Recargar vehículos
         const vehiclesResponse = await fetch(`/api/fleet/vehicles?t=${Date.now()}`, {
           cache: 'no-cache',
@@ -343,7 +338,28 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
         const vehiclesData = await vehiclesResponse.json();
         setFleetVehicles(vehiclesData);
 
-        // Cerrar modales
+        // Recalcular estadísticas basándose en los vehículos
+        const totalVehicles = vehiclesData.filter(v => v.is_active && v.status === 'AVAILABLE').length;
+        const dispatchedCount = vehiclesData.filter(v => v.is_active && v.status === 'IN_ROUTE').length;
+
+        setFleetStats({
+          enCanal: totalVehicles,
+          despachados: dispatchedCount,
+          total: totalVehicles + dispatchedCount
+        });
+
+        // Recargar detalle de flota para actualizar el modal
+        const detalleResponse = await fetch(`/api/fleet/detalle/${fecha}?t=${Date.now()}`, {
+          cache: 'no-cache',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        const detalleData = await detalleResponse.json();
+        setFlotaDetalle(detalleData);
+
+        // Cerrar modal de observación pero mantener modal de flota abierto
         setShowQuickStatusModal(false);
         setSelectedVehicle(null);
         setTargetStatus(null);
