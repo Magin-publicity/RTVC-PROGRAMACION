@@ -51,7 +51,8 @@
       "Bash(start http://localhost:5174)",
       "Bash(cat:*)",
       "Bash(ls:*)",
-      "Bash(lsof:*)"
+      "Bash(lsof:*)",
+      "Bash(npm uninstall:*)"
     ],
     "deny": [],
     "ask": []
