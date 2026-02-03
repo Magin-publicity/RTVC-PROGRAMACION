@@ -22,6 +22,7 @@ import {
 import { analyticsService } from '../../services/analyticsService';
 import { generateVehicleDispatchMessage, shareViaWhatsApp } from '../../utils/whatsappShare';
 import { MessageCircle } from 'lucide-react';
+import * as XLSX from 'xlsx-js-style';
 
 const API_URL = '/api';
 
@@ -332,6 +333,515 @@ export const RoutesManagement = () => {
     }
   };
 
+  const handleExportExcel = () => {
+    if (optimizedRoutes.length === 0) {
+      alert('No hay rutas para exportar');
+      return;
+    }
+
+    // Formatear la fecha
+    const [year, month, day] = selectedDate.split('-');
+    const formattedDate = `${day}/${month}/${year}`;
+
+    // Obtener nombre del día de la semana
+    const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const dateObj = new Date(selectedDate + 'T12:00:00');
+    const diaSemana = diasSemana[dateObj.getDay()];
+    const fechaLarga = `${diaSemana}, ${day} de ${meses[parseInt(month) - 1]} de ${year}`;
+
+    // Determinar turno para mostrar
+    const turnoDisplay = shiftType === 'AM' ? 'MAÑANA (06:00)' : shiftType === 'PM' ? 'NOCTURNO (22:00)' : shiftType;
+
+    // Estilos comunes
+    const greenHeaderStyle = {
+      fill: { fgColor: { rgb: "22C55E" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    const grayHeaderStyle = {
+      fill: { fgColor: { rgb: "E5E7EB" } },
+      font: { bold: true, color: { rgb: "374151" }, sz: 10 },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "9CA3AF" } },
+        bottom: { style: "thin", color: { rgb: "9CA3AF" } },
+        left: { style: "thin", color: { rgb: "9CA3AF" } },
+        right: { style: "thin", color: { rgb: "9CA3AF" } }
+      }
+    };
+
+    const cellStyle = {
+      font: { sz: 10 },
+      alignment: { vertical: "center", wrapText: true },
+      border: {
+        top: { style: "thin", color: { rgb: "D1D5DB" } },
+        bottom: { style: "thin", color: { rgb: "D1D5DB" } },
+        left: { style: "thin", color: { rgb: "D1D5DB" } },
+        right: { style: "thin", color: { rgb: "D1D5DB" } }
+      }
+    };
+
+    const blueInfoStyle = {
+      fill: { fgColor: { rgb: "DBEAFE" } },
+      font: { sz: 9, color: { rgb: "1E40AF" } },
+      alignment: { vertical: "center", wrapText: true },
+      border: {
+        top: { style: "thin", color: { rgb: "93C5FD" } },
+        bottom: { style: "thin", color: { rgb: "93C5FD" } },
+        left: { style: "thin", color: { rgb: "93C5FD" } },
+        right: { style: "thin", color: { rgb: "93C5FD" } }
+      }
+    };
+
+    const yellowWarningStyle = {
+      fill: { fgColor: { rgb: "FEF3C7" } },
+      font: { bold: true, sz: 10, color: { rgb: "92400E" } },
+      alignment: { vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "FCD34D" } },
+        bottom: { style: "thin", color: { rgb: "FCD34D" } },
+        left: { style: "thin", color: { rgb: "FCD34D" } },
+        right: { style: "thin", color: { rgb: "FCD34D" } }
+      }
+    };
+
+    const greenVehicleStyle = {
+      fill: { fgColor: { rgb: "DCFCE7" } },
+      font: { sz: 11, bold: true, color: { rgb: "047857" } },
+      alignment: { vertical: "center", wrapText: true },
+      border: {
+        top: { style: "thin", color: { rgb: "86EFAC" } },
+        bottom: { style: "thin", color: { rgb: "86EFAC" } },
+        left: { style: "thin", color: { rgb: "86EFAC" } },
+        right: { style: "thin", color: { rgb: "86EFAC" } }
+      }
+    };
+
+    // Estilos para el encabezado oficial
+    const mainTitleStyle = {
+      font: { bold: true, sz: 14 },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    const sectionHeaderStyle = {
+      fill: { fgColor: { rgb: "D3D3D3" } },
+      font: { bold: true, sz: 10 },
+      alignment: { horizontal: "left", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    const dataRowStyle = {
+      font: { sz: 10 },
+      alignment: { horizontal: "left", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    const justifiedTextStyle = {
+      font: { sz: 10 },
+      alignment: { horizontal: "justify", vertical: "center", wrapText: true },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    const programNameStyle = {
+      font: { bold: true, sz: 11 },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    const eventInfoStyle = {
+      font: { sz: 10 },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    const greenBannerStyle = {
+      fill: { fgColor: { rgb: "22C55E" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 14 },
+      alignment: { horizontal: "center", vertical: "center" }
+    };
+
+    const tableAssignmentHeaderStyle = {
+      fill: { fgColor: { rgb: "4B5563" } },
+      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10 },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+
+    const assignmentCellStyle = {
+      font: { sz: 10 },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "D1D5DB" } },
+        bottom: { style: "thin", color: { rgb: "D1D5DB" } },
+        left: { style: "thin", color: { rgb: "D1D5DB" } },
+        right: { style: "thin", color: { rgb: "D1D5DB" } }
+      }
+    };
+
+    // Crear workbook
+    const wb = XLSX.utils.book_new();
+    const wsData = [];
+    const merges = [];
+    const rowStyles = {}; // Para rastrear estilos por fila
+
+    let currentRow = 0;
+
+    // === ENCABEZADO RTVC ===
+    // Fila 1: Título principal y fecha
+    wsData.push(['', '', 'REQUERIMIENTO DE SERVICIO DE TRANSPORTE', '', '', '', '', 'FECHA DE LA SOLICITUD:', formattedDate]);
+    merges.push({ s: { r: currentRow, c: 2 }, e: { r: currentRow, c: 6 } });
+    merges.push({ s: { r: currentRow, c: 7 }, e: { r: currentRow, c: 7 } });
+    rowStyles[currentRow] = 'mainTitle';
+    currentRow++;
+
+    // Fila 2: Sección 1 - Encabezado
+    wsData.push(['', '1. INFORMACIÓN DEL PROCESO SOLICITANTE Y DESIGNADO RESPONSABLE DEL EVENTO', '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'sectionHeader';
+    currentRow++;
+
+    // Fila 3: Nombre del solicitante
+    wsData.push(['', 'NOMBRE DEL SOLICITANTE DEL ÁREA:', '', '', 'LUIS SOLANO', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 3 } });
+    merges.push({ s: { r: currentRow, c: 4 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'dataRow';
+    currentRow++;
+
+    // Fila 4: Email y Cargo
+    wsData.push(['', 'EMAIL:', '', 'lsolano@rtvc.gov.co', '', 'CARGO:', '', 'PRODUCCIÓN', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 2 } });
+    merges.push({ s: { r: currentRow, c: 3 }, e: { r: currentRow, c: 4 } });
+    merges.push({ s: { r: currentRow, c: 5 }, e: { r: currentRow, c: 6 } });
+    merges.push({ s: { r: currentRow, c: 7 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'dataRow';
+    currentRow++;
+
+    // Fila 5: Sección 2 - Objeto de la solicitud
+    wsData.push(['', '2. OBJETO DE LA SOLICITUD:', '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'sectionHeader';
+    currentRow++;
+
+    // Fila 6: Descripción del transporte
+    const horaInicio = shiftType === 'AM' ? '09:30 PM' : '09:30 PM';
+    const horaFin = shiftType === 'AM' ? '10:00' : '10:00';
+    const dias = shiftType === 'AM' ? 'LUNES A VIERNES' : 'LUNES A VIERNES';
+    wsData.push(['', `TRANSPORTE PARA EL PERSONAL DEL NOTICIERO DE LA NOCHE, QUE VA EN DIRECTO DE ${dias} DE ${horaInicio} A ${horaFin}. INFORMATIVO`, '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'justifiedText';
+    currentRow++;
+
+    // Fila 7: Sección 3 - Información general
+    wsData.push(['', '3. INFORMACIÓN GENERAL DEL EVENTO', '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'sectionHeader';
+    currentRow++;
+
+    // Fila 8: Programa
+    wsData.push(['', programTitle, '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'programName';
+    currentRow++;
+
+    // Fila 9: Fecha
+    wsData.push(['', fechaLarga, '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'eventInfo';
+    currentRow++;
+
+    // Fila 10: Hora
+    wsData.push(['', turnoDisplay, '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'eventInfo';
+    currentRow++;
+
+    // Fila 11: Ubicación
+    wsData.push(['', 'BOGOTÁ - CUNDINAMARCA', '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'eventInfo';
+    currentRow++;
+
+    // Fila 12: Dirección
+    wsData.push(['', 'RTVC CARRERA 45 # 26 33', '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'eventInfo';
+    currentRow++;
+
+    // Fila 13: Banner verde con nombre del programa
+    wsData.push(['', programTitle.toUpperCase(), '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'greenBanner';
+    currentRow++;
+
+    wsData.push(['']); // Línea vacía
+    currentRow++;
+
+    // === RUTAS ===
+    const routeHeaderRows = [];
+    const vehicleRows = [];
+    const warningRows = [];
+    const recorridoRows = [];
+    const tableHeaderRows = [];
+    const passengerRows = [];
+    let assignmentHeaderRow = -1;
+    const assignmentRows = [];
+
+    optimizedRoutes.forEach((route) => {
+      // Calcular recorrido de la ruta
+      const localidades = route.passengers ?
+        [...new Set(route.passengers.map(p => p.localidad || p.barrio).filter(Boolean))] : [];
+      const recorrido = localidades.join(' → ');
+      const passengerCount = route.total_passengers || route.passengers?.filter(p => p.name).length || 0;
+
+      // Encabezado de ruta (verde)
+      wsData.push([
+        `RUTA ${route.route_number}`,
+        `Zona: ${route.zone}`,
+        '',
+        '',
+        '',
+        '',
+        `${passengerCount} pasajeros`,
+        '',
+        `${route.estimated_duration_minutes || 0} min`
+      ]);
+      merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 5 } });
+      routeHeaderRows.push(currentRow);
+      currentRow++;
+
+      // Info del vehículo o advertencia
+      if (route.vehicle_plate) {
+        wsData.push([
+          `Vehículo: ${route.vehicle_plate}`,
+          '',
+          route.driver_name ? `Conductor: ${route.driver_name}` : '',
+          '',
+          route.driver_phone ? `Tel: ${route.driver_phone}` : '',
+          '', '', '', ''
+        ]);
+        merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 1 } });
+        merges.push({ s: { r: currentRow, c: 2 }, e: { r: currentRow, c: 3 } });
+        vehicleRows.push(currentRow);
+      } else {
+        wsData.push(['Sin vehículo asignado', '', '', '', '', '', '', '', '']);
+        merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 8 } });
+        warningRows.push(currentRow);
+      }
+      currentRow++;
+
+      // Recorrido (azul)
+      wsData.push([`Recorrido de la Ruta: ${recorrido}`, '', '', '', '', '', '', '', '']);
+      merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 8 } });
+      recorridoRows.push(currentRow);
+      currentRow++;
+
+      // Encabezados de tabla de pasajeros (gris)
+      wsData.push(['#', 'Pasajero', '', 'Dirección', '', '', 'Localidad', 'Teléfono', '']);
+      merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 2 } });
+      merges.push({ s: { r: currentRow, c: 3 }, e: { r: currentRow, c: 5 } });
+      tableHeaderRows.push(currentRow);
+      currentRow++;
+
+      // Pasajeros
+      if (route.passengers && Array.isArray(route.passengers)) {
+        route.passengers.filter(p => p.name).forEach((passenger, idx) => {
+          wsData.push([
+            idx + 1,
+            passenger.name || '',
+            '',
+            passenger.address || passenger.direccion || '',
+            '',
+            '',
+            passenger.localidad || passenger.barrio || '',
+            passenger.phone || '',
+            ''
+          ]);
+          merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 2 } });
+          merges.push({ s: { r: currentRow, c: 3 }, e: { r: currentRow, c: 5 } });
+          passengerRows.push(currentRow);
+          currentRow++;
+        });
+      }
+
+      // Espacio entre rutas
+      wsData.push(['']);
+      currentRow++;
+    });
+
+    // === SECCIÓN PARA TRANSPORTE ===
+    wsData.push(['']); // Línea vacía
+    currentRow++;
+
+    wsData.push(['', '=== PARA SER COMPLETADO POR EL DEPARTAMENTO DE TRANSPORTE ===', '', '', '', '', '', '', '']);
+    merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 8 } });
+    rowStyles[currentRow] = 'sectionHeader';
+    currentRow++;
+
+    wsData.push(['']); // Línea vacía
+    currentRow++;
+
+    // Encabezados de tabla de asignación
+    wsData.push(['', 'RUTA', 'ZONA', 'PASAJEROS', 'VEHÍCULO ASIGNADO', 'PLACA', 'CONDUCTOR', 'TELÉFONO', 'OBSERVACIONES']);
+    assignmentHeaderRow = currentRow;
+    currentRow++;
+
+    // Filas para completar por transporte
+    optimizedRoutes.forEach(route => {
+      wsData.push([
+        '',
+        `Ruta ${route.route_number}`,
+        route.zone,
+        route.total_passengers || route.passengers?.filter(p => p.name).length || 0,
+        route.vehicle_plate || '',
+        '',
+        route.driver_name || '',
+        route.driver_phone || '',
+        ''
+      ]);
+      assignmentRows.push(currentRow);
+      currentRow++;
+    });
+
+    // Crear worksheet
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Aplicar merges
+    ws['!merges'] = merges;
+
+    // Aplicar estilos a las celdas
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) {
+          ws[cellAddress] = { v: '', t: 's' };
+        }
+
+        // Aplicar estilos según el tipo de fila
+        if (routeHeaderRows.includes(R)) {
+          ws[cellAddress].s = greenHeaderStyle;
+        } else if (tableHeaderRows.includes(R)) {
+          ws[cellAddress].s = grayHeaderStyle;
+        } else if (vehicleRows.includes(R)) {
+          ws[cellAddress].s = greenVehicleStyle;
+        } else if (warningRows.includes(R)) {
+          ws[cellAddress].s = yellowWarningStyle;
+        } else if (recorridoRows.includes(R)) {
+          ws[cellAddress].s = blueInfoStyle;
+        } else if (passengerRows.includes(R)) {
+          ws[cellAddress].s = cellStyle;
+        } else if (rowStyles[R] === 'mainTitle') {
+          ws[cellAddress].s = mainTitleStyle;
+        } else if (rowStyles[R] === 'sectionHeader') {
+          ws[cellAddress].s = sectionHeaderStyle;
+        } else if (rowStyles[R] === 'dataRow') {
+          ws[cellAddress].s = dataRowStyle;
+        } else if (rowStyles[R] === 'justifiedText') {
+          ws[cellAddress].s = justifiedTextStyle;
+        } else if (rowStyles[R] === 'programName') {
+          ws[cellAddress].s = programNameStyle;
+        } else if (rowStyles[R] === 'eventInfo') {
+          ws[cellAddress].s = eventInfoStyle;
+        } else if (rowStyles[R] === 'greenBanner') {
+          ws[cellAddress].s = greenBannerStyle;
+        } else if (R === assignmentHeaderRow) {
+          ws[cellAddress].s = tableAssignmentHeaderStyle;
+        } else if (assignmentRows.includes(R)) {
+          ws[cellAddress].s = assignmentCellStyle;
+        }
+      }
+    }
+
+    // Configurar anchos de columnas
+    ws['!cols'] = [
+      { wch: 8 },   // A - #
+      { wch: 22 },  // B - Pasajero
+      { wch: 8 },   // C
+      { wch: 35 },  // D - Dirección
+      { wch: 8 },   // E
+      { wch: 8 },   // F
+      { wch: 15 },  // G - Localidad
+      { wch: 14 },  // H - Teléfono
+      { wch: 10 }   // I - Duración
+    ];
+
+    // Configurar altura de filas
+    ws['!rows'] = [];
+    for (let i = 0; i <= currentRow; i++) {
+      if (routeHeaderRows.includes(i)) {
+        ws['!rows'][i] = { hpt: 25 };
+      } else if (vehicleRows.includes(i)) {
+        ws['!rows'][i] = { hpt: 28 }; // Mayor altura para info del vehículo
+      } else if (rowStyles[i] === 'mainTitle') {
+        ws['!rows'][i] = { hpt: 22 };
+      } else if (rowStyles[i] === 'greenBanner') {
+        ws['!rows'][i] = { hpt: 30 };
+      } else if (rowStyles[i] === 'sectionHeader') {
+        ws['!rows'][i] = { hpt: 20 };
+      } else if (rowStyles[i] === 'justifiedText') {
+        ws['!rows'][i] = { hpt: 35 }; // Mayor altura para texto justificado
+      } else if (i === assignmentHeaderRow) {
+        ws['!rows'][i] = { hpt: 22 };
+      } else {
+        ws['!rows'][i] = { hpt: 18 };
+      }
+    }
+
+    // Agregar worksheet al workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'Rutas');
+
+    // Generar archivo
+    const fileName = `Rutas_RTVC_${day}-${month}-${year}_${shiftType}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    alert(`Excel generado: ${fileName}`);
+  };
+
   const handleToggleTransportMode = async (assignment) => {
     const newMode = assignment.transport_mode === 'RUTA' ? 'PROPIO' : 'RUTA';
 
@@ -504,6 +1014,14 @@ export const RoutesManagement = () => {
         </div>
 
         <div className="flex gap-3">
+          <Button
+            onClick={handleExportExcel}
+            className="bg-green-600 hover:bg-green-700 text-white"
+            icon={<Download size={20} />}
+            disabled={optimizedRoutes.length === 0}
+          >
+            Excel
+          </Button>
           <Button
             onClick={handleExportWhatsApp}
             variant="success"
@@ -846,7 +1364,7 @@ export const RoutesManagement = () => {
                 ) : (
                   <>
                     {/* Agrupado por área */}
-                    {['PERIODISTAS', 'PRODUCTORES', 'PRESENTADORES', 'INGENIEROS', 'INGENIEROS EMISION', 'DIRECTORES', 'ALMACEN'].map(area => {
+                    {['PERIODISTAS', 'PRODUCTORES', 'PRESENTADORES', 'INGENIEROS', 'INGENIEROS EMISION', 'INGENIEROS MASTER', 'DIRECTORES', 'ALMACEN', 'ARCHIVO', 'GRAFICADOR', 'EDITOR'].map(area => {
                       const personnel = logisticPersonnel.filter(p => p.area === area);
                       if (personnel.length === 0) return null;
 
