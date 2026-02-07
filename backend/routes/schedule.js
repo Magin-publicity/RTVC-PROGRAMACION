@@ -1340,15 +1340,29 @@ router.get('/calendar', async (req, res) => {
 router.post('/daily/:date', async (req, res) => {
   try {
     const { date } = req.params;
-    const { assignments, callTimes, manualCallTimes, manualAssignments, programs, shifts } = req.body;
+    const { assignments, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments, programs, shifts } = req.body;
 
     console.log(`💾 Guardando programación para ${date}`);
     console.log(`   📋 Programas: ${programs?.length || 0}`);
     console.log(`   ✅ Asignaciones: ${Object.keys(assignments || {}).length}`);
     console.log(`   ⏰ CallTimes: ${Object.keys(callTimes || {}).length}`);
+    console.log(`   ⏰ EndTimes: ${Object.keys(endTimes || {}).length}`);
     console.log(`   🔒 CallTimes manuales: ${Object.keys(manualCallTimes || {}).length}`);
+    console.log(`   🔒 EndTimes manuales: ${Object.keys(manualEndTimes || {}).length}`);
     console.log(`   🔒 Asignaciones manuales: ${Object.keys(manualAssignments || {}).length}`);
     console.log(`   🔧 Turnos: ${shifts?.length || 0}`);
+
+    // 🔒 PILAR: PERSISTENCIA HISTÓRICA
+    // Capturar snapshot de novedades activas para este día
+    const noveltiesSnapshot = await pool.query(`
+      SELECT p.id as personnel_id, p.name, p.area, n.type as novelty_type, n.start_date, n.end_date, n.description
+      FROM personnel p
+      INNER JOIN novelties n ON p.id = n.personnel_id
+      WHERE p.active = true
+        AND $1::date BETWEEN n.start_date AND n.end_date
+    `, [date]);
+
+    console.log(`   📸 Snapshot de novedades: ${noveltiesSnapshot.rows.length} novedades activas`);
 
     // Guardar en daily_schedules usando UPSERT (sin filtrar - respeta cambios manuales del usuario)
     await pool.query(
@@ -1359,10 +1373,30 @@ router.post('/daily/:date', async (req, res) => {
          assignments_data = $2,
          programs_data = $3,
          updated_at = CURRENT_TIMESTAMP`,
-      [date, JSON.stringify(assignments), JSON.stringify({ programs, shifts, callTimes, manualCallTimes, manualAssignments })]
+      [date, JSON.stringify(assignments), JSON.stringify({ programs, shifts, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments })]
+    );
+
+    // 📸 Guardar en daily_schedules_log (LOG HISTÓRICO INMUTABLE)
+    // Esta es la "fotografía" del día que NUNCA cambia
+    await pool.query(
+      `INSERT INTO daily_schedules_log (date, assignments_data, programs, novelties_snapshot, saved_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+       ON CONFLICT (date)
+       DO UPDATE SET
+         assignments_data = $2,
+         programs = $3,
+         novelties_snapshot = $4,
+         saved_at = CURRENT_TIMESTAMP`,
+      [
+        date,
+        JSON.stringify({ ...assignments, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments }),
+        JSON.stringify({ programs, shifts }),
+        JSON.stringify(noveltiesSnapshot.rows)
+      ]
     );
 
     console.log(`✅ Programación guardada exitosamente para ${date}`);
+    console.log(`📸 Snapshot histórico creado en daily_schedules_log`);
 
     // 🔄 ESPEJO SEMANAL COMPLETO (TODAS LAS ASIGNACIONES)
     // ⚠️ IMPORTANTE: Solo se ejecuta si es lunes Y los días martes-viernes NO EXISTEN
@@ -1430,7 +1464,47 @@ router.get('/daily/:date', async (req, res) => {
 
     console.log(`📂 Obteniendo programación para ${date}`);
 
-    // Consultar programación diaria guardada
+    // 🔒 PRIORIDAD 1: Verificar si existe en daily_schedules_log (DATOS HISTÓRICOS)
+    const historicalResult = await pool.query(
+      'SELECT * FROM daily_schedules_log WHERE date = $1',
+      [date]
+    );
+
+    if (historicalResult.rows.length > 0) {
+      console.log(`📸 Encontrado snapshot histórico para ${date}`);
+      const historical = historicalResult.rows[0];
+      const assignmentsData = historical.assignments_data || {};
+
+      // Extraer los componentes de las asignaciones
+      const { callTimes = {}, endTimes = {}, manualCallTimes = {}, manualEndTimes = {}, manualAssignments = {}, ...pureAssignments } = assignmentsData;
+
+      const programsData = historical.programs || {};
+
+      console.log(`   ✅ Usando datos históricos guardados (fotografía inmutable del día)`);
+      console.log(`   📋 Programas: ${programsData.programs?.length || 0}`);
+      console.log(`   ✅ Asignaciones: ${Object.keys(pureAssignments).length}`);
+      console.log(`   📸 Novedades snapshot: ${historical.novelties_snapshot?.length || 0}`);
+
+      return res.json({
+        found: true,
+        fromHistory: true,
+        date,
+        assignments: pureAssignments,
+        callTimes,
+        endTimes,
+        manualCallTimes,
+        manualEndTimes,
+        manualAssignments,
+        programs: programsData.programs || [],
+        shifts: programsData.shifts || [],
+        noveltiesSnapshot: historical.novelties_snapshot || [],
+        savedAt: historical.saved_at
+      });
+    }
+
+    console.log(`📄 No hay snapshot histórico para ${date}, buscando en daily_schedules...`);
+
+    // Consultar programación diaria guardada (tabla temporal)
     const result = await pool.query(
       'SELECT * FROM daily_schedules WHERE date = $1',
       [date]
@@ -1564,11 +1638,14 @@ router.get('/daily/:date', async (req, res) => {
 
     // 🔧 USAR DIRECTAMENTE LOS CALLTIMES GUARDADOS (sin corrección automática)
     const callTimes = { ...(programsData.callTimes || {}) };
+    const endTimes = { ...(programsData.endTimes || {}) };
     const manualCallTimes = { ...(programsData.manualCallTimes || {}) }; // 🚨 PILAR 1: Cargar marcadores de manuales
+    const manualEndTimes = { ...(programsData.manualEndTimes || {}) }; // 🚨 PILAR 1: Cargar marcadores de manuales endTime
     const manualAssignments = { ...(programsData.manualAssignments || {}) }; // 🚨 PILAR 3: Cargar marcadores de asignaciones manuales
 
     console.log('✅ Usando callTimes guardados de la base de datos (sin corrección automática)');
     console.log(`🔒 CallTimes manuales: ${Object.keys(manualCallTimes).length}`);
+    console.log(`🔒 EndTimes manuales: ${Object.keys(manualEndTimes).length}`);
     console.log(`🔒 Asignaciones manuales: ${Object.keys(manualAssignments).length}`);
 
     // 🎥 Calcular callTimes para CAMARÓGRAFOS DE ESTUDIO en FIN DE SEMANA
@@ -1751,7 +1828,9 @@ router.get('/daily/:date', async (req, res) => {
       date,
       assignments: mergedAssignments,
       callTimes: callTimes,
+      endTimes: endTimes,
       manualCallTimes: manualCallTimes, // 🚨 PILAR 1: Devolver marcadores de manuales
+      manualEndTimes: manualEndTimes, // 🚨 PILAR 1: Devolver marcadores de manuales endTime
       manualAssignments: manualAssignments, // 🚨 PILAR 3: Devolver marcadores de asignaciones manuales
       programs: allPrograms,
       savedAt: schedule.updated_at,
