@@ -85,15 +85,30 @@ router.post('/assignments/initialize', async (req, res) => {
     let personnelIds = [];
 
     if (shiftType === 'AM') {
-      // AM: Personal que INICIA a las 05:00
+      // AM: Personal que INICIA SOLO a las 05:00 (El Calentao)
+      // Filtro estricto: ÚNICAMENTE 05:00, NO 06:00, NO 07:00, NO 08:00, etc.
       personnelIds = shifts
-        .filter(shift => shift.shift_start === '05:00:00')
+        .filter(shift => {
+          const startTime = shift.shift_start.substring(0, 5); // Normalizar a HH:MM
+          return startTime === '05:00';
+        })
         .map(shift => shift.personnel_id);
+
+      console.log(`🚌 [RUTAS AM] Filtrando personal que inicia a las 05:00`);
+      console.log(`   Total shifts disponibles: ${shifts.length}`);
+      console.log(`   Shifts filtrados (05:00): ${personnelIds.length}`);
     } else {
-      // PM: Personal que TERMINA a las 22:00
+      // PM: Personal que TERMINA a las 22:00 (Última Emisión)
       personnelIds = shifts
-        .filter(shift => shift.shift_end === '22:00:00')
+        .filter(shift => {
+          const endTime = shift.shift_end.substring(0, 5); // Normalizar a HH:MM
+          return endTime === '22:00';
+        })
         .map(shift => shift.personnel_id);
+
+      console.log(`🚌 [RUTAS PM] Filtrando personal que termina a las 22:00`);
+      console.log(`   Total shifts disponibles: ${shifts.length}`);
+      console.log(`   Shifts filtrados (22:00): ${personnelIds.length}`);
     }
 
     if (personnelIds.length === 0) {

@@ -1,9 +1,14 @@
 // src/components/Layout/Sidebar.jsx
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, AlertCircle, FileText, Settings, Home, MapPin, Clock, Camera, Video, Truck, Route, Bus, Utensils, Menu, X, Download } from 'lucide-react';
+import { Calendar, Users, AlertCircle, FileText, Settings, Home, MapPin, Clock, Camera, Video, Truck, Route, Bus, Utensils, Menu, X, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 
-export const Sidebar = ({ activeView, onViewChange }) => {
+export const Sidebar = ({ activeView, onViewChange, onCollapseChange }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    // Restaurar estado colapsado desde localStorage
+    const saved = localStorage.getItem('rtvc_sidebar_collapsed');
+    return saved === 'true';
+  });
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
 
@@ -36,6 +41,19 @@ export const Sidebar = ({ activeView, onViewChange }) => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
+
+  // Guardar estado colapsado en localStorage y notificar al padre
+  useEffect(() => {
+    localStorage.setItem('rtvc_sidebar_collapsed', isCollapsed.toString());
+    if (onCollapseChange) {
+      onCollapseChange(isCollapsed);
+    }
+  }, [isCollapsed, onCollapseChange]);
+
+  // Alternar sidebar colapsado (solo desktop)
+  const toggleCollapse = () => {
+    setIsCollapsed(!isCollapsed);
+  };
 
   // Manejar instalación
   const handleInstallClick = async () => {
@@ -101,15 +119,29 @@ export const Sidebar = ({ activeView, onViewChange }) => {
         />
       )}
 
+      {/* Botón para colapsar/expandir - solo visible en desktop */}
+      <button
+        onClick={toggleCollapse}
+        className={`
+          hidden md:flex fixed top-20 z-50 bg-blue-600 text-white p-2 rounded-r-lg shadow-lg hover:bg-blue-700 transition-all
+          ${isCollapsed ? 'left-16' : 'left-64'}
+        `}
+        aria-label="Toggle sidebar"
+        title={isCollapsed ? 'Expandir menú' : 'Contraer menú'}
+      >
+        {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+      </button>
+
       {/* Sidebar */}
       <aside className={`
-        w-64 bg-white shadow-lg h-screen fixed top-0 left-0 overflow-y-auto z-40 transition-transform duration-300 ease-in-out
+        bg-white shadow-lg h-screen fixed top-0 left-0 overflow-y-auto z-40 transition-all duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${isCollapsed ? 'md:w-16' : 'md:w-64'}
         md:translate-x-0
       `}>
         <nav className="p-4 pt-16 md:pt-4">
-          {/* Botón de Instalación PWA - Solo visible si no está instalada */}
-          {!isInstalled && deferredPrompt && (
+          {/* Botón de Instalación PWA - Solo visible si no está instalada y sidebar no está colapsado */}
+          {!isInstalled && deferredPrompt && !isCollapsed && (
             <div className="mb-4 p-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-lg">
               <button
                 onClick={handleInstallClick}
@@ -125,7 +157,7 @@ export const Sidebar = ({ activeView, onViewChange }) => {
           )}
 
           {/* Badge de "Ya Instalada" */}
-          {isInstalled && (
+          {isInstalled && !isCollapsed && (
             <div className="mb-4 p-3 bg-green-50 border-2 border-green-500 rounded-lg">
               <div className="flex items-center justify-center gap-2 text-green-700">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -144,15 +176,17 @@ export const Sidebar = ({ activeView, onViewChange }) => {
                   <button
                     onClick={() => handleMenuClick(item.id)}
                     className={`
-                      w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors min-h-[44px]
+                      w-full flex items-center rounded-lg transition-colors min-h-[44px]
+                      ${isCollapsed ? 'justify-center px-3 py-3' : 'gap-3 px-4 py-3'}
                       ${isActive
                         ? 'bg-blue-600 text-white shadow-md'
                         : 'text-gray-700 hover:bg-gray-100'
                       }
                     `}
+                    title={isCollapsed ? item.label : ''}
                   >
                     <Icon size={20} />
-                    <span className="font-medium">{item.label}</span>
+                    {!isCollapsed && <span className="font-medium">{item.label}</span>}
                   </button>
                 </li>
               );
