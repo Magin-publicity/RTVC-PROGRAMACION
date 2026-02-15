@@ -53,62 +53,72 @@ router.post('/assignments/initialize', async (req, res) => {
       return res.status(400).json({ error: 'Fecha y tipo de turno requeridos' });
     }
 
-    // Obtener personal técnico del sistema de rotación automatizada
-    // Para AM: personal que INICIA a las 05:00 (El Calentao 06:00-10:00)
-    // Para PM: personal que TERMINA a las 22:00 (Última Emisión 21:30-22:00)
+    // 🚨 CAMBIO CRÍTICO: Usar callTimes GUARDADOS en lugar de auto-shifts
+    // Obtener la programación REAL guardada para la fecha (con callTimes/endTimes)
+    // NO usar auto-shifts porque esos son teóricos, necesitamos los REALES guardados
 
-    // Primero verificar que existe programación para la fecha
-    const scheduleCheck = await pool.query(
-      `SELECT date FROM daily_schedules WHERE date = $1`,
+    // Verificar que existe programación guardada
+    const scheduleResult = await pool.query(
+      `SELECT date, data FROM daily_schedules WHERE date = $1`,
       [date]
     );
 
-    if (scheduleCheck.rows.length === 0) {
+    if (scheduleResult.rows.length === 0) {
       return res.status(404).json({
-        error: `No hay programación automatizada para ${date}. Por favor genere primero la programación del día.`
+        error: `No hay programación guardada para ${date}. Por favor genere y guarde primero la programación del día.`
       });
     }
 
-    // Obtener los turnos generados automáticamente del endpoint auto-shifts
-    // Esto usa la lógica existente de rotación que ya funciona correctamente
-    const shiftsResponse = await fetch(`http://localhost:3000/api/schedule/auto-shifts/${date}`);
+    const scheduleData = scheduleResult.rows[0].data;
+    const { callTimes, endTimes } = scheduleData;
 
-    if (!shiftsResponse.ok) {
-      return res.status(500).json({
-        error: 'Error al obtener turnos automatizados'
+    if (!callTimes || Object.keys(callTimes).length === 0) {
+      return res.status(404).json({
+        error: `No hay llamados guardados para ${date}. Por favor complete la programación primero.`
       });
     }
 
-    const shifts = await shiftsResponse.json();
+    console.log(`📋 [RUTAS] Programación encontrada para ${date}`);
+    console.log(`   CallTimes guardados: ${Object.keys(callTimes).length}`);
+    console.log(`   EndTimes guardados: ${Object.keys(endTimes || {}).length}`);
 
-    // Filtrar personal según el tipo de turno
+    // Filtrar personal según callTimes GUARDADOS y tipo de turno
     let personnelIds = [];
 
     if (shiftType === 'AM') {
-      // AM: Personal que INICIA SOLO a las 05:00 (El Calentao)
+      // AM: Personal que tiene LLAMADO guardado a las 05:00
       // Filtro estricto: ÚNICAMENTE 05:00, NO 06:00, NO 07:00, NO 08:00, etc.
-      personnelIds = shifts
-        .filter(shift => {
-          const startTime = shift.shift_start.substring(0, 5); // Normalizar a HH:MM
-          return startTime === '05:00';
+      personnelIds = Object.entries(callTimes)
+        .filter(([personnelId, callTime]) => {
+          // Normalizar formato (puede ser "05:00" o "05:00:00")
+          const normalizedTime = callTime.substring(0, 5);
+          return normalizedTime === '05:00';
         })
-        .map(shift => shift.personnel_id);
+        .map(([personnelId, callTime]) => parseInt(personnelId));
 
-      console.log(`🚌 [RUTAS AM] Filtrando personal que inicia a las 05:00`);
-      console.log(`   Total shifts disponibles: ${shifts.length}`);
-      console.log(`   Shifts filtrados (05:00): ${personnelIds.length}`);
+      console.log(`🚌 [RUTAS AM] Filtrando personal con llamado a las 05:00`);
+      console.log(`   Total callTimes en programación: ${Object.keys(callTimes).length}`);
+      console.log(`   Personal filtrado (05:00): ${personnelIds.length}`);
+      console.log(`   IDs: ${personnelIds.join(', ')}`);
     } else {
-      // PM: Personal que TERMINA a las 22:00 (Última Emisión)
-      personnelIds = shifts
-        .filter(shift => {
-          const endTime = shift.shift_end.substring(0, 5); // Normalizar a HH:MM
-          return endTime === '22:00';
-        })
-        .map(shift => shift.personnel_id);
+      // PM: Personal que tiene HORA FIN guardada a las 22:00
+      if (!endTimes || Object.keys(endTimes).length === 0) {
+        return res.status(404).json({
+          error: `No hay horas de fin guardadas para ${date}. Complete la programación primero.`
+        });
+      }
 
-      console.log(`🚌 [RUTAS PM] Filtrando personal que termina a las 22:00`);
-      console.log(`   Total shifts disponibles: ${shifts.length}`);
-      console.log(`   Shifts filtrados (22:00): ${personnelIds.length}`);
+      personnelIds = Object.entries(endTimes)
+        .filter(([personnelId, endTime]) => {
+          const normalizedTime = endTime.substring(0, 5);
+          return normalizedTime === '22:00';
+        })
+        .map(([personnelId, endTime]) => parseInt(personnelId));
+
+      console.log(`🚌 [RUTAS PM] Filtrando personal con hora fin a las 22:00`);
+      console.log(`   Total endTimes en programación: ${Object.keys(endTimes).length}`);
+      console.log(`   Personal filtrado (22:00): ${personnelIds.length}`);
+      console.log(`   IDs: ${personnelIds.join(', ')}`);
     }
 
     if (personnelIds.length === 0) {
