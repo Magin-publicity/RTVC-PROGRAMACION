@@ -119,6 +119,141 @@ const ZONE_VECTORS = {
 };
 
 /**
+ * Estima coordenadas aproximadas basadas en dirección de Bogotá
+ * Permite ordenar rutas sin necesidad de Google Maps API (SIN COSTO)
+ */
+function estimateCoordinates(address) {
+  // Centro aproximado de Bogotá
+  const centerLat = 4.6097;
+  const centerLng = -74.0817;
+
+  // Buscar patrones de carreras y calles
+  const carreraMatch = address.match(/(?:carrera|cra|kr|kra?)[\s.]*(\d+)/i);
+  const calleMatch = address.match(/(?:calle|cl)[\s.]*(\d+)/i);
+
+  let lat = centerLat;
+  let lng = centerLng;
+
+  // Estimar longitud basada en carrera (Este-Oeste)
+  // Carreras aumentan hacia el oeste
+  if (carreraMatch) {
+    const carrera = parseInt(carreraMatch[1]);
+    // Cada carrera ≈ 0.001 grados de longitud
+    lng = centerLng - (carrera - 7) * 0.001;
+  }
+
+  // Estimar latitud basada en calle (Norte-Sur)
+  // Calles aumentan hacia el norte
+  if (calleMatch) {
+    const calle = parseInt(calleMatch[1]);
+    // Cada calle ≈ 0.001 grados de latitud
+    lat = centerLat + (calle - 45) * 0.001;
+  }
+
+  return { lat, lng };
+}
+
+/**
+ * Calcula distancia aproximada entre dos coordenadas (en km)
+ * Fórmula de Haversine - SIN COSTO, no requiere API
+ */
+function calculateDistanceFromCoords(lat1, lng1, lat2, lng2) {
+  const R = 6371; // Radio de la Tierra en km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+/**
+ * Clasifica una dirección por rangos de carreras/calles (Bogotá)
+ * Aproximación geográfica cuando no hay localidad/barrio
+ */
+function classifyByStreetNumber(address) {
+  // Buscar patrones de carreras: Carrera 38, Cra 38, Kr 38, etc.
+  const carreraMatch = address.match(/(?:carrera|cra|kr|kra?)[\s.]*(\d+)/i);
+  // Buscar patrones de calles: Calle 15, Cl 15, etc.
+  const calleMatch = address.match(/(?:calle|cl)[\s.]*(\d+)/i);
+
+  if (carreraMatch) {
+    const carrera = parseInt(carreraMatch[1]);
+
+    // Carreras 1-30: Generalmente SUR/CENTRO
+    if (carrera >= 1 && carrera <= 30) {
+      return {
+        zone: 'SUR',
+        zoneName: 'Sur',
+        confidence: 3,
+        matchedKeywords: [`carrera ${carrera} (rango sur)`],
+        priority: 1
+      };
+    }
+    // Carreras 30-70: Generalmente OCCIDENTE
+    if (carrera >= 30 && carrera <= 70) {
+      return {
+        zone: 'OCCIDENTE',
+        zoneName: 'Occidente',
+        confidence: 3,
+        matchedKeywords: [`carrera ${carrera} (rango occidente)`],
+        priority: 3
+      };
+    }
+    // Carreras 70+: Generalmente NORTE/OCCIDENTE LEJANO
+    if (carrera > 70) {
+      return {
+        zone: 'OCCIDENTE',
+        zoneName: 'Occidente',
+        confidence: 3,
+        matchedKeywords: [`carrera ${carrera} (rango occidente lejano)`],
+        priority: 3
+      };
+    }
+  }
+
+  if (calleMatch) {
+    const calle = parseInt(calleMatch[1]);
+
+    // Calles 1-40: SUR
+    if (calle >= 1 && calle <= 40) {
+      return {
+        zone: 'SUR',
+        zoneName: 'Sur',
+        confidence: 3,
+        matchedKeywords: [`calle ${calle} (rango sur)`],
+        priority: 1
+      };
+    }
+    // Calles 40-100: CENTRO/NORTE CERCANO
+    if (calle >= 40 && calle <= 100) {
+      return {
+        zone: 'NORTE',
+        zoneName: 'Norte',
+        confidence: 3,
+        matchedKeywords: [`calle ${calle} (rango norte cercano)`],
+        priority: 2
+      };
+    }
+    // Calles 100+: NORTE
+    if (calle > 100) {
+      return {
+        zone: 'NORTE',
+        zoneName: 'Norte',
+        confidence: 3,
+        matchedKeywords: [`calle ${calle} (rango norte)`],
+        priority: 2
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
  * Clasifica una dirección en una zona geográfica basándose en palabras clave
  * @param {string} address - Dirección a clasificar
  * @returns {Object} - { zone: 'SUR'|'NORTE'|'OCCIDENTE'|'NO_CLASIFICADA', confidence: number, matchedKeywords: string[] }
@@ -162,8 +297,13 @@ function classifyAddress(address) {
     }
   }
 
-  // Si no hay coincidencias
+  // Si no hay coincidencias por keywords, intentar clasificar por número de calle/carrera
   if (Object.keys(matches).length === 0) {
+    const streetClassification = classifyByStreetNumber(normalizedAddress);
+    if (streetClassification) {
+      return streetClassification;
+    }
+
     return {
       zone: 'NO_CLASIFICADA',
       confidence: 0,
@@ -326,25 +466,27 @@ function sortAddressesByProximity(addresses, reverseOrder = false) {
   if (!addresses || addresses.length === 0) return [];
   if (addresses.length === 1) return addresses;
 
-  // Si no tienen coordenadas, usar ranking de localidad
-  if (!addresses[0].latitude || !addresses[0].longitude) {
-    const sorted = [...addresses].sort((a, b) => {
-      const locA = (a.localidad || a.barrio || '').toLowerCase();
-      const locB = (b.localidad || b.barrio || '').toLowerCase();
+  // MEJORADO: Estimar coordenadas para TODAS las direcciones que no las tengan
+  // Esto permite optimización SIN COSTO (sin Google Maps API)
+  const addressesWithCoords = addresses.map(addr => {
+    if (addr.latitude && addr.longitude) {
+      return addr; // Ya tiene coordenadas
+    }
 
-      const distA = LOCALITY_DISTANCE[locA] || 50; // Desconocidas al final
-      const distB = LOCALITY_DISTANCE[locB] || 50;
+    // Estimar coordenadas basándose en la dirección
+    const fullAddress = addr.direccion || addr.address || '';
+    const coords = estimateCoordinates(fullAddress);
 
-      // reverseOrder = true para PM (llevar): de cerca a lejos
-      // reverseOrder = false para AM (recoger): de lejos a cerca
-      return reverseOrder ? (distA - distB) : (distB - distA);
-    });
-
-    return sorted;
-  }
+    return {
+      ...addr,
+      latitude: coords.lat,
+      longitude: coords.lng,
+      estimated: true // Marcar que son coordenadas estimadas
+    };
+  });
 
   const sorted = [];
-  const remaining = [...addresses];
+  const remaining = [...addressesWithCoords];
 
   // Punto de inicio: centro de la zona o RTVC (4.6097, -74.0817)
   let currentLat = 4.6097;
@@ -353,7 +495,7 @@ function sortAddressesByProximity(addresses, reverseOrder = false) {
   while (remaining.length > 0) {
     // Encontrar el punto más cercano al actual
     let nearestIndex = 0;
-    let nearestDistance = calculateDistance(
+    let nearestDistance = calculateDistanceFromCoords(
       currentLat,
       currentLng,
       remaining[0].latitude,
@@ -361,7 +503,7 @@ function sortAddressesByProximity(addresses, reverseOrder = false) {
     );
 
     for (let i = 1; i < remaining.length; i++) {
-      const distance = calculateDistance(
+      const distance = calculateDistanceFromCoords(
         currentLat,
         currentLng,
         remaining[i].latitude,
@@ -503,5 +645,7 @@ module.exports = {
   isValidAddress,
   getZonificationStats,
   getSubzona,
-  calculateRouteTime
+  calculateRouteTime,
+  estimateCoordinates,           // NUEVO: Estimar coordenadas sin API
+  calculateDistanceFromCoords    // NUEVO: Calcular distancia entre coords
 };

@@ -35,7 +35,7 @@ export const MainLayout = ({ children, activeView, onViewChange, currentUser, on
           className={`
             flex-1 p-4 sm:p-6 w-full transition-all duration-300
             ml-0
-            ${isSidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}
+            ${isSidebarCollapsed ? 'md:ml-20' : 'md:ml-64'}
           `}
           style={{ display: 'block', overflow: 'visible' }}
         >

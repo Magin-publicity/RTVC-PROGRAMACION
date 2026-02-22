@@ -76,7 +76,7 @@ function App() {
     if (isAuthenticated && !dataLoadedRef.current) {
       console.log('🔄 Cargando datos después del login...');
       dataLoadedRef.current = true; // Marcar como cargado
-      loadPersonnel();
+      // loadPersonnel(); // Ahora se carga automáticamente en usePersonnel
       loadNovelties();
       // loadSchedule se llamará automáticamente cuando sea necesario
     }

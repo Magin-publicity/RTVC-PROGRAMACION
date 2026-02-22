@@ -8,21 +8,25 @@ export const usePersonnel = () => {
   const [error, setError] = useState(null);
 
   const loadPersonnel = useCallback(async () => {
+    console.log('📂 [PERSONNEL] Cargando personal...');
     setLoading(true);
     setError(null);
     try {
       // Intentar cargar desde backend
       try {
         const data = await personnelService.getAll();
+        console.log(`✅ [PERSONNEL] Cargado desde backend: ${data.length} personas`);
         setPersonnel(data);
         personnelService.saveLocal(data);
       } catch (apiError) {
         // Si falla, usar localStorage
-        console.log('Usando datos locales de personal');
+        console.warn('⚠️ [PERSONNEL] Backend falló, usando localStorage:', apiError);
         const localData = personnelService.getAllLocal();
+        console.log(`💾 [PERSONNEL] Cargado desde localStorage: ${localData.length} personas`);
         setPersonnel(localData);
       }
     } catch (err) {
+      console.error('❌ [PERSONNEL] Error crítico al cargar:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -35,14 +39,19 @@ export const usePersonnel = () => {
     try {
       let newPerson;
       try {
+        console.log('💾 [PERSONNEL] Intentando guardar en backend:', personData);
         newPerson = await personnelService.create(personData);
+        console.log('✅ [PERSONNEL] Guardado en backend exitosamente:', newPerson);
       } catch (apiError) {
+        console.error('❌ [PERSONNEL] Error guardando en backend, usando localStorage:', apiError);
         newPerson = personnelService.addLocal(personData);
+        console.log('💾 [PERSONNEL] Guardado en localStorage:', newPerson);
       }
-      
+
       setPersonnel(prev => [...prev, newPerson]);
       return newPerson;
     } catch (err) {
+      console.error('❌ [PERSONNEL] Error crítico:', err);
       setError(err.message);
       return null;
     } finally {
@@ -125,9 +134,9 @@ export const usePersonnel = () => {
   }, [personnel]);
 
   useEffect(() => {
-    // DESHABILITADO TEMPORALMENTE PARA EVITAR BUCLES
-    // loadPersonnel();
-  }, [loadPersonnel]);
+    loadPersonnel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Solo cargar una vez al montar
 
   return {
     personnel,

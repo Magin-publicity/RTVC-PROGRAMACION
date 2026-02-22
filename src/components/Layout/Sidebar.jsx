@@ -124,7 +124,7 @@ export const Sidebar = ({ activeView, onViewChange, onCollapseChange }) => {
         onClick={toggleCollapse}
         className={`
           hidden md:flex fixed top-20 z-50 bg-blue-600 text-white p-2 rounded-r-lg shadow-lg hover:bg-blue-700 transition-all
-          ${isCollapsed ? 'left-16' : 'left-64'}
+          ${isCollapsed ? 'left-20' : 'left-64'}
         `}
         aria-label="Toggle sidebar"
         title={isCollapsed ? 'Expandir menú' : 'Contraer menú'}
@@ -134,9 +134,9 @@ export const Sidebar = ({ activeView, onViewChange, onCollapseChange }) => {
 
       {/* Sidebar */}
       <aside className={`
-        bg-white shadow-lg h-screen fixed top-0 left-0 overflow-y-auto z-40 transition-all duration-300 ease-in-out
+        bg-white shadow-lg h-screen fixed top-0 left-0 z-40 transition-all duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        ${isCollapsed ? 'md:w-16' : 'md:w-64'}
+        ${isCollapsed ? 'md:w-20 overflow-hidden' : 'md:w-64 overflow-y-auto'}
         md:translate-x-0
       `}>
         <nav className="p-4 pt-16 md:pt-4">

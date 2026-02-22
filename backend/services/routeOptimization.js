@@ -7,7 +7,9 @@ const {
   calculateDistance,
   getZonificationStats,
   getSubzona,
-  calculateRouteTime
+  calculateRouteTime,
+  estimateCoordinates,           // NUEVO: Coordenadas sin API
+  calculateDistanceFromCoords    // NUEVO: Distancia entre coords
 } = require('./geographicZonification');
 
 const MAX_PASSENGERS_PER_VEHICLE = 4;

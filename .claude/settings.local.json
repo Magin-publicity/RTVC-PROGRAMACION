@@ -52,7 +52,9 @@
       "Bash(cat:*)",
       "Bash(ls:*)",
       "Bash(lsof:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(test:*)",
+      "Bash(xargs kill:*)"
     ],
     "deny": [],
     "ask": []

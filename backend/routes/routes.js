@@ -59,7 +59,7 @@ router.post('/assignments/initialize', async (req, res) => {
 
     // Verificar que existe programación guardada
     const scheduleResult = await pool.query(
-      `SELECT date, data FROM daily_schedules WHERE date = $1`,
+      `SELECT date, assignments_data, programs_data FROM daily_schedules WHERE date = $1`,
       [date]
     );
 
@@ -69,8 +69,9 @@ router.post('/assignments/initialize', async (req, res) => {
       });
     }
 
-    const scheduleData = scheduleResult.rows[0].data;
-    const { callTimes, endTimes } = scheduleData;
+    // callTimes y endTimes están guardados en programs_data, NO en assignments_data
+    const programsData = scheduleResult.rows[0].programs_data;
+    const { callTimes, endTimes } = programsData || {};
 
     if (!callTimes || Object.keys(callTimes).length === 0) {
       return res.status(404).json({
@@ -88,17 +89,21 @@ router.post('/assignments/initialize', async (req, res) => {
     if (shiftType === 'AM') {
       // AM: Personal que tiene LLAMADO guardado a las 05:00
       // Filtro estricto: ÚNICAMENTE 05:00, NO 06:00, NO 07:00, NO 08:00, etc.
+      const MAX_INT = 2147483647; // Máximo valor para INTEGER en PostgreSQL
+
       personnelIds = Object.entries(callTimes)
         .filter(([personnelId, callTime]) => {
           // Normalizar formato (puede ser "05:00" o "05:00:00")
           const normalizedTime = callTime.substring(0, 5);
-          return normalizedTime === '05:00';
+          const id = parseInt(personnelId);
+          // Filtrar por horario Y por ID válido (no temporales de localStorage)
+          return normalizedTime === '05:00' && id <= MAX_INT;
         })
         .map(([personnelId, callTime]) => parseInt(personnelId));
 
       console.log(`🚌 [RUTAS AM] Filtrando personal con llamado a las 05:00`);
       console.log(`   Total callTimes en programación: ${Object.keys(callTimes).length}`);
-      console.log(`   Personal filtrado (05:00): ${personnelIds.length}`);
+      console.log(`   Personal filtrado (05:00 y ID válido): ${personnelIds.length}`);
       console.log(`   IDs: ${personnelIds.join(', ')}`);
     } else {
       // PM: Personal que tiene HORA FIN guardada a las 22:00
@@ -108,16 +113,20 @@ router.post('/assignments/initialize', async (req, res) => {
         });
       }
 
+      const MAX_INT = 2147483647; // Máximo valor para INTEGER en PostgreSQL
+
       personnelIds = Object.entries(endTimes)
         .filter(([personnelId, endTime]) => {
           const normalizedTime = endTime.substring(0, 5);
-          return normalizedTime === '22:00';
+          const id = parseInt(personnelId);
+          // Filtrar por horario Y por ID válido (no temporales de localStorage)
+          return normalizedTime === '22:00' && id <= MAX_INT;
         })
         .map(([personnelId, endTime]) => parseInt(personnelId));
 
       console.log(`🚌 [RUTAS PM] Filtrando personal con hora fin a las 22:00`);
       console.log(`   Total endTimes en programación: ${Object.keys(endTimes).length}`);
-      console.log(`   Personal filtrado (22:00): ${personnelIds.length}`);
+      console.log(`   Personal filtrado (22:00 y ID válido): ${personnelIds.length}`);
       console.log(`   IDs: ${personnelIds.join(', ')}`);
     }
 
