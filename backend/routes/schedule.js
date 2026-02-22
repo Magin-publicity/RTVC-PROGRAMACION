@@ -1376,17 +1376,17 @@ router.post('/daily/:date', async (req, res) => {
       [date, JSON.stringify(assignments), JSON.stringify({ programs, shifts, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments })]
     );
 
-    // 📸 Guardar en daily_schedules_log (LOG HISTÓRICO INMUTABLE)
-    // Esta es la "fotografía" del día que NUNCA cambia
+    // 📸 Guardar en daily_schedules_log — guardado MANUAL del usuario (is_mirror = FALSE)
     await pool.query(
-      `INSERT INTO daily_schedules_log (date, assignments_data, programs, novelties_snapshot, saved_at)
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+      `INSERT INTO daily_schedules_log (date, assignments_data, programs, novelties_snapshot, saved_at, is_mirror)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, FALSE)
        ON CONFLICT (date)
        DO UPDATE SET
          assignments_data = $2,
          programs = $3,
          novelties_snapshot = $4,
-         saved_at = CURRENT_TIMESTAMP`,
+         saved_at = CURRENT_TIMESTAMP,
+         is_mirror = FALSE`,
       [
         date,
         JSON.stringify({ ...assignments, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments }),
@@ -1398,47 +1398,91 @@ router.post('/daily/:date', async (req, res) => {
     console.log(`✅ Programación guardada exitosamente para ${date}`);
     console.log(`📸 Snapshot histórico creado en daily_schedules_log`);
 
-    // 🔄 ESPEJO SEMANAL COMPLETO (TODAS LAS ASIGNACIONES)
-    // ⚠️ IMPORTANTE: Solo se ejecuta si es lunes Y los días martes-viernes NO EXISTEN
-    // Si ya existen, NO se sobrescriben (respeta modificaciones manuales)
+    // 🔄 ESPEJO SEMANAL INTELIGENTE
+    // Regla: al guardar el lunes, propagar a martes-viernes EXCEPTO los que el usuario
+    // haya guardado manualmente (is_mirror = false). Los espejos anteriores SÍ se actualizan.
     const fechaObj = new Date(date + 'T12:00:00');
     const diaSemana = fechaObj.getDay(); // 0=domingo, 1=lunes, ..., 5=viernes
 
-    // Si es lunes (1), copiar TODAS las asignaciones a martes-viernes QUE NO EXISTAN
     if (diaSemana === 1) {
-      console.log(`📅 Es lunes - Verificando si necesita espejo semanal...`);
+      console.log(`📅 Es lunes - Aplicando espejo semanal inteligente a martes-viernes...`);
 
-      // Copiar a martes (2), miércoles (3), jueves (4), viernes (5)
+      const mirrorAssignmentsData = JSON.stringify({
+        ...assignments,
+        callTimes,
+        endTimes,
+        manualCallTimes,
+        manualEndTimes,
+        manualAssignments
+      });
+      const mirrorProgramsData = JSON.stringify({ programs, shifts });
+      const mirrorWorkData = JSON.stringify({
+        programs,
+        shifts,
+        callTimes,
+        endTimes,
+        manualCallTimes,
+        manualEndTimes,
+        manualAssignments
+      });
+
       for (let dia = 2; dia <= 5; dia++) {
         const targetDate = new Date(fechaObj);
         targetDate.setDate(targetDate.getDate() + (dia - 1));
         const targetDateStr = targetDate.toISOString().split('T')[0];
 
-        // 🔒 VERIFICAR SI YA EXISTE - NO sobrescribir si ya existe
-        const existingResult = await pool.query(
-          'SELECT date FROM daily_schedules WHERE date = $1',
+        // Verificar si existe y si es espejo o guardado manual
+        const existingLog = await pool.query(
+          'SELECT date, is_mirror FROM daily_schedules_log WHERE date = $1',
           [targetDateStr]
         );
 
-        if (existingResult.rows.length > 0) {
-          console.log(`   ⏭️  ${targetDateStr} ya existe - NO se sobrescribe (respeta modificaciones manuales)`);
-          continue; // Saltar este día
+        if (existingLog.rows.length > 0 && existingLog.rows[0].is_mirror === false) {
+          // El usuario guardó este día manualmente → respetar sin tocar
+          console.log(`   🔒 ${targetDateStr} guardado manualmente por usuario - NO se modifica`);
+          continue;
         }
 
-        console.log(`   📋 ${targetDateStr} NO existe - Copiando del lunes...`);
+        // Es espejo anterior o no existe → actualizar con el lunes nuevo
+        if (existingLog.rows.length > 0) {
+          // Actualizar espejo existente
+          await pool.query(
+            `UPDATE daily_schedules_log
+             SET assignments_data = $2, programs = $3, novelties_snapshot = $4,
+                 saved_at = CURRENT_TIMESTAMP, is_mirror = TRUE
+             WHERE date = $1`,
+            [targetDateStr, mirrorAssignmentsData, mirrorProgramsData, JSON.stringify(noveltiesSnapshot.rows)]
+          );
+          console.log(`   🔄 ${targetDateStr} → espejo actualizado con cambios del lunes`);
+        } else {
+          // Crear espejo nuevo
+          await pool.query(
+            `INSERT INTO daily_schedules_log (date, assignments_data, programs, novelties_snapshot, saved_at, is_mirror)
+             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, TRUE)`,
+            [targetDateStr, mirrorAssignmentsData, mirrorProgramsData, JSON.stringify(noveltiesSnapshot.rows)]
+          );
+          console.log(`   ✅ ${targetDateStr} → espejo creado desde lunes`);
+        }
 
-        // 🔥 COPIAR TODAS LAS ASIGNACIONES
-        const allAssignments = { ...assignments };
-
-        // Guardar SOLO si NO existe (INSERT sin conflicto)
+        // Sincronizar también la tabla de trabajo
         await pool.query(
           `INSERT INTO daily_schedules (date, assignments_data, programs_data, updated_at)
-           VALUES ($1, $2, $3, CURRENT_TIMESTAMP)`,
-          [targetDateStr, JSON.stringify(allAssignments), JSON.stringify({ programs, shifts, callTimes })]
+           VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+           ON CONFLICT (date) DO UPDATE SET
+             assignments_data = $2,
+             programs_data = $3,
+             updated_at = CURRENT_TIMESTAMP`,
+          [targetDateStr, JSON.stringify(assignments), mirrorWorkData]
         );
-
-        console.log(`   ✅ Creado ${targetDateStr}: ${Object.keys(allAssignments).length} asignaciones`);
       }
+    }
+
+    // Marcar el guardado del lunes como manual (is_mirror = false)
+    if (diaSemana === 1) {
+      await pool.query(
+        `UPDATE daily_schedules_log SET is_mirror = FALSE WHERE date = $1`,
+        [date]
+      );
     }
 
     res.json({

@@ -23,6 +23,7 @@ import { analyticsService } from '../../services/analyticsService';
 import { generateVehicleDispatchMessage, shareViaWhatsApp } from '../../utils/whatsappShare';
 import { MessageCircle } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
+import { RouteGroupsModal } from './RouteGroupsModal';
 
 const API_URL = '/api';
 
@@ -48,6 +49,7 @@ export const RoutesManagement = () => {
   const [logisticPersonnel, setLogisticPersonnel] = useState([]);
   const [selectedLogistic, setSelectedLogistic] = useState([]);
   const [programTitle, setProgramTitle] = useState('El Calentao');
+  const [groupsModal, setGroupsModal] = useState(false);
 
   function getTodayDate() {
     const today = new Date();
@@ -236,6 +238,39 @@ export const RoutesManagement = () => {
     } catch (error) {
       console.error('Error agregando personal logístico:', error);
       alert('Error al agregar personal logístico');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoadGroupPersonnel = async (group) => {
+    if (!group) {
+      setGroupsModal(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/routes/assignments/logistic`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: selectedDate,
+          shiftType,
+          personnelIds: group.personnel_ids,
+          program_title: programTitle
+        })
+      });
+
+      if (!response.ok) throw new Error('Error al cargar personal desde plantilla');
+
+      const result = await response.json();
+      alert(`Personal del grupo "${group.name}" cargado correctamente (${group.personnel_ids.length} personas)`);
+      setGroupsModal(false);
+      await loadAssignments();
+    } catch (error) {
+      console.error('Error cargando personal desde plantilla:', error);
+      alert('Error al cargar personal desde plantilla');
     } finally {
       setLoading(false);
     }
@@ -1071,7 +1106,7 @@ export const RoutesManagement = () => {
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="flex items-end">
             <Button
               onClick={handleInitializeAssignments}
@@ -1081,6 +1116,18 @@ export const RoutesManagement = () => {
               className="w-full"
             >
               Cargar Personal
+            </Button>
+          </div>
+
+          <div className="flex items-end">
+            <Button
+              onClick={() => setGroupsModal(true)}
+              variant="primary"
+              icon={<Users size={20} />}
+              disabled={loading}
+              className="w-full bg-purple-600 hover:bg-purple-700"
+            >
+              Plantillas
             </Button>
           </div>
 
@@ -1441,6 +1488,13 @@ export const RoutesManagement = () => {
           onSubmit={handleAssignVehicle}
         />
       )}
+
+      {/* Modal de Grupos de Rutas (Plantillas) */}
+      <RouteGroupsModal
+        isOpen={groupsModal}
+        onClose={handleLoadGroupPersonnel}
+        shiftType={shiftType}
+      />
 
     </div>
   );

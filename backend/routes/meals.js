@@ -530,4 +530,130 @@ router.post('/add-logistic-personnel', async (req, res) => {
   }
 });
 
+// ========================================
+// GRUPOS / PLANTILLAS DE ALIMENTACIÓN
+// ========================================
+
+// GET: Obtener todos los grupos (opcionalmente filtrar por service_type)
+router.get('/groups', async (req, res) => {
+  try {
+    const { service_type } = req.query;
+    let query = `SELECT * FROM meal_groups`;
+    const params = [];
+    if (service_type) {
+      query += ` WHERE service_type = $1`;
+      params.push(service_type);
+    }
+    query += ` ORDER BY name`;
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error obteniendo grupos de alimentación:', error);
+    res.status(500).json({ error: 'Error al obtener grupos' });
+  }
+});
+
+// POST: Crear nuevo grupo
+router.post('/groups', async (req, res) => {
+  try {
+    const { name, description, service_type, personnel_ids } = req.body;
+    if (!name || !service_type || !Array.isArray(personnel_ids)) {
+      return res.status(400).json({ error: 'Faltan campos: name, service_type, personnel_ids' });
+    }
+    const result = await pool.query(
+      `INSERT INTO meal_groups (name, description, service_type, personnel_ids)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [name.trim(), description || null, service_type, personnel_ids]
+    );
+    console.log(`✅ Grupo de alimentación creado: ${name}`);
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creando grupo:', error);
+    res.status(500).json({ error: 'Error al crear grupo' });
+  }
+});
+
+// PUT: Actualizar grupo existente
+router.put('/groups/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, service_type, personnel_ids } = req.body;
+    const result = await pool.query(
+      `UPDATE meal_groups
+       SET name = COALESCE($1, name),
+           description = COALESCE($2, description),
+           service_type = COALESCE($3, service_type),
+           personnel_ids = COALESCE($4, personnel_ids),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $5 RETURNING *`,
+      [name, description, service_type, personnel_ids, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Grupo no encontrado' });
+    console.log(`✏️  Grupo actualizado: ID ${id}`);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error actualizando grupo:', error);
+    res.status(500).json({ error: 'Error al actualizar grupo' });
+  }
+});
+
+// DELETE: Eliminar grupo
+router.delete('/groups/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`DELETE FROM meal_groups WHERE id = $1 RETURNING *`, [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Grupo no encontrado' });
+    console.log(`🗑️  Grupo eliminado: ID ${id}`);
+    res.json({ message: 'Grupo eliminado exitosamente' });
+  } catch (error) {
+    console.error('Error eliminando grupo:', error);
+    res.status(500).json({ error: 'Error al eliminar grupo' });
+  }
+});
+
+// POST: Cargar grupo en solicitudes de alimentación del día
+router.post('/groups/load', async (req, res) => {
+  try {
+    const { group_id, service_id, service_date } = req.body;
+    if (!group_id || !service_id || !service_date) {
+      return res.status(400).json({ error: 'Faltan campos: group_id, service_id, service_date' });
+    }
+
+    // Obtener el grupo
+    const groupResult = await pool.query(`SELECT * FROM meal_groups WHERE id = $1`, [group_id]);
+    if (groupResult.rows.length === 0) return res.status(404).json({ error: 'Grupo no encontrado' });
+    const group = groupResult.rows[0];
+
+    // Obtener info del personal
+    const personnelResult = await pool.query(
+      `SELECT id, name, area FROM personnel WHERE id = ANY($1::int[])`,
+      [group.personnel_ids]
+    );
+
+    let added = 0;
+    for (const person of personnelResult.rows) {
+      try {
+        const r = await pool.query(
+          `INSERT INTO meal_requests
+             (service_id, service_date, personnel_id, personnel_name, cargo, status, is_guest)
+           VALUES ($1, $2, $3, $4, $5, 'POR_CONFIRMAR', false)
+           ON CONFLICT (service_id, service_date, personnel_id, personnel_name) DO NOTHING
+           RETURNING id`,
+          [service_id, service_date, person.id, person.name, person.area]
+        );
+        if (r.rows.length > 0) added++;
+      } catch (err) {
+        console.error(`⚠️ Error insertando ${person.name}:`, err.message);
+      }
+    }
+
+    console.log(`✅ Grupo "${group.name}" cargado: ${added} personas agregadas`);
+    res.json({ message: `Se agregaron ${added} personas del grupo "${group.name}"`, added_count: added });
+  } catch (error) {
+    console.error('Error cargando grupo:', error);
+    res.status(500).json({ error: 'Error al cargar grupo' });
+  }
+});
+
 module.exports = router;
+

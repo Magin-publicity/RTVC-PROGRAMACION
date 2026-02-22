@@ -2,9 +2,10 @@
 // Módulo de Gestión de Alimentación (Desayunos, Almuerzos, Cenas)
 
 import React, { useState, useEffect } from 'react';
-import { Coffee, Utensils, Moon, Plus, X, Download, MessageCircle, RefreshCw, Upload, Check, Users, Send } from 'lucide-react';
+import { Coffee, Utensils, Moon, Plus, X, Download, MessageCircle, RefreshCw, Upload, Check, Users, Send, BookMarked, Search } from 'lucide-react';
 import { analyticsService } from '../../services/analyticsService';
 import { generateMealRequestMessage, shareViaWhatsApp } from '../../utils/whatsappShare';
+import { MealGroupsModal } from './MealGroupsModal';
 
 const API_URL = '/api';
 
@@ -71,6 +72,10 @@ export default function MealManagement() {
   const [showLogisticModal, setShowLogisticModal] = useState(false);
   const [logisticPersonnel, setLogisticPersonnel] = useState([]);
   const [selectedLogistic, setSelectedLogistic] = useState([]);
+  const [logisticSearchTerm, setLogisticSearchTerm] = useState('');
+
+  // Grupos / Plantillas
+  const [showGroupsModal, setShowGroupsModal] = useState(false);
 
   // ========================================
   // CARGA INICIAL
@@ -388,6 +393,40 @@ export default function MealManagement() {
   };
 
   // ========================================
+  // GRUPOS / PLANTILLAS
+  // ========================================
+
+  const handleLoadGroup = async (group) => {
+    if (!group) { setShowGroupsModal(false); return; }
+
+    const serviceId = services.find(s => s.service_name === selectedService)?.id;
+    if (!serviceId) { setShowGroupsModal(false); return; }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/meals/groups/load`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          group_id: group.id,
+          service_id: serviceId,
+          service_date: selectedDate
+        })
+      });
+      const result = await response.json();
+      setShowGroupsModal(false);
+      await loadRequests();
+      await loadStats();
+      alert(result.message || `Plantilla "${group.name}" cargada exitosamente`);
+    } catch (err) {
+      console.error('Error cargando plantilla:', err);
+      alert('Error al cargar la plantilla');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========================================
   // RESET
   // ========================================
 
@@ -621,6 +660,13 @@ export default function MealManagement() {
             >
               <Users size={18} />
               Personal Logístico
+            </button>
+            <button
+              onClick={() => setShowGroupsModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+            >
+              <BookMarked size={18} />
+              Plantillas
             </button>
           </div>
 
@@ -922,6 +968,13 @@ export default function MealManagement() {
         </div>
       )}
 
+      {/* Modal: Plantillas / Grupos */}
+      <MealGroupsModal
+        isOpen={showGroupsModal}
+        onClose={handleLoadGroup}
+        serviceType={selectedService}
+      />
+
       {/* Modal: Personal Logístico */}
       {showLogisticModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -939,37 +992,62 @@ export default function MealManagement() {
               <div className="text-center py-8">Cargando personal...</div>
             ) : (
               <div className="space-y-4">
+                {/* Buscador */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    value={logisticSearchTerm}
+                    onChange={(e) => setLogisticSearchTerm(e.target.value)}
+                    placeholder="Buscar por nombre o área..."
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                  />
+                </div>
+
                 {logisticPersonnel.length === 0 ? (
                   <div className="text-center text-gray-500 py-4">No hay personal logístico disponible</div>
                 ) : (
                   <>
                     {/* Agrupado por área */}
-                    {['PERIODISTAS', 'PRODUCTORES', 'PRESENTADORES', 'INGENIEROS', 'INGENIEROS EMISION', 'DIRECTORES', 'ALMACEN', 'ADMINISTRATIVO'].map(area => {
-                      const personnel = logisticPersonnel.filter(p => p.area === area);
-                      if (personnel.length === 0) return null;
+                    {(() => {
+                      const filteredPersonnel = logisticPersonnel.filter(p => {
+                        if (!logisticSearchTerm.trim()) return true;
+                        const term = logisticSearchTerm.toLowerCase();
+                        return p.name?.toLowerCase().includes(term) || p.area?.toLowerCase().includes(term);
+                      });
+                      const areas = [...new Set(filteredPersonnel.map(p => p.area))].sort();
 
-                      return (
-                        <div key={area} className="border rounded-lg p-4">
-                          <h4 className="font-semibold text-gray-700 mb-3">{area} ({personnel.length})</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                            {personnel.map(person => (
-                              <div key={person.id} className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  id={`logistic-${person.id}`}
-                                  checked={selectedLogistic.includes(person.id)}
-                                  onChange={() => handleToggleLogisticPerson(person.id)}
-                                  className="w-4 h-4 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
-                                />
-                                <label htmlFor={`logistic-${person.id}`} className="text-sm text-gray-700 cursor-pointer">
-                                  {person.name}
-                                </label>
-                              </div>
-                            ))}
+                      if (filteredPersonnel.length === 0) {
+                        return <div className="text-center text-gray-500 py-4">No se encontraron resultados para "{logisticSearchTerm}"</div>;
+                      }
+
+                      return areas.map(area => {
+                        const personnel = filteredPersonnel.filter(p => p.area === area);
+                        if (personnel.length === 0) return null;
+
+                        return (
+                          <div key={area} className="border rounded-lg p-4">
+                            <h4 className="font-semibold text-gray-700 mb-3">{area} ({personnel.length})</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                              {personnel.map(person => (
+                                <div key={person.id} className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    id={`logistic-${person.id}`}
+                                    checked={selectedLogistic.includes(person.id)}
+                                    onChange={() => handleToggleLogisticPerson(person.id)}
+                                    className="w-4 h-4 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                                  />
+                                  <label htmlFor={`logistic-${person.id}`} className="text-sm text-gray-700 cursor-pointer">
+                                    {person.name}
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                   </>
                 )}
 
