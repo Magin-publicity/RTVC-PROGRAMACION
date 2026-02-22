@@ -107,6 +107,7 @@ const mealsRoutes = require('./routes/meals');
 const logisticsRoutes = require('./routes/logistics');
 const snapshotsRoutes = require('./routes/snapshots');
 const routeGroupsRoutes = require('./routes/routeGroups');
+const exclusiveGroupsRoutes = require('./routes/exclusiveGroups');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/personnel', personnelRoutes);
@@ -128,6 +129,7 @@ app.use('/api/meals', mealsRoutes);
 app.use('/api/logistics', logisticsRoutes);
 app.use('/api/snapshots', snapshotsRoutes);
 app.use('/api/route-groups', routeGroupsRoutes);
+app.use('/api/exclusive-groups', exclusiveGroupsRoutes);
 
 // Puerto
 const PORT = process.env.PORT || 3000;

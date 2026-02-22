@@ -1,6 +1,6 @@
 // src/components/Layout/Sidebar.jsx
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, AlertCircle, FileText, Settings, Home, MapPin, Clock, Camera, Video, Truck, Route, Bus, Utensils, Menu, X, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Users, AlertCircle, FileText, Settings, Home, MapPin, Clock, Camera, Video, Truck, Route, Bus, Utensils, Menu, X, Download, ChevronLeft, ChevronRight, Shield } from 'lucide-react';
 
 export const Sidebar = ({ activeView, onViewChange, onCollapseChange }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -85,6 +85,7 @@ export const Sidebar = ({ activeView, onViewChange, onCollapseChange }) => {
     { id: 'routes-management', label: 'Gestión de Rutas', icon: Route },
     { id: 'fleet-management', label: 'Gestión de Flota', icon: Bus },
     { id: 'meal-management', label: 'Gestión de Alimentación', icon: Utensils },
+    { id: 'exclusive-groups', label: 'Grupos Exclusivos', icon: Shield },
     { id: 'novelties', label: 'Novedades', icon: AlertCircle },
     { id: 'reports', label: 'Reportes', icon: FileText },
     { id: 'settings', label: 'Configuración', icon: Settings },
