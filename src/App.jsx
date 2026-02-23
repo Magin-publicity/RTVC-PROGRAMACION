@@ -21,7 +21,6 @@ import { PersonalLogistico } from './components/Personnel/PersonalLogistico';
 import { RoutesManagement } from './components/Routes/RoutesManagement';
 import FleetManagement from './components/Fleet/FleetManagement';
 import MealManagement from './components/Meals/MealManagement';
-import { ExclusiveGroupsModal } from './components/ExclusiveGroups/ExclusiveGroupsModal';
 import { InstallPrompt } from './components/PWA/InstallPrompt';
 import { usePersonnel } from './hooks/usePersonnel';
 import { useSchedule } from './hooks/useSchedule';
@@ -40,7 +39,6 @@ function App() {
   const [activeView, setActiveView] = useState('dashboard');
   const [showAlert, setShowAlert] = useState(null);
   const [showNoveltiesModal, setShowNoveltiesModal] = useState(false);
-  const [showExclusiveGroupsModal, setShowExclusiveGroupsModal] = useState(false);
   const dataLoadedRef = useRef(false); // Bandera para evitar cargas duplicadas
 
   // Verificar si hay sesión guardada al cargar la app
@@ -235,63 +233,6 @@ function App() {
       case 'meal-management':
         return <MealManagement />;
 
-      case 'exclusive-groups':
-        return (
-          <div className="space-y-6">
-            <div className="bg-gradient-to-r from-blue-600 via-green-600 to-amber-500 rounded-xl p-6 text-white shadow-lg">
-              <h2 className="text-2xl font-bold mb-2">Grupos Exclusivos</h2>
-              <p className="text-white/80">
-                Gestiona equipos de Master, Móviles y Puestos Fijos. El personal asignado a estos grupos
-                queda bloqueado de la rotación general.
-              </p>
-              <button
-                onClick={() => setShowExclusiveGroupsModal(true)}
-                className="mt-4 px-6 py-3 bg-white text-gray-800 font-semibold rounded-lg hover:bg-gray-100 transition-colors shadow-md"
-              >
-                Abrir Gestión de Grupos Exclusivos
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white text-xl">📻</span>
-                  </div>
-                  <h3 className="font-bold text-blue-800">MASTER</h3>
-                </div>
-                <p className="text-sm text-blue-700">
-                  Equipos que operan un Master o Estudio. Quedan bloqueados de asignaciones externas.
-                </p>
-              </div>
-
-              <div className="bg-green-50 border-2 border-green-200 rounded-lg p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white text-xl">🚐</span>
-                  </div>
-                  <h3 className="font-bold text-green-800">MÓVIL</h3>
-                </div>
-                <p className="text-sm text-green-700">
-                  Equipos en unidad móvil con vehículo y conductor asignados. Capacidad descontada automáticamente.
-                </p>
-              </div>
-
-              <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-amber-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white text-xl">📍</span>
-                  </div>
-                  <h3 className="font-bold text-amber-800">PUESTO FIJO</h3>
-                </div>
-                <p className="text-sm text-amber-700">
-                  Personal en ubicaciones externas fijas como Congreso, Presidencia, Aeropuerto.
-                </p>
-              </div>
-            </div>
-          </div>
-        );
-
       default:
         return (
           <div className="bg-white rounded-lg shadow-md p-8 text-center">
@@ -338,20 +279,6 @@ function App() {
         onClose={() => setShowNoveltiesModal(false)}
         novelties={novelties}
         personnel={personnel}
-      />
-
-      <ExclusiveGroupsModal
-        isOpen={showExclusiveGroupsModal}
-        onClose={() => setShowExclusiveGroupsModal(false)}
-        selectedDate={currentDate.toISOString().split('T')[0]}
-        onGroupAssigned={(result) => {
-          console.log('Grupo asignado:', result);
-          setShowAlert({
-            type: result.alerts?.length > 0 ? 'warning' : 'success',
-            title: result.alerts?.length > 0 ? 'Grupo Asignado con Alertas' : 'Grupo Asignado',
-            message: result.message
-          });
-        }}
       />
 
       {/* PWA Install Prompt */}
