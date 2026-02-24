@@ -1,11 +1,39 @@
 // src/components/ProgramMapping/ProgramMappingView.jsx
 import React, { useState, useEffect } from 'react';
 import { Button } from '../UI/Button';
-import { Save, RefreshCw, Plus, X, Trash2, Edit2, Database } from 'lucide-react';
+import { Save, RefreshCw, Plus, X, Trash2, Edit2, Database, Shield, Radio, Truck, MapPin, Users, Search } from 'lucide-react';
 import { programMappingService } from '../../services/programMappingService';
 import { customProgramsService } from '../../services/customProgramsService';
 import { changeLogService } from '../../services/changeLogService';
 import { WEEKDAY_PROGRAMS, WEEKEND_PROGRAMS } from '../../data/programs';
+
+// Configuración de tipos de grupo exclusivo
+const EXCLUSIVE_GROUP_TYPES = {
+  MASTER: {
+    label: 'Master/Estudio',
+    description: 'Equipo fijo operando un Master',
+    color: '#3b82f6',
+    bgColor: 'bg-blue-100',
+    textColor: 'text-blue-700',
+    icon: Radio
+  },
+  MOVIL: {
+    label: 'Móvil',
+    description: 'Equipo en unidad móvil',
+    color: '#10b981',
+    bgColor: 'bg-green-100',
+    textColor: 'text-green-700',
+    icon: Truck
+  },
+  PUESTO_FIJO: {
+    label: 'Puesto Fijo',
+    description: 'Personal en ubicación externa',
+    color: '#f59e0b',
+    bgColor: 'bg-amber-100',
+    textColor: 'text-amber-700',
+    icon: MapPin
+  }
+};
 
 // Componente del modal de edición de fechas
 const DateEditorModal = ({ program, currentDates, onSave, onClose }) => {
@@ -132,8 +160,13 @@ export const ProgramMappingView = () => {
     time: '',
     color: '#3B82F6',
     recordingDates: [], // Array de fechas exactas seleccionadas
-    programType: 'weekday' // 'weekday' o 'weekend'
+    programType: 'weekday', // 'weekday' o 'weekend'
+    isExclusiveGroup: false,
+    exclusiveType: null, // 'MASTER', 'MOVIL', 'PUESTO_FIJO'
+    exclusivePersonnel: [] // IDs del personal asignado
   });
+  const [personnel, setPersonnel] = useState([]);
+  const [personnelSearchTerm, setPersonnelSearchTerm] = useState('');
 
   // Cargar programas personalizados y mapeos al iniciar
   useEffect(() => {
@@ -167,6 +200,17 @@ export const ProgramMappingView = () => {
     const storageKey = activeTab === 'weekend' ? 'rtvc_program_times_weekend' : 'rtvc_program_times';
     const times = JSON.parse(localStorage.getItem(storageKey) || '{}');
     setProgramTimes(times);
+
+    // Cargar personal para grupos exclusivos
+    try {
+      const personnelRes = await fetch('/api/personnel');
+      if (personnelRes.ok) {
+        const personnelData = await personnelRes.json();
+        setPersonnel(personnelData);
+      }
+    } catch (err) {
+      console.warn('No se pudo cargar personal:', err);
+    }
   };
 
   // Combinar programas según la pestaña activa
@@ -270,7 +314,10 @@ export const ProgramMappingView = () => {
         color: newProgram.color,
         type: 'custom',
         recordingDates: newProgram.recordingDates,
-        programType: newProgram.programType
+        programType: newProgram.programType,
+        isExclusiveGroup: newProgram.isExclusiveGroup,
+        exclusiveType: newProgram.isExclusiveGroup ? newProgram.exclusiveType : null,
+        exclusivePersonnel: newProgram.isExclusiveGroup ? newProgram.exclusivePersonnel : []
       });
 
       setCustomPrograms(prev => [...prev, addedProgram]);
@@ -281,8 +328,12 @@ export const ProgramMappingView = () => {
         time: '',
         color: '#3B82F6',
         recordingDates: [],
-        programType: activeTab
+        programType: activeTab,
+        isExclusiveGroup: false,
+        exclusiveType: null,
+        exclusivePersonnel: []
       });
+      setPersonnelSearchTerm('');
       setShowAddForm(false);
 
       alert(`Programa "${addedProgram.name}" agregado exitosamente`);
@@ -303,8 +354,12 @@ export const ProgramMappingView = () => {
       time: program.time,
       color: program.color,
       recordingDates: program.recordingDates || [],
-      programType: program.programType || 'weekday'
+      programType: program.programType || 'weekday',
+      isExclusiveGroup: program.isExclusiveGroup || false,
+      exclusiveType: program.exclusiveType || null,
+      exclusivePersonnel: program.exclusivePersonnel || []
     });
+    setPersonnelSearchTerm('');
     setShowAddForm(true);
   };
 
@@ -327,7 +382,10 @@ export const ProgramMappingView = () => {
         time: newProgram.time,
         color: newProgram.color,
         recordingDates: newProgram.recordingDates,
-        programType: newProgram.programType
+        programType: newProgram.programType,
+        isExclusiveGroup: newProgram.isExclusiveGroup,
+        exclusiveType: newProgram.isExclusiveGroup ? newProgram.exclusiveType : null,
+        exclusivePersonnel: newProgram.isExclusiveGroup ? newProgram.exclusivePersonnel : []
       });
 
       setCustomPrograms(prev => prev.map(p =>
@@ -340,8 +398,12 @@ export const ProgramMappingView = () => {
         time: '',
         color: '#3B82F6',
         recordingDates: [],
-        programType: activeTab
+        programType: activeTab,
+        isExclusiveGroup: false,
+        exclusiveType: null,
+        exclusivePersonnel: []
       });
+      setPersonnelSearchTerm('');
       setEditingProgram(null);
       setShowAddForm(false);
 
@@ -683,6 +745,189 @@ export const ProgramMappingView = () => {
               </p>
             </div>
 
+            {/* Grupo Exclusivo */}
+            <div className="border-t pt-4 mt-4">
+              <div className="flex items-center gap-3 mb-3">
+                <input
+                  type="checkbox"
+                  id="isExclusiveGroup"
+                  checked={newProgram.isExclusiveGroup}
+                  onChange={(e) => setNewProgram({
+                    ...newProgram,
+                    isExclusiveGroup: e.target.checked,
+                    exclusiveType: e.target.checked ? 'MASTER' : null,
+                    exclusivePersonnel: e.target.checked ? newProgram.exclusivePersonnel : []
+                  })}
+                  className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                />
+                <label htmlFor="isExclusiveGroup" className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                  <Shield className="w-5 h-5 text-indigo-600" />
+                  Este programa tiene un Grupo Exclusivo de personal
+                </label>
+              </div>
+
+              {newProgram.isExclusiveGroup && (
+                <div className="ml-8 space-y-4 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  {/* Tipo de grupo exclusivo */}
+                  <div>
+                    <label className="block text-sm font-medium text-indigo-700 mb-2">
+                      Tipo de Grupo Exclusivo
+                    </label>
+                    <div className="flex gap-2">
+                      {Object.entries(EXCLUSIVE_GROUP_TYPES).map(([type, config]) => {
+                        const Icon = config.icon;
+                        return (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={() => setNewProgram({ ...newProgram, exclusiveType: type })}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all ${
+                              newProgram.exclusiveType === type
+                                ? `${config.bgColor} border-current ${config.textColor}`
+                                : 'border-gray-200 text-gray-500 hover:border-gray-300 bg-white'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {config.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {newProgram.exclusiveType && (
+                      <p className="mt-2 text-xs text-indigo-600">
+                        {EXCLUSIVE_GROUP_TYPES[newProgram.exclusiveType]?.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Selector de personal */}
+                  <div>
+                    <label className="block text-sm font-medium text-indigo-700 mb-2">
+                      <Users className="w-4 h-4 inline mr-1" />
+                      Personal Exclusivo ({newProgram.exclusivePersonnel.length} seleccionados)
+                    </label>
+
+                    {/* Miembros actuales */}
+                    {newProgram.exclusivePersonnel.length > 0 && (
+                      <div className="mb-3 p-3 bg-white border border-indigo-200 rounded-lg">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-indigo-700">
+                            Personal asignado:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setNewProgram({ ...newProgram, exclusivePersonnel: [] })}
+                            className="text-xs text-red-500 hover:underline"
+                          >
+                            Quitar todos
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {newProgram.exclusivePersonnel.map(id => {
+                            const person = personnel.find(p => p.id === id);
+                            if (!person) return null;
+                            const config = EXCLUSIVE_GROUP_TYPES[newProgram.exclusiveType] || {};
+                            return (
+                              <span
+                                key={id}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs cursor-pointer hover:opacity-80 ${config.bgColor || 'bg-gray-100'} ${config.textColor || 'text-gray-700'}`}
+                                onClick={() => setNewProgram({
+                                  ...newProgram,
+                                  exclusivePersonnel: newProgram.exclusivePersonnel.filter(pid => pid !== id)
+                                })}
+                                title="Click para quitar"
+                              >
+                                {person.name}
+                                <X className="w-3 h-3" />
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Buscador */}
+                    <div className="relative mb-2">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="text"
+                        value={personnelSearchTerm}
+                        onChange={(e) => setPersonnelSearchTerm(e.target.value)}
+                        placeholder="Buscar por nombre o área..."
+                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                      />
+                    </div>
+
+                    {/* Lista de personal */}
+                    <div className="border rounded-lg overflow-hidden bg-white max-h-48 overflow-y-auto">
+                      {personnel.length === 0 ? (
+                        <div className="text-center py-4 text-gray-400 text-sm">
+                          Cargando personal...
+                        </div>
+                      ) : (
+                        (() => {
+                          const filtered = personnel.filter(p => {
+                            if (!personnelSearchTerm.trim()) return true;
+                            const term = personnelSearchTerm.toLowerCase();
+                            return p.name?.toLowerCase().includes(term) ||
+                                   p.area?.toLowerCase().includes(term);
+                          });
+                          const grouped = filtered.reduce((acc, p) => {
+                            const area = p.area || 'OTRO';
+                            if (!acc[area]) acc[area] = [];
+                            acc[area].push(p);
+                            return acc;
+                          }, {});
+
+                          return Object.entries(grouped).sort().map(([area, areaPersonnel]) => (
+                            <div key={area}>
+                              <div className="bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 uppercase sticky top-0">
+                                {area} ({areaPersonnel.length})
+                              </div>
+                              {areaPersonnel.map(person => {
+                                const selected = newProgram.exclusivePersonnel.includes(person.id);
+                                const config = EXCLUSIVE_GROUP_TYPES[newProgram.exclusiveType] || {};
+                                return (
+                                  <div
+                                    key={person.id}
+                                    onClick={() => setNewProgram({
+                                      ...newProgram,
+                                      exclusivePersonnel: selected
+                                        ? newProgram.exclusivePersonnel.filter(id => id !== person.id)
+                                        : [...newProgram.exclusivePersonnel, person.id]
+                                    })}
+                                    className={`px-3 py-2 border-b border-gray-100 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors ${
+                                      selected ? (config.bgColor || 'bg-indigo-50') : ''
+                                    }`}
+                                  >
+                                    <div
+                                      className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0`}
+                                      style={{
+                                        backgroundColor: selected ? (config.color || '#6366f1') : 'white',
+                                        borderColor: selected ? (config.color || '#6366f1') : '#d1d5db'
+                                      }}
+                                    >
+                                      {selected && <span className="text-white text-xs font-bold">✓</span>}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-medium text-gray-900 text-sm truncate">{person.name}</div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ));
+                        })()
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-indigo-600">
+                      El personal seleccionado quedará bloqueado de la rotación general cuando este programa esté activo.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Selección de fechas de grabación */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -759,12 +1004,16 @@ export const ProgramMappingView = () => {
                 onClick={() => {
                   setShowAddForm(false);
                   setEditingProgram(null);
+                  setPersonnelSearchTerm('');
                   setNewProgram({
                     name: '',
                     time: '',
                     color: '#3B82F6',
                     recordingDates: [],
-                    programType: activeTab
+                    programType: activeTab,
+                    isExclusiveGroup: false,
+                    exclusiveType: null,
+                    exclusivePersonnel: []
                   });
                 }}
               >
@@ -844,6 +1093,15 @@ export const ProgramMappingView = () => {
                         {program.name}
                         {program.isCustom && (
                           <span className="ml-2 text-xs text-blue-600">(Personalizado)</span>
+                        )}
+                        {program.isExclusiveGroup && program.exclusiveType && (
+                          <span className={`ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${EXCLUSIVE_GROUP_TYPES[program.exclusiveType]?.bgColor} ${EXCLUSIVE_GROUP_TYPES[program.exclusiveType]?.textColor}`}>
+                            <Shield className="w-3 h-3" />
+                            {EXCLUSIVE_GROUP_TYPES[program.exclusiveType]?.label}
+                            {program.exclusivePersonnel?.length > 0 && (
+                              <span className="font-semibold">({program.exclusivePersonnel.length})</span>
+                            )}
+                          </span>
                         )}
                       </div>
                     </div>
