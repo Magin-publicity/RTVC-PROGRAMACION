@@ -245,18 +245,10 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     let isCancelled = false;
 
     const loadEverything = async () => {
-      // 🧹 LIMPIEZA DE LOCALSTORAGE: Limpiar SOLO datos de programación (NO credenciales)
-      console.log('🧹 [LOCALSTORAGE] Limpiando datos de programación (preservando credenciales)...');
-      const keysToKeep = ['token', 'user', 'bypass_mode']; // Preservar credenciales
-      const keysToRemove = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && !keysToKeep.includes(key)) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach(key => localStorage.removeItem(key));
-      console.log(`✅ [LOCALSTORAGE] Eliminadas ${keysToRemove.length} claves, preservadas ${keysToKeep.length} claves`);
+      // 🧹 LIMPIEZA DE LOCALSTORAGE: Limpiar SOLO datos de programación temporales
+      // NOTA: Ya no limpiamos todo el localStorage porque borraba programas personalizados
+      // Solo limpiamos las claves específicas que causan problemas de estado
+      console.log('🧹 [LOCALSTORAGE] Limpieza selectiva (preservando configuración y programas)...');
 
       // 🧹 LIMPIEZA DE ZOMBIS: Resetear todos los estados al cambiar de día
       // Esto asegura que no queden residuos del día anterior en memoria
@@ -1865,15 +1857,25 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     try {
       console.log(`🗑️ [RESET] Limpiando datos locales para ${dateStr}...`);
 
-      // Limpiar localStorage (PRESERVANDO credenciales)
+      // Limpiar localStorage (PRESERVANDO credenciales y configuración importante)
       const token = localStorage.getItem('token');
       const user = localStorage.getItem('user');
       const bypassMode = localStorage.getItem('bypass_mode');
+      const customPrograms = localStorage.getItem('rtvc_custom_programs');
+      const programTimes = localStorage.getItem('rtvc_program_times');
+      const programTimesWeekend = localStorage.getItem('rtvc_program_times_weekend');
+      const sidebarCollapsed = localStorage.getItem('rtvc_sidebar_collapsed');
+
       localStorage.clear();
+
       if (token) localStorage.setItem('token', token);
       if (user) localStorage.setItem('user', user);
       if (bypassMode) localStorage.setItem('bypass_mode', bypassMode);
-      console.log('✅ [RESET] localStorage limpiado (credenciales preservadas)');
+      if (customPrograms) localStorage.setItem('rtvc_custom_programs', customPrograms);
+      if (programTimes) localStorage.setItem('rtvc_program_times', programTimes);
+      if (programTimesWeekend) localStorage.setItem('rtvc_program_times_weekend', programTimesWeekend);
+      if (sidebarCollapsed) localStorage.setItem('rtvc_sidebar_collapsed', sidebarCollapsed);
+      console.log('✅ [RESET] localStorage limpiado (credenciales y configuración preservadas)');
 
       // Resetear todos los estados a vacío
       setAssignments({});

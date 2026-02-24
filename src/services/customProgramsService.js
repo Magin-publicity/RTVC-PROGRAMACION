@@ -13,7 +13,9 @@ export const customProgramsService = {
   getAll() {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const programs = data ? JSON.parse(data) : [];
+      console.log('📦 [customProgramsService.getAll] Programas cargados:', programs.length, programs.map(p => p.name));
+      return programs;
     } catch (error) {
       console.error('Error al obtener programas personalizados:', error);
       return [];
@@ -28,6 +30,7 @@ export const customProgramsService = {
   add(program) {
     try {
       const programs = this.getAll();
+      console.log('📦 [customProgramsService.add] Programas existentes:', programs.length);
 
       // Generar ID único (números mayores a 1000 para evitar conflictos)
       const newId = programs.length > 0
@@ -41,8 +44,15 @@ export const customProgramsService = {
         createdAt: new Date().toISOString()
       };
 
+      console.log('📦 [customProgramsService.add] Nuevo programa a guardar:', newProgram);
+
       programs.push(newProgram);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(programs));
+
+      // Verificar que se guardó correctamente
+      const saved = localStorage.getItem(STORAGE_KEY);
+      console.log('📦 [customProgramsService.add] Guardado en localStorage:', saved ? 'OK' : 'ERROR');
+      console.log('📦 [customProgramsService.add] Total programas guardados:', JSON.parse(saved || '[]').length);
 
       return newProgram;
     } catch (error) {
@@ -58,8 +68,11 @@ export const customProgramsService = {
    */
   delete(programId) {
     try {
+      console.log('🗑️ [customProgramsService.delete] Eliminando programa ID:', programId);
       const programs = this.getAll();
+      console.log('🗑️ [customProgramsService.delete] Programas antes de eliminar:', programs.length);
       const filteredPrograms = programs.filter(p => p.id !== programId);
+      console.log('🗑️ [customProgramsService.delete] Programas después de eliminar:', filteredPrograms.length);
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredPrograms));
       return true;
@@ -101,6 +114,8 @@ export const customProgramsService = {
    */
   clearAll() {
     try {
+      console.log('⚠️⚠️⚠️ [customProgramsService.clearAll] LIMPIANDO TODOS LOS PROGRAMAS!!!');
+      console.trace('Stack trace de clearAll:');
       localStorage.removeItem(STORAGE_KEY);
       return true;
     } catch (error) {
