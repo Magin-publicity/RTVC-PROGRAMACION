@@ -302,11 +302,6 @@ export const ProgramMappingView = () => {
       return;
     }
 
-    if (newProgram.recordingDates.length === 0) {
-      alert('Por favor selecciona al menos una fecha de grabación');
-      return;
-    }
-
     try {
       const addedProgram = customProgramsService.add({
         name: newProgram.name,
@@ -368,11 +363,6 @@ export const ProgramMappingView = () => {
 
     if (!newProgram.name || !newProgram.time) {
       alert('Por favor completa todos los campos');
-      return;
-    }
-
-    if (newProgram.recordingDates.length === 0) {
-      alert('Por favor selecciona al menos una fecha de grabación');
       return;
     }
 
@@ -931,70 +921,117 @@ export const ProgramMappingView = () => {
             {/* Selección de fechas de grabación */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Fechas de Grabación *
+                Fechas de Grabación
               </label>
-              <div className="flex gap-2 mb-2">
-                <input
-                  type="date"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  onChange={(e) => {
-                    if (e.target.value && !newProgram.recordingDates.includes(e.target.value)) {
-                      setNewProgram({
-                        ...newProgram,
-                        recordingDates: [...newProgram.recordingDates, e.target.value].sort()
-                      });
-                      e.target.value = ''; // Limpiar el input
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
-                  onClick={() => {
-                    const input = document.querySelector('input[type="date"]');
-                    if (input) input.value = '';
-                  }}
-                >
-                  Agregar Fecha
-                </button>
+
+              {/* Opciones: Todos los días vs Fechas específicas */}
+              <div className="space-y-3 mb-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="dateOption"
+                    checked={newProgram.recordingDates.length === 0}
+                    onChange={() => setNewProgram({ ...newProgram, recordingDates: [] })}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="text-sm text-gray-700 font-medium">Todos los días</span>
+                  <span className="text-xs text-gray-500">(el programa aparecerá siempre)</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="dateOption"
+                    checked={newProgram.recordingDates.length > 0}
+                    onChange={() => {
+                      if (newProgram.recordingDates.length === 0) {
+                        // Agregar la fecha de hoy por defecto
+                        const today = new Date();
+                        const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                        setNewProgram({ ...newProgram, recordingDates: [dateStr] });
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="text-sm text-gray-700 font-medium">Fechas específicas</span>
+                  <span className="text-xs text-gray-500">(solo en las fechas seleccionadas)</span>
+                </label>
               </div>
 
-              {/* Lista de fechas seleccionadas */}
+              {/* Selector de fechas - solo visible si se eligió "Fechas específicas" */}
               {newProgram.recordingDates.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-700">Fechas seleccionadas:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {newProgram.recordingDates.map(date => (
-                      <div
-                        key={date}
-                        className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-md text-sm"
-                      >
-                        <span>{new Date(date + 'T00:00:00').toLocaleDateString('es-ES', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                        })}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
+                <div className="ml-6 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="date"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => {
+                        if (e.target.value && !newProgram.recordingDates.includes(e.target.value)) {
+                          setNewProgram({
+                            ...newProgram,
+                            recordingDates: [...newProgram.recordingDates, e.target.value].sort()
+                          });
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="px-4 py-2 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                      onClick={() => {
+                        const input = document.querySelector('input[type="date"]');
+                        if (input && input.value) {
+                          if (!newProgram.recordingDates.includes(input.value)) {
                             setNewProgram({
                               ...newProgram,
-                              recordingDates: newProgram.recordingDates.filter(d => d !== date)
+                              recordingDates: [...newProgram.recordingDates, input.value].sort()
                             });
-                          }}
-                          className="text-blue-600 hover:text-blue-900 font-bold"
+                          }
+                          input.value = '';
+                        }
+                      }}
+                    >
+                      Agregar
+                    </button>
+                  </div>
+
+                  {/* Lista de fechas seleccionadas */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-700">Fechas seleccionadas:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {newProgram.recordingDates.map(date => (
+                        <div
+                          key={date}
+                          className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-md text-sm"
                         >
-                          ×
-                        </button>
-                      </div>
-                    ))}
+                          <span>{new Date(date + 'T00:00:00').toLocaleDateString('es-ES', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newDates = newProgram.recordingDates.filter(d => d !== date);
+                              // Si queda vacío después de eliminar, agregar hoy para no volver a "todos los días"
+                              if (newDates.length === 0) {
+                                const today = new Date();
+                                const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                                setNewProgram({ ...newProgram, recordingDates: [dateStr] });
+                              } else {
+                                setNewProgram({ ...newProgram, recordingDates: newDates });
+                              }
+                            }}
+                            className="text-blue-600 hover:text-blue-900 font-bold"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
-
-              <p className="mt-2 text-xs text-gray-500">
-                Selecciona las fechas exactas en las que este programa debe aparecer en la programación
-              </p>
             </div>
 
             <div className="flex justify-end gap-2">
