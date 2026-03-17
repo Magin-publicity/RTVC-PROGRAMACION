@@ -176,6 +176,7 @@ export default function FleetManagement() {
 
   const handleSaveVehicle = async (vehicleData) => {
     try {
+      // El backend espera camelCase, enviar directamente vehicleData
       const url = editingVehicle
         ? `${API_URL}/fleet/vehicles/${editingVehicle.id}`
         : `${API_URL}/fleet/vehicles`;
@@ -192,6 +193,10 @@ export default function FleetManagement() {
         await loadVehicles();
         setShowVehicleModal(false);
         setEditingVehicle(null);
+      } else {
+        const errorData = await response.json();
+        console.error('Error del servidor:', errorData);
+        alert(`Error al guardar vehículo: ${errorData.message || 'Error desconocido'}`);
       }
     } catch (error) {
       console.error('Error guardando vehículo:', error);
@@ -511,21 +516,31 @@ function VehiclesTab({ vehicles, onEdit, onDelete, onAdd }) {
 
             <div className="space-y-2 mb-3">
               <div className="flex items-center text-sm">
-                <span className="text-gray-600 w-20">Placa:</span>
+                <span className="text-gray-600 w-24">Placa:</span>
                 <span className="font-medium">{vehicle.plate || 'N/A'}</span>
               </div>
               <div className="flex items-center text-sm">
-                <span className="text-gray-600 w-20">Capacidad:</span>
+                <span className="text-gray-600 w-24">Capacidad:</span>
                 <span className="font-medium">{vehicle.capacity} pasajeros</span>
               </div>
               <div className="flex items-center text-sm">
-                <span className="text-gray-600 w-20">Conductor:</span>
+                <span className="text-gray-600 w-24">Conductor:</span>
                 <span className="font-medium">{vehicle.driver_name || 'N/A'}</span>
               </div>
               {vehicle.driver_phone && (
                 <div className="flex items-center text-sm">
-                  <span className="text-gray-600 w-20">Teléfono:</span>
+                  <span className="text-gray-600 w-24">Teléfono:</span>
                   <span className="font-medium">{vehicle.driver_phone}</span>
+                </div>
+              )}
+              {(vehicle.shift_start || vehicle.shift_end) && (
+                <div className="mt-2 pt-2 border-t border-gray-300">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">🕐 Turno:</span>
+                    <span className="font-medium text-blue-600">
+                      {vehicle.shift_start || '--:--'} - {vehicle.shift_end || '--:--'}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
@@ -852,6 +867,8 @@ function VehicleModal({ vehicle, onSave, onClose }) {
     driverPhone: vehicle?.driver_phone || '',
     plate: vehicle?.plate || '',
     status: vehicle?.status || 'AVAILABLE',
+    shiftStart: vehicle?.shift_start || '',
+    shiftEnd: vehicle?.shift_end || '',
   });
 
   const handleSubmit = (e) => {
@@ -968,6 +985,34 @@ function VehicleModal({ vehicle, onSave, onClose }) {
               />
             </div>
 
+            {/* Hora de Ingreso */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Hora de Ingreso
+              </label>
+              <input
+                type="time"
+                value={formData.shiftStart}
+                onChange={(e) => setFormData({ ...formData, shiftStart: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">Hora en que el conductor inicia turno</p>
+            </div>
+
+            {/* Hora de Salida */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Hora de Salida
+              </label>
+              <input
+                type="time"
+                value={formData.shiftEnd}
+                onChange={(e) => setFormData({ ...formData, shiftEnd: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">Hora en que el conductor finaliza turno</p>
+            </div>
+
             {/* Estado (solo al editar) */}
             {vehicle && (
               <div>
@@ -1019,7 +1064,6 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
     assistantIds: dispatch?.assistant_ids || (dispatch?.assistant_id ? [dispatch.assistant_id] : []), // Array de IDs
     directorIds: dispatch?.director_ids || (dispatch?.director_id ? [dispatch.director_id] : []), // Array de IDs
     liveuIds: dispatch?.liveu_ids || (dispatch?.liveu_id ? [dispatch.liveu_id] : []), // Array de IDs
-    driverIds: dispatch?.driver_ids || [], // Array de IDs de conductores
     driverName: dispatch?.driver_name || '',
     driverPhone: dispatch?.driver_phone || '',
     vehiclePlate: dispatch?.vehicle_plate || '',
@@ -1065,30 +1109,84 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
     activeDispatches.filter(d => d.id !== currentDispatchId && d.journalist_id).map(d => d.journalist_id)
   );
 
-  // Filtrar vehículos disponibles (solo los marcados como disponibles del día Y no en uso)
+  // Función para verificar si un vehículo está en su horario de turno
+  const isVehicleInShift = (vehicle) => {
+    if (!vehicle.shift_start || !vehicle.shift_end) return true; // Si no tiene horarios, está disponible siempre
+
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const shiftStart = vehicle.shift_start.substring(0, 5); // HH:MM
+    const shiftEnd = vehicle.shift_end.substring(0, 5); // HH:MM
+
+    // Si el turno cruza medianoche (ej: 15:00 - 03:00)
+    if (shiftStart > shiftEnd) {
+      return currentTime >= shiftStart || currentTime <= shiftEnd;
+    }
+
+    // Turno normal (ej: 06:00 - 18:00)
+    return currentTime >= shiftStart && currentTime <= shiftEnd;
+  };
+
+  // Filtrar vehículos disponibles (solo los marcados como disponibles del día Y no en uso Y dentro de su horario)
   const availableVehicleIds = new Set(availability.map(a => a.vehicle_id));
-  const availableVehicles = vehicles.filter(v => availableVehicleIds.has(v.id) && !usedVehicleIds.has(v.id));
+  const availableVehicles = vehicles.filter(v =>
+    availableVehicleIds.has(v.id) &&
+    !usedVehicleIds.has(v.id) &&
+    isVehicleInShift(v)
+  );
 
   // Función para combinar personal: primero EN TURNO AM, luego EN TURNO PM, luego otros
-  // También filtrar los que ya están en uso
+  // También filtrar los que ya están en uso o bloqueados por viaje
   const mergePersonnelWithShifts = (onDutyList, allList, usedIds) => {
     const onDutyIds = new Set(onDutyList.map(p => p.id));
-    const others = allList.filter(p => !onDutyIds.has(p.id) && !usedIds.has(p.id));
+    const others = allList.filter(p => !onDutyIds.has(p.id) && !usedIds.has(p.id) && !p.is_blocked);
 
-    // Separar en turno por AM y PM
-    const onDutyAM = onDutyList.filter(p => !usedIds.has(p.id) && (p.turno === 'AM' || p.turno === 'MAÑANA' || p.shift_start?.startsWith('08') || p.shift_start?.startsWith('05') || p.shift_start?.startsWith('09')));
-    const onDutyPM = onDutyList.filter(p => !usedIds.has(p.id) && (p.turno === 'PM' || p.turno === 'TARDE' || p.shift_start?.startsWith('13') || p.shift_start?.startsWith('14') || p.shift_start?.startsWith('15') || p.shift_start?.startsWith('16')));
-    const onDutyOther = onDutyList.filter(p => !usedIds.has(p.id) && !onDutyAM.includes(p) && !onDutyPM.includes(p));
+    // Separar en turno por AM y PM BASÁNDOSE EN LA PROGRAMACIÓN DEL DÍA (p.call_time)
+    // Si tiene call_time entre 00:00-11:59 es AM, si es 12:00-23:59 es PM
+    const onDutyAM = onDutyList.filter(p => {
+      if (usedIds.has(p.id) || p.is_blocked) return false;
 
-    // Marcar los que están en uso
+      // Primero verificar el campo turno que viene de la programación
+      if (p.turno === 'AM' || p.turno === 'MAÑANA') return true;
+
+      // Si no tiene turno, verificar por call_time (hora de llamado de la programación)
+      if (p.call_time) {
+        const hour = parseInt(p.call_time.substring(0, 2));
+        return hour >= 0 && hour < 12;
+      }
+
+      return false;
+    });
+
+    const onDutyPM = onDutyList.filter(p => {
+      if (usedIds.has(p.id) || p.is_blocked) return false;
+
+      // Primero verificar el campo turno que viene de la programación
+      if (p.turno === 'PM' || p.turno === 'TARDE') return true;
+
+      // Si no tiene turno, verificar por call_time (hora de llamado de la programación)
+      if (p.call_time) {
+        const hour = parseInt(p.call_time.substring(0, 2));
+        return hour >= 12 && hour < 24;
+      }
+
+      return false;
+    });
+
+    const onDutyOther = onDutyList.filter(p => !usedIds.has(p.id) && !p.is_blocked && !onDutyAM.includes(p) && !onDutyPM.includes(p));
+
+    // Marcar los que están en uso o bloqueados
     const inUse = allList.filter(p => usedIds.has(p.id));
+    const blocked = onDutyList.filter(p => p.is_blocked && !usedIds.has(p.id));
 
     return {
       onDutyAM,
       onDutyPM,
       onDutyOther,
       others,
-      inUse
+      inUse,
+      blocked // Nuevo: personal bloqueado por viaje
     };
   };
 
@@ -1100,7 +1198,7 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
   // Filtrar LiveU disponibles
   const availableLiveu = liveuEquipment.filter(l => !usedLiveuIds.has(l.id));
 
-  // Cuando se selecciona un vehículo, autocompletar conductor y placa
+  // Cuando se selecciona un vehículo, autocompletar conductor, placa y teléfono
   const handleVehicleChange = (vehicleId) => {
     const vehicle = vehicles.find(v => v.id === parseInt(vehicleId));
     if (vehicle) {
@@ -1109,6 +1207,7 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
         vehicleId: vehicle.id,
         driverName: vehicle.driver_name || '',
         vehiclePlate: vehicle.plate || '',
+        driverPhone: vehicle.driver_phone || '',
       });
     }
   };
@@ -1405,7 +1504,22 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
                     ))}
                   </div>
                 )}
-                {formData.cameramanIds.length === 0 && (
+                {cameramenCombined.blocked && cameramenCombined.blocked.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">✈️ VIAJANDO (Bloqueados)</p>
+                    {cameramenCombined.blocked.map((cameraman) => (
+                      <label key={cameraman.id} className="flex items-center gap-2 py-1 opacity-50 cursor-not-allowed">
+                        <input
+                          type="checkbox"
+                          disabled
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{cameraman.full_name} - {cameraman.novelty_tipo}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {formData.cameramanIds.length === 0 && cameramenCombined.onDutyAM.length === 0 && cameramenCombined.onDutyPM.length === 0 && cameramenCombined.others.length === 0 && (
                   <p className="text-sm text-gray-500 italic">Ningún camarógrafo seleccionado</p>
                 )}
               </div>
@@ -1483,7 +1597,22 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
                     ))}
                   </div>
                 )}
-                {formData.assistantIds.length === 0 && (
+                {assistantsCombined.blocked && assistantsCombined.blocked.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">✈️ VIAJANDO (Bloqueados)</p>
+                    {assistantsCombined.blocked.map((assistant) => (
+                      <label key={assistant.id} className="flex items-center gap-2 py-1 opacity-50 cursor-not-allowed">
+                        <input
+                          type="checkbox"
+                          disabled
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{assistant.full_name} - {assistant.novelty_tipo}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {formData.assistantIds.length === 0 && assistantsCombined.onDutyAM.length === 0 && assistantsCombined.onDutyPM.length === 0 && assistantsCombined.others.length === 0 && (
                   <p className="text-sm text-gray-500 italic">Ningún asistente seleccionado</p>
                 )}
               </div>
@@ -1657,64 +1786,6 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
               </p>
             </div>
 
-            {/* Conductores (multiselección) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Conductores (puedes seleccionar varios)
-              </label>
-              <div className="border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto bg-white">
-                {(() => {
-                  // Extraer conductores únicos de los vehículos
-                  const uniqueDrivers = [...new Set(vehicles.filter(v => v.driver_name).map(v => v.driver_name))].sort();
-
-                  if (uniqueDrivers.length === 0) {
-                    return <p className="text-sm text-gray-500 italic">No hay conductores disponibles</p>;
-                  }
-
-                  return uniqueDrivers.map((driverName, index) => {
-                    // Buscar vehículo asociado a este conductor
-                    const driverVehicle = vehicles.find(v => v.driver_name === driverName);
-
-                    return (
-                      <label key={index} className="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.driverIds.includes(driverName)}
-                          onChange={(e) => {
-                            const newIds = e.target.checked
-                              ? [...formData.driverIds, driverName]
-                              : formData.driverIds.filter(id => id !== driverName);
-
-                            // Si es el primer conductor seleccionado, autocompletar placa y teléfono
-                            if (e.target.checked && newIds.length === 1 && driverVehicle) {
-                              setFormData({
-                                ...formData,
-                                driverIds: newIds,
-                                vehiclePlate: driverVehicle.plate || '',
-                                driverPhone: driverVehicle.driver_phone || ''
-                              });
-                            } else {
-                              setFormData({ ...formData, driverIds: newIds });
-                            }
-                          }}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm">{driverName}</span>
-                        {driverVehicle && (
-                          <span className="text-xs text-gray-500 ml-auto">
-                            {driverVehicle.plate} • {driverVehicle.driver_phone || 'Sin teléfono'}
-                          </span>
-                        )}
-                      </label>
-                    );
-                  });
-                })()}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Seleccionados: {formData.driverIds.length}
-              </p>
-            </div>
-
             {/* Placa */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1727,7 +1798,7 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
                 placeholder="Placa"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
               />
-              <p className="text-xs text-gray-500 mt-1">Se autocompletó del conductor seleccionado</p>
+              <p className="text-xs text-gray-500 mt-1">Se autocompletó del vehículo seleccionado</p>
             </div>
 
             {/* Teléfono del Conductor */}
@@ -1742,7 +1813,7 @@ function DispatchModal({ dispatch, vehicles, availability, journalists, camerame
                 placeholder="Teléfono"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
               />
-              <p className="text-xs text-gray-500 mt-1">Se autocompletó del conductor seleccionado</p>
+              <p className="text-xs text-gray-500 mt-1">Se autocompletó del vehículo seleccionado</p>
             </div>
 
             {/* Hora de Salida */}

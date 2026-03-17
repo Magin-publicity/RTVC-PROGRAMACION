@@ -17,7 +17,7 @@ const pool = new Pool({
 router.get('/vehicles', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT id, vehicle_code, vehicle_type, capacity, driver_name, driver_phone, plate, status, is_active
+      SELECT id, vehicle_code, vehicle_type, capacity, driver_name, driver_phone, plate, shift_start, shift_end, status, is_active
       FROM fleet_vehicles
       WHERE is_active = true
       ORDER BY vehicle_code
@@ -517,17 +517,17 @@ router.get('/directors', async (req, res) => {
  */
 router.post('/vehicles', async (req, res) => {
   try {
-    const { vehicleCode, vehicleType, capacity, driverName, driverPhone, plate } = req.body;
+    const { vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, shiftStart, shiftEnd } = req.body;
 
     if (!vehicleCode || !vehicleType || !capacity) {
       return res.status(400).json({ error: 'Código, tipo y capacidad son requeridos' });
     }
 
     const result = await pool.query(`
-      INSERT INTO fleet_vehicles (vehicle_code, vehicle_type, capacity, driver_name, driver_phone, plate, status, is_active)
-      VALUES ($1, $2, $3, $4, $5, $6, 'AVAILABLE', true)
+      INSERT INTO fleet_vehicles (vehicle_code, vehicle_type, capacity, driver_name, driver_phone, plate, shift_start, shift_end, status, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'AVAILABLE', true)
       RETURNING *
-    `, [vehicleCode, vehicleType, capacity, driverName, driverPhone, plate]);
+    `, [vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, shiftStart || null, shiftEnd || null]);
 
     console.log(`✅ Vehículo creado: ${vehicleCode} - ${vehicleType}`);
     res.status(201).json(result.rows[0]);
@@ -548,7 +548,7 @@ router.post('/vehicles', async (req, res) => {
 router.put('/vehicles/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, status, notes } = req.body;
+    const { vehicleCode, vehicleType, capacity, driverName, driverPhone, plate, status, notes, shiftStart, shiftEnd } = req.body;
 
     // Primero obtener el vehículo actual para comparar vehicle_code
     const currentVehicle = await pool.query('SELECT * FROM fleet_vehicles WHERE id = $1 AND is_active = true', [id]);
@@ -595,6 +595,14 @@ router.put('/vehicles/:id', async (req, res) => {
     if (notes !== undefined) {
       updates.push(`notes = $${paramCount++}`);
       values.push(notes);
+    }
+    if (shiftStart !== undefined) {
+      updates.push(`shift_start = $${paramCount++}`);
+      values.push(shiftStart || null);
+    }
+    if (shiftEnd !== undefined) {
+      updates.push(`shift_end = $${paramCount++}`);
+      values.push(shiftEnd || null);
     }
 
     // Siempre actualizar updated_at

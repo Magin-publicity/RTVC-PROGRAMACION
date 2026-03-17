@@ -38,6 +38,10 @@ CREATE TABLE IF NOT EXISTS personnel (
     area VARCHAR(150) NOT NULL,
     email VARCHAR(255) UNIQUE,
     telefono VARCHAR(50),
+    cedula VARCHAR(50),
+    fecha_nacimiento DATE,
+    arl VARCHAR(255),
+    eps VARCHAR(255),
     activo BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

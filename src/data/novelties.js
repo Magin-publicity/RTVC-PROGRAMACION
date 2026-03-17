@@ -140,6 +140,26 @@ export const NOVELTY_TYPES = {
     requiresDescription: true,
     affectsSchedule: false,
     priority: 3
+  },
+  MOVIL: {
+    id: 'MOVIL',
+    name: 'Móvil',
+    icon: '🚐',
+    color: '#10B981',
+    bgColor: '#D1FAE5',
+    requiresDescription: true,
+    affectsSchedule: true,
+    priority: 1
+  },
+  PUESTO_FIJO: {
+    id: 'PUESTO_FIJO',
+    name: 'Puesto Fijo',
+    icon: '📍',
+    color: '#F59E0B',
+    bgColor: '#FEF3C7',
+    requiresDescription: true,
+    affectsSchedule: true,
+    priority: 1
   }
 };
 

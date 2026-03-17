@@ -102,12 +102,14 @@ export const PersonalLogistico = () => {
 
   const loadPersonal = async () => {
     try {
+      console.log('🔄 Cargando personal logístico desde API...');
       const response = await fetch(`${API_URL}/personnel?tipo=LOGISTICO`);
       const data = await response.json();
+      console.log(`✅ Personal logístico cargado: ${data.length} personas`, data);
       setPersonal(data);
       setLoading(false);
     } catch (error) {
-      console.error('Error cargando personal logístico:', error);
+      console.error('❌ Error cargando personal logístico:', error);
       setLoading(false);
     }
   };
@@ -124,6 +126,8 @@ export const PersonalLogistico = () => {
 
   const handleSave = async (data) => {
     try {
+      console.log('💾 Guardando personal logístico:', data);
+
       // Limpiar campos de contrato para personal logístico (no los necesitan)
       const { contract_start, contract_end, current_shift, ...logisticsData } = data;
 
@@ -137,6 +141,8 @@ export const PersonalLogistico = () => {
         current_shift: null
       };
 
+      console.log('📤 Payload a enviar:', payload);
+
       if (selectedPerson) {
         // Actualizar
         const response = await fetch(`${API_URL}/personnel/${selectedPerson.id}`, {
@@ -145,10 +151,17 @@ export const PersonalLogistico = () => {
           body: JSON.stringify(payload)
         });
 
-        if (!response.ok) throw new Error('Error al actualizar');
+        console.log('📥 Respuesta actualizar:', response.status, response.statusText);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('❌ Error al actualizar:', errorData);
+          throw new Error(`Error al actualizar: ${response.status} ${response.statusText}`);
+        }
 
         const updated = await response.json();
-        setPersonal(personal.map(p => p.id === updated.id ? updated : p));
+        console.log('✅ Personal actualizado:', updated);
+        alert(`✅ Personal "${updated.name}" actualizado correctamente`);
       } else {
         // Crear
         const response = await fetch(`${API_URL}/personnel`, {
@@ -157,17 +170,28 @@ export const PersonalLogistico = () => {
           body: JSON.stringify(payload)
         });
 
-        if (!response.ok) throw new Error('Error al crear');
+        console.log('📥 Respuesta crear:', response.status, response.statusText);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('❌ Error al crear:', errorData);
+          throw new Error(`Error al crear: ${response.status} ${response.statusText}`);
+        }
 
         const newPerson = await response.json();
-        setPersonal([...personal, newPerson]);
+        console.log('✅ Personal creado:', newPerson);
+        alert(`✅ Personal "${newPerson.name}" creado correctamente con ID ${newPerson.id}`);
       }
+
+      // Recargar la lista completa desde el servidor para asegurar sincronización
+      console.log('🔄 Recargando lista de personal desde servidor...');
+      await loadPersonal();
 
       setShowModal(false);
       setSelectedPerson(null);
     } catch (error) {
-      console.error('Error guardando personal:', error);
-      alert('Error al guardar el personal');
+      console.error('❌ Error guardando personal:', error);
+      alert(`❌ Error al guardar el personal:\n\n${error.message}\n\nRevisa la consola (F12) para más detalles.`);
     }
   };
 

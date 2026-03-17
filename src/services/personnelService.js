@@ -3,7 +3,9 @@ import api from './api';
 
 export const personnelService = {
   async getAll() {
-    return await api.get('/personnel');
+    // Cargar solo personal TÉCNICO (producción) - por defecto
+    // Para obtener TODO el personal (incluyendo logístico), usar getAll('ALL')
+    return await api.get('/personnel?tipo=TECNICO');
   },
 
   async getById(id) {

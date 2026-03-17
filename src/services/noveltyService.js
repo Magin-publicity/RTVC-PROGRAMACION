@@ -30,6 +30,14 @@ export const noveltyService = {
     return await api.delete(`/novelties/${id}`);
   },
 
+  async getByProgramId(programId) {
+    return await api.get(`/novelties/program/${programId}`);
+  },
+
+  async deleteByProgramId(programId) {
+    return await api.delete(`/novelties/program/${programId}`);
+  },
+
   // Métodos locales
   getAllLocal() {
     const novelties = localStorage.getItem('rtvc_novelties');

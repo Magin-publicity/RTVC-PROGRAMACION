@@ -34,25 +34,35 @@ export const usePersonnel = () => {
   }, []);
 
   const addPerson = useCallback(async (personData) => {
+    console.log('🚀 [PERSONNEL] addPerson llamado con:', personData);
     setLoading(true);
     setError(null);
     try {
       let newPerson;
       try {
-        console.log('💾 [PERSONNEL] Intentando guardar en backend:', personData);
+        console.log('💾 [PERSONNEL] Intentando guardar en backend...');
+        console.log('📤 [PERSONNEL] Datos a enviar:', JSON.stringify(personData, null, 2));
         newPerson = await personnelService.create(personData);
-        console.log('✅ [PERSONNEL] Guardado en backend exitosamente:', newPerson);
+        console.log('✅ [PERSONNEL] ¡GUARDADO EN BACKEND EXITOSAMENTE!');
+        console.log('📥 [PERSONNEL] Respuesta del servidor:', newPerson);
+        alert(`✅ Personal "${newPerson.name}" guardado en base de datos con ID ${newPerson.id}`);
       } catch (apiError) {
-        console.error('❌ [PERSONNEL] Error guardando en backend, usando localStorage:', apiError);
+        console.error('❌ [PERSONNEL] Error guardando en backend:', apiError);
+        console.error('❌ [PERSONNEL] Stack trace:', apiError.stack);
+        console.warn('⚠️ [PERSONNEL] FALLBACK: Usando localStorage en su lugar');
         newPerson = personnelService.addLocal(personData);
-        console.log('💾 [PERSONNEL] Guardado en localStorage:', newPerson);
+        console.log('💾 [PERSONNEL] Guardado en localStorage con ID temporal:', newPerson.id);
+        alert(`⚠️ Personal "${newPerson.name}" guardado SOLO en localStorage (ID temporal: ${newPerson.id})\n\nNo se guardó en la base de datos. Verifica la conexión.`);
       }
 
       setPersonnel(prev => [...prev, newPerson]);
+      console.log('✅ [PERSONNEL] Personal agregado al estado de React');
       return newPerson;
     } catch (err) {
-      console.error('❌ [PERSONNEL] Error crítico:', err);
+      console.error('❌ [PERSONNEL] Error crítico en addPerson:', err);
+      console.error('❌ [PERSONNEL] Stack trace:', err.stack);
       setError(err.message);
+      alert(`❌ Error crítico al guardar personal:\n\n${err.message}`);
       return null;
     } finally {
       setLoading(false);

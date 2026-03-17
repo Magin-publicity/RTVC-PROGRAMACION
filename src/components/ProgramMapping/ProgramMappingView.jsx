@@ -1,11 +1,92 @@
 // src/components/ProgramMapping/ProgramMappingView.jsx
 import React, { useState, useEffect } from 'react';
 import { Button } from '../UI/Button';
-import { Save, RefreshCw, Plus, X, Trash2, Edit2, Database, Shield, Radio, Truck, MapPin, Users, Search } from 'lucide-react';
+import { Save, RefreshCw, Plus, X, Trash2, Edit2, Database, Shield, Radio, Truck, MapPin, Users, Search, Download } from 'lucide-react';
 import { programMappingService } from '../../services/programMappingService';
 import { customProgramsService } from '../../services/customProgramsService';
 import { changeLogService } from '../../services/changeLogService';
+import { noveltyService } from '../../services/noveltyService';
 import { WEEKDAY_PROGRAMS, WEEKEND_PROGRAMS } from '../../data/programs';
+import { exportExclusiveGroupPersonnel } from '../../utils/exportExclusiveGroupPersonnel';
+
+// Función para crear/actualizar novedades de grupos exclusivos
+const createExclusiveGroupNovelties = async (program, personnelIds) => {
+  if (!program.isExclusiveGroup || !personnelIds || personnelIds.length === 0) return;
+
+  const noveltyType = program.exclusiveType === 'MOVIL' ? 'MOVIL' :
+                      program.exclusiveType === 'PUESTO_FIJO' ? 'PUESTO_FIJO' : null;
+
+  if (!noveltyType) return;
+
+  // Extraer hora de inicio y fin del programa
+  const [startTime, endTime] = (program.time || '00:00-23:59').split('-');
+
+  // Descripción de la novedad
+  const description = `${program.name} (${startTime}-${endTime})`;
+
+  // Usar startDate y endDate del programa
+  let startDate = program.startDate;
+  let endDate = program.endDate;
+
+  // Si no hay fechas definidas, usar hoy
+  if (!startDate || !endDate) {
+    const today = new Date();
+    startDate = startDate || today.toISOString().split('T')[0];
+    endDate = endDate || startDate;
+  }
+
+  // Crear una novedad por persona con rango de fechas
+  for (const personnelId of personnelIds) {
+    try {
+      const noveltyData = {
+        personnel_id: personnelId,
+        type: noveltyType,
+        description: description,
+        start_date: startDate,
+        end_date: endDate,
+        program_id: program.id,
+        program_name: program.name,
+        exclusive_type: program.exclusiveType
+      };
+
+      // Crear novedad en API
+      try {
+        await noveltyService.create(noveltyData);
+        console.log(`📡 Novedad creada en API para persona ${personnelId}`);
+      } catch (apiError) {
+        // Si falla API, guardar en localStorage
+        noveltyService.addLocal(noveltyData);
+        console.log(`💾 Novedad guardada localmente para persona ${personnelId}`);
+      }
+    } catch (error) {
+      console.error('Error creando novedad:', error);
+    }
+  }
+
+  console.log(`✅ Novedades creadas para ${personnelIds.length} personas en programa ${program.name}`);
+};
+
+// Función para eliminar novedades de un programa exclusivo
+const removeExclusiveGroupNovelties = async (programId) => {
+  try {
+    // Intentar eliminar por API usando el nuevo endpoint
+    try {
+      const result = await noveltyService.deleteByProgramId(programId);
+      console.log(`🗑️ Novedades del programa ${programId} eliminadas via API:`, result);
+    } catch (apiError) {
+      console.log('API no disponible, eliminando localmente...');
+    }
+
+    // También limpiar localStorage por seguridad
+    const localNovelties = noveltyService.getAllLocal();
+    const filtered = localNovelties.filter(n => n.program_id !== programId);
+    noveltyService.saveLocal(filtered);
+
+    console.log(`🗑️ Novedades del programa ${programId} eliminadas de localStorage`);
+  } catch (error) {
+    console.error('Error eliminando novedades:', error);
+  }
+};
 
 // Configuración de tipos de grupo exclusivo
 const EXCLUSIVE_GROUP_TYPES = {
@@ -38,6 +119,12 @@ const EXCLUSIVE_GROUP_TYPES = {
 // Componente del modal de edición de fechas
 const DateEditorModal = ({ program, currentDates, onSave, onClose }) => {
   const [tempDates, setTempDates] = useState(currentDates || []);
+  const [startDate, setStartDate] = useState(program?.startDate || '');
+  const [endDate, setEndDate] = useState(program?.endDate || '');
+
+  // Detectar si es un grupo exclusivo (MOVIL o PUESTO_FIJO)
+  const isExclusiveGroup = program?.isExclusiveGroup &&
+                          (program?.exclusiveType === 'MOVIL' || program?.exclusiveType === 'PUESTO_FIJO');
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -47,23 +134,59 @@ const DateEditorModal = ({ program, currentDates, onSave, onClose }) => {
         </h3>
 
         <div className="space-y-4">
-          {/* Opción: Todos los días */}
-          <div className="flex items-center gap-2">
-            <input
-              type="radio"
-              id="allDays"
-              name="dateOption"
-              checked={tempDates.length === 0}
-              onChange={() => setTempDates([])}
-              className="w-4 h-4"
-            />
-            <label htmlFor="allDays" className="text-sm font-medium text-gray-700">
-              Todos los días
-            </label>
-          </div>
+          {/* Si es grupo exclusivo, mostrar selector de rango */}
+          {isExclusiveGroup ? (
+            <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4">
+              <p className="text-sm text-gray-700 mb-3 font-medium">
+                {program.exclusiveType === 'MOVIL' ? '🚐 Grupo MÓVIL' : '📍 Grupo PUESTO FIJO'} - Selecciona el período de asignación:
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+              {startDate && endDate && (
+                <p className="mt-3 text-sm text-green-600 font-medium">
+                  El personal aparecerá como "{program.exclusiveType === 'MOVIL' ? '🚐 MÓVIL' : '📍 PUESTO FIJO'}" del{' '}
+                  {new Date(startDate + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })} al{' '}
+                  {new Date(endDate + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Opción: Todos los días */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  id="allDays"
+                  name="dateOption"
+                  checked={tempDates.length === 0}
+                  onChange={() => setTempDates([])}
+                  className="w-4 h-4"
+                />
+                <label htmlFor="allDays" className="text-sm font-medium text-gray-700">
+                  Todos los días
+                </label>
+              </div>
 
-          {/* Opción: Fechas específicas */}
-          <div className="flex items-start gap-2">
+              {/* Opción: Fechas específicas */}
+              <div className="flex items-start gap-2">
             <input
               type="radio"
               id="specificDates"
@@ -126,6 +249,8 @@ const DateEditorModal = ({ program, currentDates, onSave, onClose }) => {
               )}
             </div>
           </div>
+            </>
+          )}
         </div>
 
         {/* Botones */}
@@ -133,7 +258,15 @@ const DateEditorModal = ({ program, currentDates, onSave, onClose }) => {
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={() => onSave(tempDates)}>
+          <Button onClick={() => {
+            if (isExclusiveGroup) {
+              // Para grupos exclusivos, guardar startDate y endDate
+              onSave({ startDate, endDate });
+            } else {
+              // Para programas normales, guardar tempDates
+              onSave(tempDates);
+            }
+          }}>
             Guardar
           </Button>
         </div>
@@ -163,7 +296,9 @@ export const ProgramMappingView = () => {
     programType: 'weekday', // 'weekday' o 'weekend'
     isExclusiveGroup: false,
     exclusiveType: null, // 'MASTER', 'MOVIL', 'PUESTO_FIJO'
-    exclusivePersonnel: [] // IDs del personal asignado
+    exclusivePersonnel: [], // IDs del personal asignado
+    startDate: '', // Fecha de inicio para grupos exclusivos
+    endDate: '' // Fecha de fin para grupos exclusivos
   });
   const [personnel, setPersonnel] = useState([]);
   const [personnelSearchTerm, setPersonnelSearchTerm] = useState('');
@@ -312,10 +447,19 @@ export const ProgramMappingView = () => {
         programType: newProgram.programType,
         isExclusiveGroup: newProgram.isExclusiveGroup,
         exclusiveType: newProgram.isExclusiveGroup ? newProgram.exclusiveType : null,
-        exclusivePersonnel: newProgram.isExclusiveGroup ? newProgram.exclusivePersonnel : []
+        exclusivePersonnel: newProgram.isExclusiveGroup ? newProgram.exclusivePersonnel : [],
+        startDate: newProgram.startDate || '',
+        endDate: newProgram.endDate || ''
       });
 
       setCustomPrograms(prev => [...prev, addedProgram]);
+
+      // Crear novedades automáticas para grupos exclusivos (MOVIL o PUESTO_FIJO)
+      if (newProgram.isExclusiveGroup &&
+          (newProgram.exclusiveType === 'MOVIL' || newProgram.exclusiveType === 'PUESTO_FIJO') &&
+          newProgram.exclusivePersonnel.length > 0) {
+        createExclusiveGroupNovelties({...addedProgram, startDate: newProgram.startDate, endDate: newProgram.endDate}, newProgram.exclusivePersonnel);
+      }
 
       // Resetear formulario
       setNewProgram({
@@ -326,7 +470,9 @@ export const ProgramMappingView = () => {
         programType: activeTab,
         isExclusiveGroup: false,
         exclusiveType: null,
-        exclusivePersonnel: []
+        exclusivePersonnel: [],
+        startDate: '',
+        endDate: ''
       });
       setPersonnelSearchTerm('');
       setShowAddForm(false);
@@ -351,6 +497,8 @@ export const ProgramMappingView = () => {
       recordingDates: program.recordingDates || [],
       programType: program.programType || 'weekday',
       isExclusiveGroup: program.isExclusiveGroup || false,
+      startDate: program.startDate || '',
+      endDate: program.endDate || '',
       exclusiveType: program.exclusiveType || null,
       exclusivePersonnel: program.exclusivePersonnel || []
     });
@@ -358,7 +506,7 @@ export const ProgramMappingView = () => {
     setShowAddForm(true);
   };
 
-  const handleUpdateProgram = (e) => {
+  const handleUpdateProgram = async (e) => {
     e.preventDefault();
 
     if (!newProgram.name || !newProgram.time) {
@@ -367,6 +515,9 @@ export const ProgramMappingView = () => {
     }
 
     try {
+      // Primero eliminar novedades anteriores del programa (ESPERAR a que termine)
+      await removeExclusiveGroupNovelties(editingProgram.id);
+
       const updatedProgram = customProgramsService.update(editingProgram.id, {
         name: newProgram.name,
         time: newProgram.time,
@@ -375,12 +526,21 @@ export const ProgramMappingView = () => {
         programType: newProgram.programType,
         isExclusiveGroup: newProgram.isExclusiveGroup,
         exclusiveType: newProgram.isExclusiveGroup ? newProgram.exclusiveType : null,
-        exclusivePersonnel: newProgram.isExclusiveGroup ? newProgram.exclusivePersonnel : []
+        exclusivePersonnel: newProgram.isExclusiveGroup ? newProgram.exclusivePersonnel : [],
+        startDate: newProgram.startDate || '',
+        endDate: newProgram.endDate || ''
       });
 
       setCustomPrograms(prev => prev.map(p =>
         p.id === editingProgram.id ? updatedProgram : p
       ));
+
+      // Crear nuevas novedades para grupos exclusivos (MOVIL o PUESTO_FIJO) - ESPERAR a que termine
+      if (newProgram.isExclusiveGroup &&
+          (newProgram.exclusiveType === 'MOVIL' || newProgram.exclusiveType === 'PUESTO_FIJO') &&
+          newProgram.exclusivePersonnel.length > 0) {
+        await createExclusiveGroupNovelties({...updatedProgram, startDate: newProgram.startDate, endDate: newProgram.endDate}, newProgram.exclusivePersonnel);
+      }
 
       // Resetear formulario
       setNewProgram({
@@ -391,14 +551,17 @@ export const ProgramMappingView = () => {
         programType: activeTab,
         isExclusiveGroup: false,
         exclusiveType: null,
-        exclusivePersonnel: []
+        exclusivePersonnel: [],
+        startDate: '',
+        endDate: ''
       });
       setPersonnelSearchTerm('');
       setEditingProgram(null);
       setShowAddForm(false);
 
-      alert(`Programa "${updatedProgram.name}" actualizado exitosamente`);
+      alert(`Programa "${updatedProgram.name}" actualizado exitosamente. Las novedades se han actualizado.`);
     } catch (error) {
+      console.error('Error al actualizar:', error);
       alert('Error al actualizar el programa. Intenta de nuevo.');
     }
   };
@@ -416,6 +579,8 @@ export const ProgramMappingView = () => {
     try {
       // 1. Si es personalizado, eliminar de customPrograms localStorage
       if (isCustom) {
+        // Eliminar novedades asociadas al programa
+        removeExclusiveGroupNovelties(programId);
         customProgramsService.delete(programId);
         setCustomPrograms(prev => prev.filter(p => p.id !== programId));
       } else {
@@ -921,116 +1086,157 @@ export const ProgramMappingView = () => {
             {/* Selección de fechas de grabación */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Fechas de Grabación
+                {newProgram.isExclusiveGroup && (newProgram.exclusiveType === 'MOVIL' || newProgram.exclusiveType === 'PUESTO_FIJO')
+                  ? 'Período de Asignación'
+                  : 'Fechas de Grabación'}
               </label>
 
-              {/* Opciones: Todos los días vs Fechas específicas */}
-              <div className="space-y-3 mb-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="dateOption"
-                    checked={newProgram.recordingDates.length === 0}
-                    onChange={() => setNewProgram({ ...newProgram, recordingDates: [] })}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="text-sm text-gray-700 font-medium">Todos los días</span>
-                  <span className="text-xs text-gray-500">(el programa aparecerá siempre)</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="dateOption"
-                    checked={newProgram.recordingDates.length > 0}
-                    onChange={() => {
-                      if (newProgram.recordingDates.length === 0) {
-                        // Agregar la fecha de hoy por defecto
-                        const today = new Date();
-                        const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                        setNewProgram({ ...newProgram, recordingDates: [dateStr] });
-                      }
-                    }}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="text-sm text-gray-700 font-medium">Fechas específicas</span>
-                  <span className="text-xs text-gray-500">(solo en las fechas seleccionadas)</span>
-                </label>
-              </div>
-
-              {/* Selector de fechas - solo visible si se eligió "Fechas específicas" */}
-              {newProgram.recordingDates.length > 0 && (
-                <div className="ml-6 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="date"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      onChange={(e) => {
-                        if (e.target.value && !newProgram.recordingDates.includes(e.target.value)) {
-                          setNewProgram({
-                            ...newProgram,
-                            recordingDates: [...newProgram.recordingDates, e.target.value].sort()
-                          });
-                          e.target.value = '';
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="px-4 py-2 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700"
-                      onClick={() => {
-                        const input = document.querySelector('input[type="date"]');
-                        if (input && input.value) {
-                          if (!newProgram.recordingDates.includes(input.value)) {
-                            setNewProgram({
-                              ...newProgram,
-                              recordingDates: [...newProgram.recordingDates, input.value].sort()
-                            });
-                          }
-                          input.value = '';
-                        }
-                      }}
-                    >
-                      Agregar
-                    </button>
-                  </div>
-
-                  {/* Lista de fechas seleccionadas */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-gray-700">Fechas seleccionadas:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {newProgram.recordingDates.map(date => (
-                        <div
-                          key={date}
-                          className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-md text-sm"
-                        >
-                          <span>{new Date(date + 'T00:00:00').toLocaleDateString('es-ES', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newDates = newProgram.recordingDates.filter(d => d !== date);
-                              // Si queda vacío después de eliminar, agregar hoy para no volver a "todos los días"
-                              if (newDates.length === 0) {
-                                const today = new Date();
-                                const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                                setNewProgram({ ...newProgram, recordingDates: [dateStr] });
-                              } else {
-                                setNewProgram({ ...newProgram, recordingDates: newDates });
-                              }
-                            }}
-                            className="text-blue-600 hover:text-blue-900 font-bold"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
+              {/* Si es grupo exclusivo MOVIL o PUESTO_FIJO, mostrar selector de rango */}
+              {newProgram.isExclusiveGroup && (newProgram.exclusiveType === 'MOVIL' || newProgram.exclusiveType === 'PUESTO_FIJO') ? (
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-sm text-green-700 mb-3">
+                    Selecciona el período durante el cual el personal estará asignado a este {newProgram.exclusiveType === 'MOVIL' ? 'móvil' : 'puesto fijo'}:
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
+                      <input
+                        type="date"
+                        value={newProgram.startDate || ''}
+                        onChange={(e) => setNewProgram({ ...newProgram, startDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Hasta</label>
+                      <input
+                        type="date"
+                        value={newProgram.endDate || ''}
+                        min={newProgram.startDate || ''}
+                        onChange={(e) => setNewProgram({ ...newProgram, endDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
                     </div>
                   </div>
+                  {newProgram.startDate && newProgram.endDate && (
+                    <p className="mt-3 text-sm text-green-600 font-medium">
+                      El personal aparecerá como "{newProgram.exclusiveType === 'MOVIL' ? '🚐 MÓVIL' : '📍 PUESTO FIJO'}" del{' '}
+                      {new Date(newProgram.startDate + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })} al{' '}
+                      {new Date(newProgram.endDate + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </p>
+                  )}
                 </div>
+              ) : (
+                <>
+                  {/* Opciones: Todos los días vs Fechas específicas (para programas normales) */}
+                  <div className="space-y-3 mb-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="dateOption"
+                        checked={newProgram.recordingDates.length === 0}
+                        onChange={() => setNewProgram({ ...newProgram, recordingDates: [] })}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-sm text-gray-700 font-medium">Todos los días</span>
+                      <span className="text-xs text-gray-500">(el programa aparecerá siempre)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="dateOption"
+                        checked={newProgram.recordingDates.length > 0}
+                        onChange={() => {
+                          if (newProgram.recordingDates.length === 0) {
+                            // Agregar la fecha de hoy por defecto
+                            const today = new Date();
+                            const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                            setNewProgram({ ...newProgram, recordingDates: [dateStr] });
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-sm text-gray-700 font-medium">Fechas específicas</span>
+                      <span className="text-xs text-gray-500">(solo en las fechas seleccionadas)</span>
+                    </label>
+                  </div>
+
+                  {/* Selector de fechas - solo visible si se eligió "Fechas específicas" */}
+                  {newProgram.recordingDates.length > 0 && (
+                    <div className="ml-6 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="date"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onChange={(e) => {
+                            if (e.target.value && !newProgram.recordingDates.includes(e.target.value)) {
+                              setNewProgram({
+                                ...newProgram,
+                                recordingDates: [...newProgram.recordingDates, e.target.value].sort()
+                              });
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="px-4 py-2 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                          onClick={() => {
+                            const input = document.querySelector('input[type="date"]');
+                            if (input && input.value) {
+                              if (!newProgram.recordingDates.includes(input.value)) {
+                                setNewProgram({
+                                  ...newProgram,
+                                  recordingDates: [...newProgram.recordingDates, input.value].sort()
+                                });
+                              }
+                              input.value = '';
+                            }
+                          }}
+                        >
+                          Agregar
+                        </button>
+                      </div>
+
+                      {/* Lista de fechas seleccionadas */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-gray-700">Fechas seleccionadas:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {newProgram.recordingDates.map(date => (
+                            <div
+                              key={date}
+                              className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-md text-sm"
+                            >
+                              <span>{new Date(date + 'T00:00:00').toLocaleDateString('es-ES', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              })}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newDates = newProgram.recordingDates.filter(d => d !== date);
+                                  // Si queda vacío después de eliminar, agregar hoy para no volver a "todos los días"
+                                  if (newDates.length === 0) {
+                                    const today = new Date();
+                                    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                                    setNewProgram({ ...newProgram, recordingDates: [dateStr] });
+                                  } else {
+                                    setNewProgram({ ...newProgram, recordingDates: newDates });
+                                  }
+                                }}
+                                className="text-blue-600 hover:text-blue-900 font-bold"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -1100,6 +1306,19 @@ export const ProgramMappingView = () => {
 
               // Función helper para mostrar fechas
               const getDatesText = (dates) => {
+                // Si es grupo exclusivo con startDate y endDate, mostrar rango
+                if (program.isExclusiveGroup && program.startDate && program.endDate) {
+                  const startFormatted = new Date(program.startDate + 'T00:00:00').toLocaleDateString('es-ES', {
+                    day: 'numeric',
+                    month: 'short'
+                  });
+                  const endFormatted = new Date(program.endDate + 'T00:00:00').toLocaleDateString('es-ES', {
+                    day: 'numeric',
+                    month: 'short'
+                  });
+                  return `${startFormatted} - ${endFormatted}`;
+                }
+
                 if (!dates || dates.length === 0) return 'Todos los días';
 
                 // Mostrar máximo 3 fechas, luego indicar cuántas más
@@ -1219,6 +1438,16 @@ export const ProgramMappingView = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex items-center gap-3">
+                      {program.isExclusiveGroup && program.exclusivePersonnel?.length > 0 && (
+                        <button
+                          onClick={() => exportExclusiveGroupPersonnel(program, personnel)}
+                          className="text-green-600 hover:text-green-900 flex items-center gap-1"
+                          title="Exportar personal a Excel"
+                        >
+                          <Download size={16} />
+                          Excel
+                        </button>
+                      )}
                       {program.isCustom && (
                         <button
                           onClick={() => handleEditProgram(program)}
@@ -1257,18 +1486,44 @@ export const ProgramMappingView = () => {
           <DateEditorModal
             program={program}
             currentDates={currentProgramDates}
-            onSave={(tempDates) => {
+            onSave={async (data) => {
               if (isCustomProgram) {
-                // Actualizar programa personalizado
-                customProgramsService.update(editingDates, {
-                  recordingDates: tempDates
-                });
-                setCustomPrograms(prev => prev.map(p =>
-                  p.id === editingDates ? { ...p, recordingDates: tempDates } : p
-                ));
+                // Detectar si es grupo exclusivo
+                const isExclusiveGroup = program?.isExclusiveGroup &&
+                                        (program?.exclusiveType === 'MOVIL' || program?.exclusiveType === 'PUESTO_FIJO');
+
+                if (isExclusiveGroup && data.startDate && data.endDate) {
+                  // Actualizar programa exclusivo con rango de fechas
+                  // Primero eliminar novedades antiguas
+                  await removeExclusiveGroupNovelties(editingDates);
+
+                  // Actualizar programa con nuevas fechas
+                  customProgramsService.update(editingDates, {
+                    startDate: data.startDate,
+                    endDate: data.endDate
+                  });
+
+                  setCustomPrograms(prev => prev.map(p =>
+                    p.id === editingDates ? { ...p, startDate: data.startDate, endDate: data.endDate } : p
+                  ));
+
+                  // Crear nuevas novedades con fechas actualizadas
+                  await createExclusiveGroupNovelties(
+                    { ...program, startDate: data.startDate, endDate: data.endDate },
+                    program.exclusivePersonnel
+                  );
+                } else {
+                  // Actualizar programa normal con fechas específicas
+                  customProgramsService.update(editingDates, {
+                    recordingDates: data
+                  });
+                  setCustomPrograms(prev => prev.map(p =>
+                    p.id === editingDates ? { ...p, recordingDates: data } : p
+                  ));
+                }
               } else {
                 // Guardar fechas para programa predefinido
-                handleDateChange(editingDates, tempDates);
+                handleDateChange(editingDates, data);
               }
               setEditingDates(null);
             }}

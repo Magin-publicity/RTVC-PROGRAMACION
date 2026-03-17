@@ -15,6 +15,9 @@ router.get('/', async (req, res) => {
         n.end_date,
         n.type,
         n.description,
+        n.program_id,
+        n.program_name,
+        n.exclusive_type,
         p.name AS personnel_name,
         p.area,
         p.role
@@ -44,7 +47,11 @@ router.get('/date/:date', async (req, res) => {
         n.start_date,
         n.end_date,
         n.type AS novelty_type,
+        n.type,
         n.description,
+        n.program_id,
+        n.program_name,
+        n.exclusive_type,
         p.name AS personnel_name,
         p.area,
         p.role
@@ -67,9 +74,55 @@ router.get('/date/:date', async (req, res) => {
   }
 });
 
+// Obtener novedades por program_id
+router.get('/program/:programId', async (req, res) => {
+  try {
+    const { programId } = req.params;
+    const result = await pool.query(`
+      SELECT
+        n.id,
+        n.personnel_id,
+        n.date,
+        n.start_date,
+        n.end_date,
+        n.type,
+        n.description,
+        n.program_id,
+        n.program_name,
+        n.exclusive_type,
+        p.name AS personnel_name,
+        p.area,
+        p.role
+      FROM novelties n
+      LEFT JOIN personnel p ON n.personnel_id = p.id
+      WHERE n.program_id = $1
+      ORDER BY p.name
+    `, [programId]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('❌ Error al obtener novedades por programa:', error);
+    res.status(500).json({ error: 'Error al obtener novedades por programa' });
+  }
+});
+
+// Eliminar novedades por program_id
+router.delete('/program/:programId', async (req, res) => {
+  try {
+    const { programId } = req.params;
+    const result = await pool.query('DELETE FROM novelties WHERE program_id = $1 RETURNING *', [programId]);
+    res.json({
+      message: `🗑️ ${result.rows.length} novedades eliminadas del programa`,
+      deleted: result.rows.length
+    });
+  } catch (error) {
+    console.error('❌ Error al eliminar novedades por programa:', error);
+    res.status(500).json({ error: 'Error al eliminar novedades por programa' });
+  }
+});
+
 // Crear una nueva novedad
 router.post('/', async (req, res) => {
-  const { personnel_id, date, start_date, end_date, type, description } = req.body;
+  const { personnel_id, date, start_date, end_date, type, description, program_id, program_name, exclusive_type } = req.body;
   try {
     // Si se proporciona start_date y end_date, usarlos; si no, usar date para compatibilidad
     const useStartDate = start_date || date;
@@ -81,8 +134,8 @@ router.post('/', async (req, res) => {
     }
 
     const result = await pool.query(
-      'INSERT INTO novelties (personnel_id, date, start_date, end_date, type, description) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [personnel_id, useDate, useStartDate, useEndDate, type, description]
+      'INSERT INTO novelties (personnel_id, date, start_date, end_date, type, description, program_id, program_name, exclusive_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+      [personnel_id, useDate, useStartDate, useEndDate, type, description, program_id || null, program_name || null, exclusive_type || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {

@@ -347,9 +347,9 @@ router.post('/assignments/logistic', async (req, res) => {
       return res.status(400).json({ error: 'Fecha, turno y personal requeridos' });
     }
 
-    // Obtener información del personal
+    // Obtener información del personal (logístico + producción)
     const personnelResult = await pool.query(
-      `SELECT * FROM personnel WHERE id = ANY($1) AND tipo_personal = 'LOGISTICO' AND active = true`,
+      `SELECT * FROM personnel WHERE id = ANY($1) AND active = true`,
       [personnelIds]
     );
 
@@ -382,7 +382,7 @@ router.post('/assignments/logistic', async (req, res) => {
           shiftType,
           person.id,
           person.name,
-          'LOGISTICO',
+          person.area || person.tipo_personal || 'LOGISTICO',
           person.area,
           person.direccion && person.direccion.trim() !== '' ? 'RUTA' : 'PROPIO',
           person.direccion,
@@ -396,12 +396,12 @@ router.post('/assignments/logistic', async (req, res) => {
     }
 
     res.status(201).json({
-      message: `${insertedAssignments.length} personas logísticas agregadas correctamente`,
+      message: `${insertedAssignments.length} persona(s) agregada(s) correctamente`,
       assignments: insertedAssignments
     });
   } catch (error) {
-    console.error('Error agregando personal logístico:', error);
-    res.status(500).json({ error: 'Error al agregar personal logístico' });
+    console.error('Error agregando personal:', error);
+    res.status(500).json({ error: 'Error al agregar personal' });
   }
 });
 

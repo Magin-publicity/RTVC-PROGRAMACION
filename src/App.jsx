@@ -194,6 +194,8 @@ function App() {
             onAdd={addNovelty}
             onUpdate={updateNovelty}
             onDelete={deleteNovelty}
+            onRefresh={loadNovelties}
+            selectedDate={currentDate}
           />
         );
         

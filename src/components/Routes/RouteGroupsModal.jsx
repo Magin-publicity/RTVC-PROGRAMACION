@@ -1,6 +1,6 @@
 // src/components/Routes/RouteGroupsModal.jsx
 import React, { useState, useEffect } from 'react';
-import { X, Save, Trash2, Users, Plus, Search } from 'lucide-react';
+import { X, Save, Trash2, Users, Plus, Search, RefreshCw } from 'lucide-react';
 import { routeGroupsService } from '../../services/routeGroupsService';
 
 const API_URL = '/api';
@@ -32,7 +32,8 @@ export const RouteGroupsModal = ({ isOpen, onClose, shiftType }) => {
     try {
       const [groupsData, personnelRes] = await Promise.all([
         routeGroupsService.getAll(shiftType),
-        fetch(`${API_URL}/routes/logistic-personnel`).then(r => r.json())
+        // Cargar TODO el personal (logístico + producción + técnico)
+        fetch(`${API_URL}/personnel?tipo=ALL`).then(r => r.json())
       ]);
       setGroups(groupsData);
       setPersonnel(personnelRes);
@@ -130,14 +131,16 @@ export const RouteGroupsModal = ({ isOpen, onClose, shiftType }) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     return p.name?.toLowerCase().includes(term) ||
+           p.role?.toLowerCase().includes(term) ||
            p.area?.toLowerCase().includes(term) ||
            p.localidad?.toLowerCase().includes(term) ||
            p.barrio?.toLowerCase().includes(term);
   });
 
-  // Agrupar personal filtrado por área
+  // Agrupar personal filtrado por área o rol
   const personnelByArea = filteredPersonnel.reduce((acc, p) => {
-    const area = p.area || 'OTRO';
+    // Usar área si existe, si no usar rol, si no "OTRO"
+    const area = p.area || p.role || 'OTRO';
     if (!acc[area]) acc[area] = [];
     acc[area].push(p);
     return acc;
@@ -277,7 +280,7 @@ export const RouteGroupsModal = ({ isOpen, onClose, shiftType }) => {
                 {/* Personal */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Personal Logístico{' '}
+                    Personal{' '}
                     <span className="text-purple-600 font-semibold">
                       ({formData.personnel_ids.length} seleccionados)
                     </span>
@@ -318,23 +321,38 @@ export const RouteGroupsModal = ({ isOpen, onClose, shiftType }) => {
                     </div>
                   )}
 
-                  {/* Buscador */}
-                  <div className="relative mb-2">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Buscar por nombre, área o localidad..."
-                      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                    />
+                  {/* Buscador con botón de recarga */}
+                  <div className="flex gap-2 mb-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Buscar por nombre, área o localidad..."
+                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        loadData();
+                        setSearchTerm('');
+                      }}
+                      disabled={loading}
+                      className="px-3 py-2 bg-blue-50 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 disabled:opacity-50 transition-colors flex items-center gap-2"
+                      title="Recargar lista de personal"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                      <span className="text-sm font-medium">Recargar</span>
+                    </button>
                   </div>
 
                   {loading ? (
                     <div className="text-center py-6 text-gray-500">Cargando personal...</div>
                   ) : personnel.length === 0 ? (
                     <div className="text-center py-6 text-gray-400 border rounded-lg">
-                      No hay personal logístico disponible
+                      No hay personal disponible
                     </div>
                   ) : (
                     <div className="border rounded-lg overflow-hidden">

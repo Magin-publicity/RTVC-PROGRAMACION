@@ -540,25 +540,50 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
 
   // Novedades recientes - mostrar las últimas 10, incluyendo las recién expiradas
   // Para "Novedades Recientes" mostramos las últimas independientemente de si están activas
-  // NUEVO: Agrupar novelties por persona + descripción para evitar duplicados visuales
-  const groupedNovelties = novelties.reduce((acc, novelty) => {
-    const key = `${novelty.personnel_id}-${novelty.description || 'sin-desc'}`;
+  // NUEVO: Consolidar grupos exclusivos (MOVIL, PUESTO_FIJO) en una sola entrada
+  const consolidateNovelties = (noveltiesList) => {
+    const consolidated = [];
+    const exclusiveGroups = {}; // Agrupar por program_id
 
-    if (!acc[key]) {
-      acc[key] = novelty;
-    } else {
-      // Si ya existe, mantener la que tenga start_date más reciente
-      const existingDate = new Date(acc[key].start_date || acc[key].date || acc[key].created_at);
-      const currentDate = new Date(novelty.start_date || novelty.date || novelty.created_at);
-      if (currentDate > existingDate) {
-        acc[key] = novelty;
+    noveltiesList.forEach(novelty => {
+      // Si es un grupo exclusivo (MOVIL o PUESTO_FIJO) con program_id
+      if ((novelty.type === 'MOVIL' || novelty.type === 'PUESTO_FIJO') && novelty.program_id) {
+        const groupKey = novelty.program_id;
+        if (!exclusiveGroups[groupKey]) {
+          exclusiveGroups[groupKey] = {
+            ...novelty,
+            isConsolidated: true,
+            memberCount: 0
+          };
+        }
+        exclusiveGroups[groupKey].memberCount++;
+      } else {
+        // Novedad individual - agrupar por persona + descripción para evitar duplicados
+        const key = `${novelty.personnel_id}-${novelty.description || 'sin-desc'}`;
+        const existing = consolidated.find(c => c._groupKey === key);
+        if (!existing) {
+          consolidated.push({ ...novelty, _groupKey: key });
+        } else {
+          // Si ya existe, mantener la que tenga start_date más reciente
+          const existingDate = new Date(existing.start_date || existing.date || existing.created_at);
+          const currentDateVal = new Date(novelty.start_date || novelty.date || novelty.created_at);
+          if (currentDateVal > existingDate) {
+            const index = consolidated.indexOf(existing);
+            consolidated[index] = { ...novelty, _groupKey: key };
+          }
+        }
       }
-    }
+    });
 
-    return acc;
-  }, {});
+    // Agregar grupos consolidados
+    Object.values(exclusiveGroups).forEach(group => {
+      consolidated.push(group);
+    });
 
-  const recentNovelties = Object.values(groupedNovelties)
+    return consolidated;
+  };
+
+  const recentNovelties = consolidateNovelties(novelties)
     .sort((a, b) => {
       // Ordenar por fecha más reciente primero
       const dateA = new Date(a.start_date || a.date || a.created_at);
@@ -978,6 +1003,34 @@ export const AdminDashboard = ({ personnel, novelties, currentDate }) => {
                 isActive = novelty.date.split('T')[0] === todayStr;
               }
 
+              // Renderizar grupo consolidado (MOVIL/PUESTO_FIJO)
+              if (novelty.isConsolidated) {
+                const icon = novelty.type === 'MOVIL' ? '🚐' : '📍';
+                return (
+                  <div key={`group-${novelty.program_id}`} className={`flex items-start gap-3 p-3 rounded-lg ${isActive ? 'bg-green-50 border-2 border-green-300' : 'bg-gray-50 border border-gray-200 opacity-70'}`}>
+                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isActive ? 'bg-green-100' : 'bg-gray-200'}`}>
+                      <span className="text-lg">{icon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${isActive ? 'text-gray-900' : 'text-gray-600'}`}>
+                        {novelty.program_name || novelty.description}
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        <span className="font-semibold text-green-700">{novelty.type}</span>
+                        <span className="ml-2 bg-green-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">
+                          {novelty.memberCount} persona{novelty.memberCount !== 1 ? 's' : ''}
+                        </span>
+                        {!isActive && <span className="ml-2 text-gray-400">(Finalizada)</span>}
+                      </p>
+                    </div>
+                    <span className="text-xs text-gray-500 flex-shrink-0">
+                      {formatDateRange(novelty.start_date || novelty.date, novelty.end_date)}
+                    </span>
+                  </div>
+                );
+              }
+
+              // Renderizar novedad individual normal
               return (
                 <div key={novelty.id} className={`flex items-start gap-3 p-3 rounded-lg ${isActive ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50 border border-gray-200 opacity-70'}`}>
                   <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isActive ? 'bg-orange-100' : 'bg-gray-200'}`}>

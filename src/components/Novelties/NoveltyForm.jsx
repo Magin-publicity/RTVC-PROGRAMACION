@@ -4,17 +4,23 @@ import { Input } from '../UI/Input';
 import { Select } from '../UI/Select';
 import { Button } from '../UI/Button';
 import { getAllNoveltyTypes } from '../../data/novelties';
+import { Users } from 'lucide-react';
 
-export const NoveltyForm = ({ initialData, personnel, onSubmit, onCancel }) => {
+export const NoveltyForm = ({ initialData, personnel, onSubmit, onCancel, isGroupMode = false, selectedPersonnel = [], selectedDate }) => {
+  // Usar la fecha seleccionada del panel de programas, o la fecha actual si no está disponible
+  const defaultDate = selectedDate
+    ? (selectedDate instanceof Date ? selectedDate.toISOString().split('T')[0] : selectedDate)
+    : new Date().toISOString().split('T')[0];
+
   const [formData, setFormData] = useState({
     personnel_id: initialData?.personnel_id || '',
-    date: initialData?.date || new Date().toISOString().split('T')[0],
-    start_date: initialData?.start_date || new Date().toISOString().split('T')[0],
-    end_date: initialData?.end_date || new Date().toISOString().split('T')[0],
+    date: initialData?.date || defaultDate,
+    start_date: initialData?.start_date || defaultDate,
+    end_date: initialData?.end_date || defaultDate,
     type: initialData?.type || '',
     description: initialData?.description || ''
   });
-  
+
   const [errors, setErrors] = useState({});
   const noveltyTypes = getAllNoveltyTypes();
   
@@ -23,8 +29,14 @@ export const NoveltyForm = ({ initialData, personnel, onSubmit, onCancel }) => {
   const validate = () => {
     const newErrors = {};
 
-    if (!formData.personnel_id) {
+    // En modo grupal, no validar personnel_id porque ya tenemos selectedPersonnel
+    if (!isGroupMode && !formData.personnel_id) {
       newErrors.personnel_id = 'Debe seleccionar una persona';
+    }
+
+    // En modo grupal, verificar que haya personas seleccionadas
+    if (isGroupMode && selectedPersonnel.length === 0) {
+      newErrors.personnel_id = 'No hay personas seleccionadas';
     }
 
     if (!formData.start_date) {
@@ -81,38 +93,66 @@ export const NoveltyForm = ({ initialData, personnel, onSubmit, onCancel }) => {
   
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-  <label className="block text-sm font-medium text-gray-700 mb-1">
-    Personal <span className="text-red-500">*</span>
-  </label>
-  <select
-    value={formData.personnel_id}
-    onChange={(e) => handleChange('personnel_id', e.target.value)}
-    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-  >
-    <option value="">Seleccionar...</option>
-    {Object.entries(
-      [...personnel].sort((a, b) => {
-        if (a.area < b.area) return -1;
-        if (a.area > b.area) return 1;
-        return a.name.localeCompare(b.name);
-      }).reduce((acc, person) => {
-        if (!acc[person.area]) acc[person.area] = [];
-        acc[person.area].push(person);
-        return acc;
-      }, {})
-    ).map(([area, people]) => (
-      <optgroup key={area} label={area}>
-        {people.map(person => (
-          <option key={person.id} value={person.id}>
-            {person.name} - {person.role}
-          </option>
-        ))}
-      </optgroup>
-    ))}
-  </select>
-  {errors.personnel_id && <p className="mt-1 text-sm text-red-500">{errors.personnel_id}</p>}
-</div>
+      {/* Modo Grupal: Mostrar personas seleccionadas */}
+      {isGroupMode ? (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Personal Seleccionado ({selectedPersonnel.length})
+          </label>
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Users size={18} className="text-blue-600" />
+              <span className="font-medium text-blue-800">
+                Se creará esta novedad para {selectedPersonnel.length} persona{selectedPersonnel.length > 1 ? 's' : ''}:
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {selectedPersonnel.map(person => (
+                <span
+                  key={person.id}
+                  className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm"
+                >
+                  {person.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Modo Individual: Selector de personal */
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Personal <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={formData.personnel_id}
+            onChange={(e) => handleChange('personnel_id', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Seleccionar...</option>
+            {Object.entries(
+              [...personnel].sort((a, b) => {
+                if (a.area < b.area) return -1;
+                if (a.area > b.area) return 1;
+                return a.name.localeCompare(b.name);
+              }).reduce((acc, person) => {
+                if (!acc[person.area]) acc[person.area] = [];
+                acc[person.area].push(person);
+                return acc;
+              }, {})
+            ).map(([area, people]) => (
+              <optgroup key={area} label={area}>
+                {people.map(person => (
+                  <option key={person.id} value={person.id}>
+                    {person.name} - {person.role}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {errors.personnel_id && <p className="mt-1 text-sm text-red-500">{errors.personnel_id}</p>}
+        </div>
+      )}
       
  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
   <div>

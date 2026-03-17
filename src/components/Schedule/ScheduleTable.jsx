@@ -1,10 +1,12 @@
 // src/components/Schedule/ScheduleTable.jsx
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Plus, Download, Edit2, Trash2, Wifi, WifiOff, Camera } from 'lucide-react';
+import { Plus, Download, Edit2, Trash2, Wifi, WifiOff, Camera, GripVertical } from 'lucide-react';
 import { generateSchedulePDF } from '../../utils/pdfGenerator';
 import { classifyPersonnel, getResourceForPersonnel } from '../../utils/personnelClassification';
 import { programMappingService } from '../../services/programMappingService';
 import { customProgramsService } from '../../services/customProgramsService';
+import { personnelOrderService } from '../../services/personnelOrderService';
+import { getWeeklyGroups, setPersonWeeklyGroup, setBulkWeeklyGroups, getDefaultGroup } from '../../services/personnelGroupService';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useContractValidation } from '../../hooks/useContractValidation';
 import { useWorkdayReminder } from '../../hooks/useWorkdayReminder';
@@ -181,6 +183,14 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isClosingWorkday, setIsClosingWorkday] = useState(false); // Estado específico para cerrar jornada
+  const [orderVersion, setOrderVersion] = useState(0); // Para forzar re-render cuando cambia el orden personalizado
+  const [draggedPerson, setDraggedPerson] = useState(null); // Persona siendo arrastrada
+  const [draggedArea, setDraggedArea] = useState(null); // Área de la persona arrastrada
+  const [dropTarget, setDropTarget] = useState(null); // Objetivo del drop (índice)
+  const [selectedPersonnel, setSelectedPersonnel] = useState([]); // Personal seleccionado para arrastre múltiple
+  const dragOverTimeoutRef = useRef(null); // Para optimizar drag over
+  const [orderHistory, setOrderHistory] = useState([]); // Historial de cambios para Ctrl+Z
+  const [isDraggingLocked, setIsDraggingLocked] = useState(false); // Bloquear drag horizontal
   const [lastSaved, setLastSaved] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // 🚨 Indica si hay cambios sin guardar
   const isUpdatingFromSocket = useRef(false);
@@ -208,9 +218,64 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     return (hours || 0) * 60 + (minutes || 0);
   };
 
-  // Helper: Verificar si un programa debe mostrarse según callTime
+  // Helper: Obtener información de grupos exclusivos del personal
+  const getExclusiveGroupInfo = useCallback(() => {
+    const customPrograms = customProgramsService.getAll();
+    const exclusiveInfo = {}; // {personnelId: {programId, programName, exclusiveType}}
+
+    customPrograms.forEach(program => {
+      if (program.isExclusiveGroup && program.exclusivePersonnel && program.exclusivePersonnel.length > 0) {
+        // Verificar si el programa está activo para la fecha actual
+        let isActiveToday = false;
+
+        // Si tiene startDate y endDate, verificar si hoy está en el rango
+        if (program.startDate && program.endDate) {
+          isActiveToday = dateStr >= program.startDate && dateStr <= program.endDate;
+        }
+        // Si tiene recordingDates (modo antiguo), verificar si hoy está en la lista
+        else if (program.recordingDates && program.recordingDates.length > 0) {
+          isActiveToday = program.recordingDates.includes(dateStr);
+        }
+        // Si no tiene fechas definidas, está activo siempre
+        else {
+          isActiveToday = true;
+        }
+
+        if (isActiveToday) {
+          program.exclusivePersonnel.forEach(personnelId => {
+            exclusiveInfo[personnelId] = {
+              programId: program.id,
+              programName: program.name,
+              exclusiveType: program.exclusiveType,
+              programTime: program.time,
+              startDate: program.startDate,
+              endDate: program.endDate
+            };
+          });
+        }
+      }
+    });
+
+    return exclusiveInfo;
+  }, [dateStr]);
+
+  // Helper: Verificar si un programa debe mostrarse según callTime y grupos exclusivos
   const shouldShowProgram = (personnelId, programId, program) => {
     const key = `${personnelId}_${programId}`;
+
+    // Obtener información de grupos exclusivos
+    const exclusiveInfo = getExclusiveGroupInfo();
+    const personExclusiveInfo = exclusiveInfo[personnelId];
+
+    // Si la persona está en un grupo exclusivo (MOVIL o PUESTO_FIJO)
+    if (personExclusiveInfo &&
+        (personExclusiveInfo.exclusiveType === 'MOVIL' || personExclusiveInfo.exclusiveType === 'PUESTO_FIJO')) {
+      // Solo mostrar el programa exclusivo asignado, no los demás
+      if (programId !== personExclusiveInfo.programId) {
+        return false; // No mostrar otros programas
+      }
+      return true; // Mostrar su programa exclusivo
+    }
 
     // Si es asignación manual, siempre mostrarla
     if (manualAssignments[key]) {
@@ -239,6 +304,133 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
   // Indicador de conexión (sin WebSocket real, solo visual)
   const { isConnected } = useRealtimeSync(dateStr);
+
+  // 🔄 MANTENER PÁGINA ACTIVA: Evitar que el navegador suspenda la pestaña
+  useEffect(() => {
+    // 1. Wake Lock API - Mantiene la pantalla activa (si el navegador lo soporta)
+    let wakeLock = null;
+
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log('🔒 Wake Lock activado - La pantalla permanecerá activa');
+
+          wakeLock.addEventListener('release', () => {
+            console.log('🔓 Wake Lock liberado');
+          });
+        }
+      } catch (err) {
+        console.log('⚠️ Wake Lock no disponible:', err.message);
+      }
+    };
+
+    requestWakeLock();
+
+    // 2. Detectar cuando la página vuelve a ser visible (después de reposo)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👁️ Página visible de nuevo - Verificando estado...');
+        // Re-solicitar Wake Lock cuando la página vuelve a estar visible
+        requestWakeLock();
+      }
+    };
+
+    // 3. Detectar cuando la página pierde/gana foco
+    const handleFocus = () => {
+      console.log('✅ Ventana en foco');
+      requestWakeLock();
+    };
+
+    // 4. Ping periódico para mantener la página activa (cada 30 segundos)
+    const keepAliveInterval = setInterval(() => {
+      // Este pequeño cambio de estado mantiene React activo
+      const now = new Date().toISOString();
+      console.log(`💓 Keep-alive ping: ${now}`);
+    }, 30000);
+
+    // 5. Detectar cuando el usuario vuelve (después de reposo del PC)
+    const handleOnline = () => {
+      console.log('🌐 Conexión restaurada después de reposo');
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      if (wakeLock) {
+        wakeLock.release();
+      }
+      clearInterval(keepAliveInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
+
+  // 💾 AUTO-GUARDAR: Guardar estado antes de que la página se oculte o cierre
+  useEffect(() => {
+    const saveStateToLocalStorage = () => {
+      if (!dateStr) return;
+
+      const stateBackup = {
+        assignments,
+        callTimes,
+        endTimes,
+        manualCallTimes,
+        manualEndTimes,
+        manualAssignments,
+        timestamp: Date.now(),
+        dateStr
+      };
+
+      localStorage.setItem(`schedule_backup_${dateStr}`, JSON.stringify(stateBackup));
+      console.log(`💾 Estado guardado automáticamente para ${dateStr}`);
+    };
+
+    // Guardar cuando la página se oculta (antes de reposo)
+    const handleBeforeHide = () => {
+      if (document.visibilityState === 'hidden') {
+        saveStateToLocalStorage();
+      }
+    };
+
+    // Guardar antes de cerrar la página
+    const handleBeforeUnload = (e) => {
+      saveStateToLocalStorage();
+    };
+
+    // Restaurar estado cuando la página vuelve a ser visible
+    const handleRestore = () => {
+      if (document.visibilityState === 'visible') {
+        const backup = localStorage.getItem(`schedule_backup_${dateStr}`);
+        if (backup) {
+          try {
+            const savedState = JSON.parse(backup);
+            // Solo restaurar si el backup es reciente (menos de 1 hora)
+            const backupAge = Date.now() - savedState.timestamp;
+            if (backupAge < 3600000 && savedState.dateStr === dateStr) {
+              console.log('📂 Restaurando estado desde backup...');
+              // No restaurar automáticamente - los datos ya deberían estar en el estado de React
+            }
+          } catch (err) {
+            console.error('Error al restaurar backup:', err);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleBeforeHide);
+    document.addEventListener('visibilitychange', handleRestore);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleBeforeHide);
+      document.removeEventListener('visibilitychange', handleRestore);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [dateStr, assignments, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments]);
 
   // EFECTO COMBINADO: Cargar programs Y assignments en el orden correcto
   useEffect(() => {
@@ -902,6 +1094,20 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     }
   }, [assignments, callTimes, endTimes, manualCallTimes, manualEndTimes, manualAssignments, isLoadingSchedule]);
 
+  // ⌨️ CTRL+Z: Deshacer cambios en el orden del personal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+Z o Cmd+Z
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndoOrder();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [orderHistory]);
+
   // 💾 GUARDAR: Guardar cambios Y crear snapshot histórico INMUTABLE
   // Cada vez que se presiona "Guardar", se crea/actualiza el registro histórico
   const handleSaveSchedule = async () => {
@@ -1113,6 +1319,442 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     return `${dayName} ${day} ${month} DE ${year}`;
   };
 
+  // 🔢 ORDEN NUMÉRICO: Cambiar orden escribiendo un número
+  const handleOrderChange = (person, area, newPosition, sortedPersonnel) => {
+    if (isNaN(newPosition) || newPosition < 1 || newPosition > sortedPersonnel.length) {
+      return; // Número inválido
+    }
+
+    // Guardar TODAS las posiciones de scroll posibles
+    const scrollY = window.scrollY || window.pageYOffset;
+    const scrollX = window.scrollX || window.pageXOffset;
+    const bodyScrollTop = document.body.scrollTop;
+    const docScrollTop = document.documentElement.scrollTop;
+    const mainContainer = document.querySelector('main') || document.querySelector('.overflow-auto') || document.querySelector('[class*="overflow"]');
+    const containerScrollY = mainContainer ? mainContainer.scrollTop : 0;
+
+    // Guardar orden anterior en historial
+    const previousOrder = sortedPersonnel.map(p => p.name);
+
+    // Crear nuevo orden
+    const currentIndex = sortedPersonnel.findIndex(p => p.id === person.id);
+    if (currentIndex === -1) return;
+
+    const newOrder = [...sortedPersonnel];
+    const [removed] = newOrder.splice(currentIndex, 1);
+    newOrder.splice(newPosition - 1, 0, removed);
+
+    // Guardar en historial
+    setOrderHistory(prev => [...prev, {
+      area,
+      previousOrder,
+      action: 'order_change',
+      personName: person.name,
+      from: currentIndex + 1,
+      to: newPosition,
+      timestamp: Date.now()
+    }]);
+
+    // Guardar nuevo orden
+    personnelOrderService.setAreaOrder(area, newOrder.map(p => p.name));
+    setOrderVersion(prev => prev + 1);
+
+    // Restaurar posición del scroll después del re-render usando múltiples estrategias
+    const restoreScroll = () => {
+      window.scrollTo(scrollX, scrollY);
+      if (document.body.scrollTop !== bodyScrollTop) {
+        document.body.scrollTop = bodyScrollTop;
+      }
+      if (document.documentElement.scrollTop !== docScrollTop) {
+        document.documentElement.scrollTop = docScrollTop;
+      }
+      if (mainContainer && mainContainer.scrollTop !== containerScrollY) {
+        mainContainer.scrollTop = containerScrollY;
+      }
+    };
+
+    // Intentar restaurar el scroll en múltiples momentos
+    requestAnimationFrame(() => {
+      restoreScroll();
+      setTimeout(restoreScroll, 0);
+      setTimeout(restoreScroll, 10);
+      setTimeout(restoreScroll, 50);
+    });
+
+    console.log(`✅ ${person.name} movido de posición ${currentIndex + 1} → ${newPosition} en ${area}`);
+  };
+
+  // 👥 CAMBIAR GRUPO: Cambiar el número de grupo de una persona o grupo de personas
+  const handleGroupChange = (person, area, newGroup, allPersonnelInArea) => {
+    if (isNaN(newGroup) || newGroup < 1) {
+      return; // Número inválido
+    }
+
+    // Validar rango según el área
+    const maxGroup = area === 'CAMARÓGRAFOS DE ESTUDIO' ? 4 : 2;
+    if (newGroup > maxGroup) {
+      alert(`El grupo debe estar entre 1 y ${maxGroup}`);
+      return;
+    }
+
+    // Guardar TODAS las posiciones de scroll posibles
+    const scrollY = window.scrollY || window.pageYOffset;
+    const scrollX = window.scrollX || window.pageXOffset;
+    const bodyScrollTop = document.body.scrollTop;
+    const docScrollTop = document.documentElement.scrollTop;
+    const mainContainer = document.querySelector('main') || document.querySelector('.overflow-auto') || document.querySelector('[class*="overflow"]');
+    const containerScrollY = mainContainer ? mainContainer.scrollTop : 0;
+
+    // Obtener grupos actuales de todas las personas
+    const weeklyGroups = getWeeklyGroups(selectedDate, area);
+
+    // Crear nuevo orden reorganizando por grupos
+    const personnelWithGroups = allPersonnelInArea.map((p, index) => {
+      let groupNumber;
+
+      // Si es la persona que estamos cambiando (o está en la selección múltiple)
+      if (p.id === person.id || (selectedPersonnel.length > 0 && selectedPersonnel.some(sp => sp.id === p.id))) {
+        groupNumber = newGroup;
+        // Guardar el nuevo grupo
+        setPersonWeeklyGroup(selectedDate, area, p.id, newGroup);
+      } else {
+        // Usar grupo personalizado si existe, si no usar el grupo por defecto
+        groupNumber = weeklyGroups[p.id] || getDefaultGroup(area, index) || 1;
+      }
+
+      return {
+        person: p,
+        group: groupNumber
+      };
+    });
+
+    // Ordenar por grupo y luego mantener el orden relativo dentro de cada grupo
+    personnelWithGroups.sort((a, b) => {
+      if (a.group !== b.group) {
+        return a.group - b.group; // Ordenar por número de grupo
+      }
+      // Dentro del mismo grupo, mantener el orden original
+      return allPersonnelInArea.indexOf(a.person) - allPersonnelInArea.indexOf(b.person);
+    });
+
+    // Crear el nuevo orden de nombres
+    const newOrder = personnelWithGroups.map(item => item.person.name);
+
+    // Guardar el nuevo orden en el servicio de orden
+    personnelOrderService.setAreaOrder(area, newOrder);
+
+    // Log
+    if (selectedPersonnel.length > 0 && selectedPersonnel.some(p => p.id === person.id)) {
+      console.log(`✅ Grupo cambiado en bloque: ${selectedPersonnel.length} personas → Grupo ${newGroup}`);
+    } else {
+      console.log(`✅ ${person.name} → Grupo ${newGroup} (reordenado)`);
+    }
+
+    // Forzar re-render
+    setOrderVersion(prev => prev + 1);
+
+    // Restaurar posición del scroll después del re-render usando múltiples estrategias
+    const restoreScroll = () => {
+      window.scrollTo(scrollX, scrollY);
+      if (document.body.scrollTop !== bodyScrollTop) {
+        document.body.scrollTop = bodyScrollTop;
+      }
+      if (document.documentElement.scrollTop !== docScrollTop) {
+        document.documentElement.scrollTop = docScrollTop;
+      }
+      if (mainContainer && mainContainer.scrollTop !== containerScrollY) {
+        mainContainer.scrollTop = containerScrollY;
+      }
+    };
+
+    // Intentar restaurar el scroll en múltiples momentos
+    requestAnimationFrame(() => {
+      restoreScroll();
+      setTimeout(restoreScroll, 0);
+      setTimeout(restoreScroll, 10);
+      setTimeout(restoreScroll, 50);
+    });
+  };
+
+  // ⏪ DESHACER: Ctrl+Z para deshacer cambios en el orden
+  const handleUndoOrder = () => {
+    if (orderHistory.length === 0) {
+      console.log('⏭️ No hay cambios para deshacer');
+      return;
+    }
+
+    // Obtener el último cambio
+    const lastChange = orderHistory[orderHistory.length - 1];
+    console.log('⏪ Deshaciendo cambio:', lastChange);
+
+    // Restaurar el orden anterior
+    personnelOrderService.setAreaOrder(lastChange.area, lastChange.previousOrder);
+
+    // Remover del historial
+    setOrderHistory(prev => prev.slice(0, -1));
+
+    // Forzar re-render
+    setOrderVersion(prev => prev + 1);
+
+    // Feedback en consola
+    const actionText = lastChange.action === 'move_multiple'
+      ? `movimiento de ${lastChange.count} personas`
+      : lastChange.action === 'order_change'
+      ? `cambio de orden de ${lastChange.personName}`
+      : `movimiento de ${lastChange.personName}`;
+    console.log(`✅ Deshecho ${actionText} en ${lastChange.area}`);
+  };
+
+  // 🖐️ SELECCIÓN MÚLTIPLE: Click para seleccionar/deseleccionar personal
+  const handlePersonClick = (e, person, area) => {
+    // Solo activar con Ctrl/Cmd
+    if (!e.ctrlKey && !e.metaKey) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    setSelectedPersonnel(prev => {
+      const isSelected = prev.some(p => p.id === person.id);
+
+      if (isSelected) {
+        // Deseleccionar
+        return prev.filter(p => p.id !== person.id);
+      } else {
+        // Seleccionar solo si está en la misma área (o es el primero)
+        const allSameArea = prev.length === 0 || prev.every(p => normalizeArea(p.area) === normalizeArea(area));
+
+        if (allSameArea) {
+          return [...prev, { ...person, area }];
+        } else {
+          // Diferentes áreas - empezar nueva selección
+          return [{ ...person, area }];
+        }
+      }
+    });
+  };
+
+  // 🖐️ DRAG & DROP: Reordenamiento manual tipo Excel (con soporte multi-select)
+  const handleDragStart = (e, person, area, index) => {
+    // Si la persona arrastrada está en la selección, arrastrar todos los seleccionados
+    const isInSelection = selectedPersonnel.some(p => p.id === person.id);
+
+    if (isInSelection && selectedPersonnel.length > 1) {
+      // Arrastre múltiple
+      setDraggedPerson({ isMultiple: true, items: selectedPersonnel });
+    } else {
+      // Arrastre individual
+      setDraggedPerson(person);
+    }
+
+    setDraggedArea(area);
+    e.dataTransfer.effectAllowed = 'move';
+    e.currentTarget.classList.add('dragging');
+  };
+
+  const handleDragEnd = (e) => {
+    e.currentTarget.classList.remove('dragging');
+    setDraggedPerson(null);
+    setDraggedArea(null);
+    setDropTarget(null);
+    // Limpiar selección después del drop
+    setSelectedPersonnel([]);
+  };
+
+  const handleDragOver = (e, targetIndex, area) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Solo permitir drop en la misma área
+    if (draggedArea && draggedArea !== area) {
+      e.dataTransfer.dropEffect = 'none';
+      setDropTarget(null);
+      return;
+    }
+
+    e.dataTransfer.dropEffect = 'move';
+
+    // Optimización: solo actualizar si cambió y con throttle
+    if (dragOverTimeoutRef.current) {
+      clearTimeout(dragOverTimeoutRef.current);
+    }
+
+    dragOverTimeoutRef.current = setTimeout(() => {
+      setDropTarget(current => current !== targetIndex ? targetIndex : current);
+    }, 50); // 50ms throttle para suavidad
+  };
+
+  const handleDragLeave = (e) => {
+    // Solo limpiar si realmente salimos del elemento (no de sus hijos)
+    const relatedTarget = e.relatedTarget;
+    if (!relatedTarget || e.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+
+    // Limpiar timeout pendiente
+    if (dragOverTimeoutRef.current) {
+      clearTimeout(dragOverTimeoutRef.current);
+    }
+  };
+
+  const handleDrop = (e, area, targetIndex) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // BLOQUEO CRÍTICO: Solo permitir drop si el mouse está sobre la PRIMERA CELDA (columna NOMBRE)
+    let target = e.target;
+    let isFirstColumn = false;
+
+    // Subir por el DOM hasta encontrar el TD
+    while (target && target.tagName !== 'TD' && target.tagName !== 'TR') {
+      target = target.parentElement;
+    }
+
+    if (target && target.tagName === 'TD') {
+      // Verificar si es la primera celda del TR
+      const tr = target.parentElement;
+      const cells = Array.from(tr.children);
+      const cellIndex = cells.indexOf(target);
+      isFirstColumn = cellIndex === 0;
+    }
+
+    // Si NO está sobre la primera columna, rechazar el drop
+    if (!isFirstColumn) {
+      console.log(`⛔ Drop bloqueado: solo puedes soltar en la columna NOMBRE`);
+      setDropTarget(null);
+      return;
+    }
+
+    // BLOQUEO: Solo permitir drop en la MISMA área (no arrastre horizontal)
+    if (!draggedPerson || draggedArea !== area) {
+      console.log(`⛔ Arrastre bloqueado: no puedes mover personal entre áreas diferentes`);
+      setDropTarget(null);
+      return;
+    }
+
+    // Obtener el personal del área ordenado
+    const areaPersonnel = personnel.filter(p => {
+      const normalizedPersonArea = normalizeArea(p.area);
+      const normalizedAreaTarget = normalizeArea(area);
+      return normalizedPersonArea === normalizedAreaTarget;
+    });
+
+    const sortedPersonnel = [...areaPersonnel].sort((a, b) => {
+      const indexA = getPersonnelSortIndex(a, area);
+      const indexB = getPersonnelSortIndex(b, area);
+      return indexA - indexB;
+    });
+
+    // Manejar arrastre múltiple
+    if (draggedPerson.isMultiple) {
+      const selectedIds = new Set(draggedPerson.items.map(p => p.id));
+
+      // Verificar si el target es uno de los seleccionados (no mover)
+      if (selectedIds.has(sortedPersonnel[targetIndex]?.id)) {
+        console.log(`⏭️ No mover múltiple: target está dentro de la selección`);
+        setDropTarget(null);
+        setSelectedPersonnel([]);
+        return;
+      }
+
+      console.log(`🖐️ Drop múltiple: ${draggedPerson.items.length} personas a posición ${targetIndex} en ${area}`);
+
+      // Guardar estado anterior en el historial
+      const previousOrder = sortedPersonnel.map(p => p.name);
+
+      // Crear nuevo orden sin los items seleccionados
+      const withoutSelected = sortedPersonnel.filter(p => !selectedIds.has(p.id));
+
+      // Insertar todos los items seleccionados en la posición target (manteniendo su orden relativo)
+      const selectedInOrder = sortedPersonnel.filter(p => selectedIds.has(p.id));
+
+      // Calcular índice de inserción ajustado
+      let insertIndex = targetIndex;
+
+      // Contar cuántos elementos seleccionados están ANTES del target
+      const selectedBeforeTarget = sortedPersonnel
+        .slice(0, targetIndex)
+        .filter(p => selectedIds.has(p.id)).length;
+
+      // Ajustar índice restando los elementos que ya se quitaron
+      insertIndex = Math.max(0, targetIndex - selectedBeforeTarget);
+
+      const newOrder = [
+        ...withoutSelected.slice(0, insertIndex),
+        ...selectedInOrder,
+        ...withoutSelected.slice(insertIndex)
+      ];
+
+      // Guardar en historial ANTES de aplicar el cambio
+      setOrderHistory(prev => [...prev, {
+        area,
+        previousOrder,
+        action: 'move_multiple',
+        count: draggedPerson.items.length,
+        timestamp: Date.now()
+      }]);
+
+      personnelOrderService.setAreaOrder(area, newOrder.map(p => p.name));
+      setOrderVersion(prev => prev + 1);
+      setDropTarget(null);
+      setSelectedPersonnel([]);
+      return;
+    }
+
+    // Arrastre individual
+    const currentIndex = sortedPersonnel.findIndex(p => p.id === draggedPerson.id);
+
+    if (currentIndex === -1) {
+      setDropTarget(null);
+      return;
+    }
+
+    // Si arrastra a la misma posición o adyacente, no hacer nada
+    if (currentIndex === targetIndex || currentIndex === targetIndex - 1) {
+      console.log(`⏭️ No mover: ${draggedPerson.name} ya está en posición ${currentIndex} (target: ${targetIndex})`);
+      setDropTarget(null);
+      return;
+    }
+
+    console.log(`🖐️ Drop: ${draggedPerson.name} de posición ${currentIndex} → ${targetIndex} en ${area}`);
+
+    // Guardar estado anterior en el historial
+    const previousOrder = sortedPersonnel.map(p => p.name);
+
+    const newOrder = [...sortedPersonnel];
+    const [removed] = newOrder.splice(currentIndex, 1);
+
+    // Ajustar targetIndex si estamos moviendo hacia abajo
+    const insertIndex = currentIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    newOrder.splice(insertIndex, 0, removed);
+
+    // Guardar en historial ANTES de aplicar el cambio
+    setOrderHistory(prev => [...prev, {
+      area,
+      previousOrder,
+      action: 'move_single',
+      personName: draggedPerson.name,
+      from: currentIndex,
+      to: insertIndex,
+      timestamp: Date.now()
+    }]);
+
+    personnelOrderService.setAreaOrder(area, newOrder.map(p => p.name));
+    setOrderVersion(prev => prev + 1);
+    setDropTarget(null);
+
+    console.log(`✅ Nuevo orden guardado para ${area}`);
+  };
+
+  const handleResetAreaOrder = (area) => {
+    if (!confirm(`¿Restaurar el orden por defecto del PDF para ${area}?`)) return;
+
+    console.log(`🔄 Reseteando orden de: ${area}`);
+    personnelOrderService.resetAreaOrder(area);
+
+    // Forzar re-render
+    setOrderVersion(prev => prev + 1);
+  };
+
   // 🔄 REORGANIZACIÓN POR ÁREA: Redistribuir empleados disponibles usando algoritmos predefinidos
   const handleReorganizeArea = (areaName) => {
     console.log(`🔄 [REORGANIZAR ÁREA] Iniciando reorganización para: ${areaName}`);
@@ -1137,7 +1779,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
       const hasBlockingNovelty = novelties?.some(n => {
         if (Number(n.personnel_id) !== Number(person.id)) return false;
-        if (!['VIAJE', 'VIAJE MÓVIL', 'SIN_CONTRATO', 'LIBRE', 'INCAPACIDAD'].includes(n.type)) return false;
+        if (!['VIAJE', 'VIAJE MÓVIL', 'SIN_CONTRATO', 'LIBRE', 'INCAPACIDAD', 'MOVIL', 'PUESTO_FIJO'].includes(n.type)) return false;
 
         if (n.start_date && n.end_date) {
           const startStr = n.start_date.split('T')[0];
@@ -1181,7 +1823,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
         const hasExtraBlockingNovelty = novelties?.some(n => {
           if (Number(n.personnel_id) !== Number(person.id)) return false;
-          if (!['VIAJE MÓVIL', 'INCAPACIDAD'].includes(n.type)) return false;
+          if (!['VIAJE MÓVIL', 'INCAPACIDAD', 'MOVIL', 'PUESTO_FIJO'].includes(n.type)) return false;
 
           if (n.start_date && n.end_date) {
             const startStr = n.start_date.split('T')[0];
@@ -1197,7 +1839,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         });
 
         if (hasExtraBlockingNovelty) {
-          console.log(`   ❌ ${person.name}: Tiene novedad bloqueante adicional (VIAJE MÓVIL/INCAPACIDAD)`);
+          console.log(`   ❌ ${person.name}: Tiene novedad bloqueante adicional (VIAJE MÓVIL/INCAPACIDAD/MOVIL/PUESTO_FIJO)`);
           return false;
         }
         return true;
@@ -1352,8 +1994,8 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       const baseDate = new Date('2025-12-30'); // Lunes de referencia
       const weeksDiff = Math.floor((mondayOfWeek - baseDate) / (7 * 24 * 60 * 60 * 1000));
 
-      // Ordenar empleados alfabéticamente (mismo orden que backend)
-      const sortedEmployees = [...finalAvailable].sort((a, b) => a.name.localeCompare(b.name));
+      // IMPORTANTE: NO ordenar - mantener el orden fijo del personal según se carga de la base de datos
+      const sortedEmployees = [...finalAvailable];
 
       // 🔄 ROTACIÓN SEMANAL - Las personas rotan entre los turnos cada semana
       // Identificar turnos únicos desde distribucion y contar cupos (mismo algoritmo que backend)
@@ -1742,12 +2384,8 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     console.log(`   🎯 Aplicando algoritmo para ${employeeCount} empleados`);
     console.log(`   📋 Turnos del algoritmo:`, turnosAlgoritmo.map(t => `${t.callTime}-${t.endTime} (${t.label})`));
 
-    // 4. Ordenar empleados por hora de entrada actual
-    const sortedEmployees = [...availableEmployees].sort((a, b) => {
-      const timeA = callTimes[a.id] || '99:99';
-      const timeB = callTimes[b.id] || '99:99';
-      return timeA.localeCompare(timeB);
-    });
+    // 4. IMPORTANTE: NO ordenar - mantener el orden fijo del personal
+    const sortedEmployees = [...availableEmployees];
 
     console.log(`   📋 Empleados ordenados:`, sortedEmployees.map(e => `${e.name} (${callTimes[e.id]})`));
 
@@ -2016,18 +2654,23 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
   };
 
 
-  // Orden personalizado de áreas
+  // Orden personalizado de áreas - EXACTO según PDF de Coordinación Personal
+  // IMPORTANTE: Solo incluir áreas de producción técnica, excluir logística/admin
   const areaOrder = [
+    'PRODUCCIÓN',
     'PRODUCTORES',
     'ASISTENTES DE PRODUCCIÓN',
     'DIRECTORES DE CÁMARA',
     'VTR',
+    'VIMIX',
     'OPERADORES DE VMIX',
+    'OPERADORES DE VIMIX',
     'OPERADORES DE PANTALLAS',
     'GENERADORES DE CARACTERES',
     'OPERADORES DE SONIDO',
     'ASISTENTES DE SONIDO',
     'OPERADORES DE PROMPTER',
+    'OPERADORES DE TELEPROMPTER',
     'CAMARÓGRAFOS DE ESTUDIO',
     'ASISTENTES DE ESTUDIO',
     'COORDINADOR ESTUDIO',
@@ -2042,16 +2685,115 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     'MAQUILLAJE',
   ];
 
+  // Roles de producción permitidos (excluir productores jefes/gerentes)
+  const allowedProductionRoles = [
+    'Productor de Emisión',
+    'Produccion',
+    'Asistente de producción',
+    'Asistente de Producción',
+  ];
+
+  // Función auxiliar para normalizar nombres de áreas (quitar tildes, espacios extras)
+  const normalizeArea = (area) => {
+    if (!area) return '';
+    return area
+      .toUpperCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, ''); // Quitar tildes
+  };
+
+  // Orden exacto del personal según PDF de Coordinación Personal 02-03-2026
+  // Este orden NO debe cambiar - las rotaciones solo cambian valores de celdas
+  const personnelOrder = {
+    'PRODUCCIÓN': ['Luis Fajardo', 'Laura Ávila', 'Rocio Ruiz', 'Marilú Durán', 'Juliana Coronel', 'Luis Solano', 'Juan Carlos Boada', 'Nicolle Diaz', 'Angela Cabezas', 'Isabella Rojas', 'Valentina Vélez', 'Camila Carvajal', 'Sebastián Arango', 'Alexander Paez', 'Sara Daza', 'Juana Ullune'],
+    'PRODUCTORES': ['Luis Fajardo', 'Laura Ávila', 'Rocio Ruiz', 'Marilú Durán', 'Juliana Coronel', 'Luis Solano', 'Juan Carlos Boada'],
+    'ASISTENTES DE PRODUCCIÓN': ['Nicolle Diaz', 'Angela Cabezas', 'Isabella Rojas', 'Valentina Vélez', 'Camila Carvajal', 'Sebastián Arango', 'Alexander Paez', 'Sara Daza', 'Juana Ullune'],
+    'DIRECTORES DE CÁMARA': ['Andrés Patiño', 'Camilo Hernández', 'Diego Gamboa', 'Eduardo Contreras', 'Julián Jiménez', 'Alejandro La Torre'],
+    'VTR': ['Alfredo Méndez', 'David Córdoba', 'Henry Villarraga', 'William Aldana'],
+    'VIMIX': ['Sofía Fajardo', 'Ronald Ortiz', 'Vanesa Castañeda', 'Tania Morales'],
+    'OPERADORES DE VMIX': ['Sofía Fajardo', 'Ronald Ortiz', 'Vanesa Castañeda', 'Tania Morales'],
+    'OPERADORES DE VIMIX': ['Sofía Fajardo', 'Ronald Ortiz', 'Vanesa Castañeda', 'Tania Morales'],
+    'OPERADORES DE PANTALLAS': ['Paola Borrero', 'Dary Segura', 'Leidy Salazar', 'Ashlei Montero'],
+    'GENERADORES DE CARACTERES': ['Diana Ospina', 'Maria Jose Escobar', 'Santiago Ortiz', 'Santiago Rico', 'Dayana Rodríguez', 'María Suárez'],
+    'OPERADORES DE SONIDO': ['Oscar Bernal', 'John Valencia', 'Wilmar Matiz', 'Harold Barrero', 'Lenin Gutiérrez', 'Huber Salazar'],
+    'ASISTENTES DE SONIDO': ['Jimmy Estupiñán', 'Marcela Vélez', 'Luis Fonseca', 'Jaime Rueda', 'Wilson Cano'],
+    'OPERADORES DE PROMPTER': ['Duván Díaz', 'Katherine Montoya', 'Kevin Alejandro Lerma', 'Lina Rodríguez'],
+    'OPERADORES DE TELEPROMPTER': ['Duván Díaz', 'Katherine Montoya', 'Kevin Alejandro Lerma', 'Lina Rodríguez'],
+    'CAMARÓGRAFOS DE ESTUDIO': ['Jorge Jaramillo', 'Juan Sacristán', 'Jefferson Pérez', 'John Jiménez', 'Alexander Quiñonez', 'Sebastián Hernández', 'Carlos López', 'Carlos A. López', 'Cesar Jimenez', 'Ángel Zapata', 'Angel Zapata', 'John Loaiza', 'Ernesto Corchuelo', 'Carlos García', 'Carlos Garcia', 'John Daminston', 'John Daminston Arevalo', 'William Mosquera', 'Pedro Niño', 'Pedro Nino', 'Luis Bernal', 'Raul Ramírez', 'Raul Ramirez', 'Samuel Romero', 'Oscar González', 'Oscar Gonzalez'],
+    'ASISTENTES DE ESTUDIO': ['Diego González', 'Julio Vega', 'Rodolfo Saldaña', 'José Peña', 'Carlos Orlando Espinel'],
+    'COORDINADOR ESTUDIO': ['Jonathan Contreras'],
+    'ESCENOGRAFÍA': ['Rafael López', 'Néstor Peña', 'John Forero', 'Jacson Urrego', 'Joaquín Alonso'],
+    'ASISTENTES DE LUCES': ['Daniel Pinilla', 'Jaiver Galeano', 'Santiago Espinosa', 'Jhonatan Andres Ramirez', 'Julio López'],
+    'OPERADORES DE VIDEO': ['Leonardo Castro', 'Horacio Suárez', 'Pedro Torres', 'Iván Aristizábal'],
+    'CONTRIBUCIONES': ['Carolina Benavides', 'Michael Torres', 'Daniel Cabra', 'Adrian Contreras', 'Angelica Rodriguez'],
+    'REALIZADORES': ['William Ruiz', 'Carlos Wilches', 'Cesar Morales', 'Julián Luna', 'Enrique Muñoz', 'William Uribe', 'John Buitrago', 'Floresmiro Luna', 'Edgar Nieto', 'Álvaro Díaz', 'Victor Vargas', 'Erick Velásquez', 'Andrés Ramírez', 'Edgar Castillo', 'Marco Solorzano', 'Ramiro Balaguera', 'Leonel Cifuentes', 'Didier Buitrago', 'Laura Vargas', 'Alexander Valencia', 'Santiago Torres', 'David Patarroyo', 'Óscar Ortega', 'Guillermo Solarte', 'Wílmer Salamanca', 'Manuel Díaz'],
+    'CAMARÓGRAFOS DE REPORTERÍA': ['William Ruiz', 'Carlos Wilches', 'Cesar Morales', 'Julián Luna', 'Enrique Muñoz', 'William Uribe', 'John Buitrago', 'Floresmiro Luna', 'Edgar Nieto', 'Álvaro Díaz', 'Victor Vargas', 'Erick Velásquez', 'Andrés Ramírez', 'Edgar Castillo', 'Marco Solorzano', 'Ramiro Balaguera', 'Leonel Cifuentes', 'Didier Buitrago'],
+    'ASISTENTES DE REPORTERÍA': ['Richard Beltran', 'Johan Daniel Moreno', 'Walter Murillo', 'Pablo Preciado', 'Bryan Rodríguez', 'Brayan Munera', 'José Mesa'],
+    'VESTUARIO': ['Mariluz Beltrán', 'Dora Rincón', 'Yineth Tovar', 'Mercedes Malagón', 'Carlos Acosta'],
+    'MAQUILLAJE': ['Catalina Acevedo', 'María Espinosa', 'Lady Ortiz', 'Ana Villalba'],
+  };
+
+  // Función para obtener el índice de orden de una persona según el PDF o orden personalizado
+  const getPersonnelSortIndex = (person, area) => {
+    // 1. Primero verificar si hay un orden personalizado (manual) para esta área
+    const customOrder = personnelOrderService.getAreaOrder(area);
+    if (customOrder && customOrder.length > 0) {
+      const index = customOrder.findIndex(name => name.toLowerCase() === person.name.toLowerCase());
+      if (index !== -1) return index;
+    }
+
+    // 2. Si no hay orden personalizado, usar el orden del PDF (hardcoded)
+    const normalizedArea = normalizeArea(area);
+    const orderList = personnelOrder[area] || personnelOrder[Object.keys(personnelOrder).find(key => normalizeArea(key) === normalizedArea)];
+
+    if (!orderList) return 9999; // Si no hay orden definido, va al final
+
+    const index = orderList.findIndex(name => name.toLowerCase() === person.name.toLowerCase());
+    return index === -1 ? 9999 : index; // Si no se encuentra, va al final
+  };
+
+  // Crear mapa normalizado de áreas permitidas
+  const normalizedAreaOrder = areaOrder.map(normalizeArea);
+
+  // Filtrar solo el personal de áreas de producción (excluir administrativos, logística, etc.)
   const personnelByDept = personnel.reduce((acc, person) => {
-    if (!acc[person.area]) acc[person.area] = [];
-    acc[person.area].push(person);
+    const normalizedPersonArea = normalizeArea(person.area);
+
+    // Solo incluir si el área está en areaOrder
+    if (normalizedAreaOrder.includes(normalizedPersonArea)) {
+      // Usar el nombre original del área para agrupar
+      const areaKey = person.area;
+
+      // Si es PRODUCCIÓN, PRODUCTORES o ASISTENTES DE PRODUCCIÓN, filtrar por roles permitidos
+      const isProductionArea =
+        normalizedPersonArea === 'PRODUCCION' ||
+        normalizedPersonArea === 'PRODUCTORES' ||
+        normalizedPersonArea === 'ASISTENTES DE PRODUCCION';
+
+      if (isProductionArea) {
+        if (allowedProductionRoles.includes(person.role)) {
+          if (!acc[areaKey]) acc[areaKey] = [];
+          acc[areaKey].push(person);
+        }
+      } else {
+        // Para otras áreas, incluir todo el personal
+        if (!acc[areaKey]) acc[areaKey] = [];
+        acc[areaKey].push(person);
+      }
+    }
     return acc;
   }, {});
 
-  // Ordenar según areaOrder
+  // Ordenar según areaOrder (usando normalización para comparar)
   const sortedDepts = Object.entries(personnelByDept).sort((a, b) => {
-    const indexA = areaOrder.indexOf(a[0]);
-    const indexB = areaOrder.indexOf(b[0]);
+    const normalizedA = normalizeArea(a[0]);
+    const normalizedB = normalizeArea(b[0]);
+
+    // Buscar el índice en el array normalizado
+    const indexA = normalizedAreaOrder.indexOf(normalizedA);
+    const indexB = normalizedAreaOrder.indexOf(normalizedB);
+
     return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
   });
 
@@ -2180,6 +2922,19 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
               <span className="text-sm font-medium">Reset Datos Hoy</span>
             </button>
 
+            {/* ⏪ BOTÓN DESHACER (Ctrl+Z) */}
+            <button
+              onClick={handleUndoOrder}
+              disabled={orderHistory.length === 0}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              title={`Deshacer último cambio de orden (Ctrl+Z)${orderHistory.length > 0 ? ` - ${orderHistory.length} cambio${orderHistory.length > 1 ? 's' : ''} disponible${orderHistory.length > 1 ? 's' : ''}` : ''}`}
+            >
+              <span className="text-lg">⏪</span>
+              <span className="text-sm font-medium">
+                Deshacer {orderHistory.length > 0 && `(${orderHistory.length})`}
+              </span>
+            </button>
+
             <button
               onClick={() => generateSchedulePDF(personnel, programs, assignments, callTimes, selectedDate, programMappings, novelties, assignmentNotes, endTimes)}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded"
@@ -2196,7 +2951,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="bg-blue-700 text-white">
-              <th className="border border-gray-300 p-2 sticky left-0 bg-blue-700 z-10">NOMBRE</th>
+              <th className="border border-gray-300 p-2 sticky left-0 bg-blue-700 z-20">NOMBRE</th>
               <th className="border border-gray-300 p-2">ACTIVIDAD</th>
               <th className="border border-gray-300 p-2">HORA LLAMADO</th>
               <th className="border border-gray-300 p-2">HORA FIN</th>
@@ -2215,64 +2970,39 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
           <tbody>
             {sortedDepts.map(([dept, deptPersonnel]) => {
-              // Ordenar personal por hora de llamado
-              // Los que NO tienen hora válida van al final (como Julián sin contrato)
+              // IMPORTANTE: Ordenar según el orden exacto del PDF de Coordinación Personal O según orden manual
+              // orderVersion fuerza re-render cuando el usuario reordena manualmente
+              // Cambiar rotaciones solo modifica los valores de las celdas, no el orden de las filas
               const sortedByTime = [...deptPersonnel].sort((a, b) => {
-                const timeA = callTimes[a.id];
-                const timeB = callTimes[b.id];
-
-                // Función auxiliar para validar hora válida
-                const isValidTime = (time) => {
-                  if (!time) return false;
-                  if (time === '') return false;
-                  if (time === '--:--') return false;
-                  if (time === 'Seleccionar...') return false;
-                  if (time.startsWith('Selecc')) return false; // Captura "Seleccio", "Seleccionar", etc.
-                  if (!time.includes(':')) return false;
-                  return true;
-                };
-
-                const hasValidTimeA = isValidTime(timeA);
-                const hasValidTimeB = isValidTime(timeB);
-
-                // LOGS para debugging (puedes comentar después)
-                if (dept === 'DIRECTORES DE CÁMARA') {
-                  console.log(`[SORT] ${a.name}: "${timeA}" → válido: ${hasValidTimeA}`);
-                }
-
-                // Sin hora válida → al final
-                if (!hasValidTimeA && !hasValidTimeB) {
-                  return a.name.localeCompare(b.name); // Ordenar alfabéticamente entre sí
-                }
-                if (!hasValidTimeA) return 1; // A sin hora → va después de B
-                if (!hasValidTimeB) return -1; // B sin hora → va después de A
-
-                // Ambos tienen hora válida, ordenar por hora
-                return timeA.localeCompare(timeB);
+                const indexA = getPersonnelSortIndex(a, dept);
+                const indexB = getPersonnelSortIndex(b, dept);
+                return indexA - indexB;
               });
 
               return (
-  <React.Fragment key={dept}>
+  <React.Fragment key={`${dept}-${orderVersion}`}>
     {/* Encabezado del área */}
     <tr className="bg-blue-800 text-white font-bold">
       <td colSpan={4 + programs.length} className="border border-gray-300 p-2">
         <div className="flex items-center justify-between">
-          <span>{dept}</span>
-          <button
-            onClick={() => handleReorganizeArea(dept)}
-            className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
-            title="Reorganizar área automáticamente"
-          >
-            <span>🔄</span>
-            <span className="text-xs">Reorganizar</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <span>{dept}</span>
+            {selectedPersonnel.length > 0 && normalizeArea(selectedPersonnel[0].area) === normalizeArea(dept) && (
+              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-medium">
+                {selectedPersonnel.length} seleccionado{selectedPersonnel.length > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-300 italic">Ctrl+Click para selección múltiple</span>
+          </div>
         </div>
       </td>
     </tr>
 
     {/* Encabezado de columnas para esta área */}
     <tr className="bg-blue-700 text-white">
-      <th className="border border-gray-300 p-2 sticky left-0 bg-blue-700 z-10">NOMBRE</th>
+      <th className="border border-gray-300 p-2 sticky left-0 bg-blue-700 z-20">NOMBRE</th>
       <th className="border border-gray-300 p-2">ACTIVIDAD</th>
       <th className="border border-gray-300 p-2">HORA LLAMADO</th>
       <th className="border border-gray-300 p-2">HORA FIN</th>
@@ -2288,7 +3018,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       })}
     </tr>
 
-                  {sortedByTime.map(person => {
+                  {sortedByTime.map((person, personIndex) => {
                     // Buscar si la persona tiene novedad "SIN CONTRATO" hoy
                     const today = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
                     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -2315,13 +3045,59 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                     const contractStatus = getContractStatus(person.id);
                     const isContractExpired = contractStatus.isExpired;
 
+                    // Verificar si esta persona está seleccionada
+                    const isSelected = selectedPersonnel.some(p => p.id === person.id);
+
+                    // Calcular número de grupo
+                    let displayNumber = personIndex + 1;
+                    let usesGroups = false;
+                    let maxGroup = 4;
+
+                    if (dept === 'CAMARÓGRAFOS DE ESTUDIO' || dept === 'CAMARÓGRAFOS DE REPORTERÍA') {
+                      usesGroups = true;
+                      maxGroup = dept === 'CAMARÓGRAFOS DE ESTUDIO' ? 4 : 2;
+
+                      // Primero intentar obtener el grupo personalizado de esta semana
+                      const weeklyGroups = getWeeklyGroups(selectedDate, dept);
+                      if (weeklyGroups[person.id]) {
+                        displayNumber = weeklyGroups[person.id];
+                      } else {
+                        // Si no hay grupo personalizado, usar el grupo por defecto basado en posición
+                        displayNumber = getDefaultGroup(dept, personIndex) || displayNumber;
+                      }
+                    }
+
                     return (
-                    <tr key={person.id} className="hover:bg-gray-50">
-                      <td className={`border border-gray-300 p-2 sticky left-0 bg-white font-medium ${isContractExpired ? 'bg-red-50' : ''}`}>
-                        <span className={isContractExpired ? 'text-red-700 font-bold' : ''}>
-                          {person.name}
-                          {isContractExpired && <span className="ml-1 text-xs">⚠️</span>}
-                        </span>
+                    <tr
+                      key={person.id}
+                      onClick={(e) => handlePersonClick(e, person, dept)}
+                      className={`transition-all duration-200 ${isSelected ? 'selected-personnel' : ''}`}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td className={`border border-gray-300 p-2 sticky left-0 font-medium z-20 ${isContractExpired ? 'bg-red-50' : isSelected ? 'bg-blue-50' : 'bg-white'}`}>
+                        <div className="flex items-center gap-2 relative">
+                          <input
+                            type="number"
+                            min="1"
+                            max={usesGroups ? maxGroup : sortedByTime.length}
+                            value={displayNumber}
+                            onChange={(e) => {
+                              const newValue = parseInt(e.target.value);
+                              if (usesGroups) {
+                                handleGroupChange(person, dept, newValue, sortedByTime);
+                              } else {
+                                handleOrderChange(person, dept, newValue, sortedByTime);
+                              }
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            className={`w-12 px-1 py-0.5 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 ${usesGroups ? 'bg-blue-50' : ''}`}
+                            title={usesGroups ? `Cambiar grupo (1-${maxGroup}). Ctrl+Click para seleccionar múltiples` : `Cambiar posición (1-${sortedByTime.length})`}
+                          />
+                          <span className={isContractExpired ? 'text-red-700 font-bold' : ''}>
+                            {person.name}
+                            {isContractExpired && <span className="ml-1 text-xs">⚠️</span>}
+                          </span>
+                        </div>
                       </td>
 
                       <td className="border border-gray-300 p-2 text-xs">
@@ -2545,12 +3321,14 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
                       {programs.map(program => {
                         const key = `${person.id}_${program.id}`;
-                        const isAssigned = assignments[key];
                         const isEditing = editingCell === key;
 
                         // FILTRO POR CALLTIME: Verificar si este programa debe mostrarse
-                        // basándose en la hora de llamado del trabajador
+                        // basándose en la hora de llamado del trabajador y grupos exclusivos
                         const shouldShow = shouldShowProgram(person.id, program.id, program);
+
+                        // Si la persona está en grupo exclusivo y NO es su programa, no mostrar asignación
+                        const isAssigned = shouldShow ? assignments[key] : false;
 
                         // Buscar novedad del día para este empleado
                         const todayNovelty = novelties?.find(n => {
@@ -2580,10 +3358,23 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                         let textColor = '#000000';
                         let isSinContrato = false;
 
-                        // Verificar si esta persona tiene un despacho activo
-                        const personDispatch = dispatches[person.id];
+                        // Obtener info de grupo exclusivo para esta persona
+                        const exclusiveInfo = getExclusiveGroupInfo();
+                        const personExclusiveInfo = exclusiveInfo[person.id];
+                        const isInExclusiveGroup = personExclusiveInfo &&
+                          (personExclusiveInfo.exclusiveType === 'MOVIL' || personExclusiveInfo.exclusiveType === 'PUESTO_FIJO');
 
-                        if (personDispatch) {
+                        // Si la persona está en grupo exclusivo
+                        if (isInExclusiveGroup) {
+                          // Mostrar en verde con el nombre del programa exclusivo en TODAS las celdas
+                          const icon = personExclusiveInfo.exclusiveType === 'MOVIL' ? '🚐' : '📍';
+                          cellText = `${icon} ${personExclusiveInfo.programName}`;
+                          bgColor = 'rgb(0, 251, 58)'; // Verde
+                          textColor = '#000000';
+                        }
+                        // Verificar si esta persona tiene un despacho activo
+                        else if (dispatches[person.id]) {
+                          const personDispatch = dispatches[person.id];
                           // Persona está en despacho - pintar en verde con destino
                           cellText = personDispatch.destino || 'EN TERRENO';
                           bgColor = 'rgb(0, 251, 58)'; // Verde (igual que viajes)
@@ -2601,6 +3392,16 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                             cellText = todayNovelty.description || todayNovelty.type;
                             bgColor = 'rgb(0, 251, 58)'; // Verde
                             textColor = '#000000'; // Texto negro para mejor contraste
+                          } else if (todayNovelty.type === 'MOVIL') {
+                            // Si es MÓVIL, mostrar en verde (igual que viajes)
+                            cellText = `🚐 ${todayNovelty.description || 'MÓVIL'}`;
+                            bgColor = 'rgb(0, 251, 58)'; // Verde (igual que viajes)
+                            textColor = '#000000';
+                          } else if (todayNovelty.type === 'PUESTO_FIJO') {
+                            // Si es PUESTO FIJO, mostrar en verde (igual que viajes)
+                            cellText = `📍 ${todayNovelty.description || 'PUESTO FIJO'}`;
+                            bgColor = 'rgb(0, 251, 58)'; // Verde (igual que viajes)
+                            textColor = '#000000';
                           } else {
                             // Para otras novedades, mostrar la descripción o tipo
                             cellText = todayNovelty.description || todayNovelty.type;

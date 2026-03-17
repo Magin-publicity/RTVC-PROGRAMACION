@@ -29,6 +29,10 @@ export const PersonnelForm = ({ initialData, onSubmit, onCancel, isLogistics = f
     direccion: initialData?.direccion || '',
     barrio: initialData?.barrio || '',
     localidad: initialData?.localidad || '',
+    cedula: initialData?.cedula || '',
+    fecha_nacimiento: initialData?.fecha_nacimiento ? initialData.fecha_nacimiento.split('T')[0] : '',
+    arl: initialData?.arl || '',
+    eps: initialData?.eps || '',
     contract_start: initialData?.contract_start ? initialData.contract_start.split('T')[0] : '',
     contract_end: initialData?.contract_end ? initialData.contract_end.split('T')[0] : ''
   });
@@ -138,13 +142,22 @@ export const PersonnelForm = ({ initialData, onSubmit, onCancel, isLogistics = f
         placeholder="correo@rtvc.gov.co"
       />
       
-      <Input
-        label="Teléfono"
-        type="tel"
-        value={formData.phone}
-        onChange={(e) => handleChange('phone', e.target.value)}
-        placeholder="3001234567"
-      />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Input
+          label="Cédula"
+          value={formData.cedula}
+          onChange={(e) => handleChange('cedula', e.target.value)}
+          placeholder="Ej: 1234567890"
+        />
+
+        <Input
+          label="Teléfono"
+          type="tel"
+          value={formData.phone}
+          onChange={(e) => handleChange('phone', e.target.value)}
+          placeholder="3001234567"
+        />
+      </div>
 
       <Input
         label="Dirección"
@@ -166,6 +179,29 @@ export const PersonnelForm = ({ initialData, onSubmit, onCancel, isLogistics = f
           value={formData.localidad}
           onChange={(e) => handleChange('localidad', e.target.value)}
           placeholder="Ej: Usaquén"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Input
+          label="Fecha de Nacimiento"
+          type="date"
+          value={formData.fecha_nacimiento}
+          onChange={(e) => handleChange('fecha_nacimiento', e.target.value)}
+        />
+
+        <Input
+          label="ARL"
+          value={formData.arl}
+          onChange={(e) => handleChange('arl', e.target.value)}
+          placeholder="Ej: Positiva, Sura, etc."
+        />
+
+        <Input
+          label="EPS"
+          value={formData.eps}
+          onChange={(e) => handleChange('eps', e.target.value)}
+          placeholder="Ej: Sanitas, Compensar, etc."
         />
       </div>
 

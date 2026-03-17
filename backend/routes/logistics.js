@@ -368,6 +368,9 @@ router.get('/personnel-on-duty/:date', async (req, res) => {
 
     const shifts = await shiftsResponse.json();
 
+    // TODO: Implementar detección de novedades de viaje
+    const noveltiesMap = new Map();
+
     // Extraer IDs únicos de cada área
     const journalistIds = [...new Set(shifts
       .filter(s => s.area === 'PERIODISTAS')
@@ -402,11 +405,28 @@ router.get('/personnel-on-duty/:date', async (req, res) => {
       // Agregar información de turno
       return result.rows.map(person => {
         const shift = shiftsForArea.find(s => s.personnel_id === person.id);
+
+        // Determinar el turno basado en shift_start
+        let turno = shift?.turno_rotado || null;
+        let call_time = shift?.shift_start || null;
+
+        if (!turno && call_time) {
+          const hour = parseInt(call_time.substring(0, 2));
+          turno = hour < 12 ? 'AM' : 'PM';
+        }
+
+        // Verificar si está viajando (bloqueado)
+        const noveltyType = noveltiesMap.get(person.id);
+        const isBlocked = noveltyType === 'VIAJE';
+
         return {
           ...person,
-          shift_start: shift?.shift_start || null,
+          shift_start: call_time,
           shift_end: shift?.shift_end || null,
-          turno: shift?.turno_rotado || null
+          turno: turno,
+          call_time: call_time, // Usar shift_start como call_time
+          is_blocked: isBlocked,
+          novelty_tipo: noveltyType || null
         };
       });
     };
