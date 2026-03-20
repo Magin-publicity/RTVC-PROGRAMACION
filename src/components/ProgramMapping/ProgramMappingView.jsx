@@ -1023,9 +1023,34 @@ export const ProgramMappingView = () => {
                         (() => {
                           const filtered = personnel.filter(p => {
                             if (!personnelSearchTerm.trim()) return true;
-                            const term = personnelSearchTerm.toLowerCase();
-                            return p.name?.toLowerCase().includes(term) ||
-                                   p.area?.toLowerCase().includes(term);
+
+                            // Normalizar función
+                            const normalize = (str) => {
+                              if (!str) return '';
+                              return str.toLowerCase()
+                                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                                .trim();
+                            };
+
+                            const searchTerm = normalize(personnelSearchTerm);
+                            const personName = normalize(p.name || '');
+                            const personArea = normalize(p.area || '');
+
+                            // Buscar por nombre completo o área
+                            if (personName.includes(searchTerm) || personArea.includes(searchTerm)) {
+                              return true;
+                            }
+
+                            // Buscar por tokens individuales (palabras)
+                            const searchTokens = searchTerm.split(/\s+/);
+                            const nameTokens = personName.split(/\s+/);
+                            const areaTokens = personArea.split(/\s+/);
+
+                            // Si algún token de búsqueda coincide con algún token del nombre o área
+                            return searchTokens.every(searchToken =>
+                              nameTokens.some(nameToken => nameToken.includes(searchToken)) ||
+                              areaTokens.some(areaToken => areaToken.includes(searchToken))
+                            );
                           });
                           const grouped = filtered.reduce((acc, p) => {
                             const area = p.area || 'OTRO';
