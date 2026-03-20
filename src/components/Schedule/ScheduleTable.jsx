@@ -482,7 +482,12 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         if (isWeekendDay && programType !== 'weekend') return false;
         if (!isWeekendDay && programType !== 'weekday') return false;
 
-        // Filtrar por fechas específicas
+        // Para grupos exclusivos con startDate/endDate, verificar el rango de fechas
+        if (program.isExclusiveGroup && program.startDate && program.endDate) {
+          return dateStr >= program.startDate && dateStr <= program.endDate;
+        }
+
+        // Filtrar por fechas específicas de grabación
         if (!program.recordingDates || program.recordingDates.length === 0) return true;
         return program.recordingDates.includes(dateStr);
       });
