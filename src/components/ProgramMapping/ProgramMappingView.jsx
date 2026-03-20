@@ -336,9 +336,9 @@ export const ProgramMappingView = () => {
     const times = JSON.parse(localStorage.getItem(storageKey) || '{}');
     setProgramTimes(times);
 
-    // Cargar personal para grupos exclusivos
+    // Cargar personal para grupos exclusivos (TODO el personal: técnico y logístico)
     try {
-      const personnelRes = await fetch('/api/personnel');
+      const personnelRes = await fetch('/api/personnel?tipo=ALL');
       if (personnelRes.ok) {
         const personnelData = await personnelRes.json();
         setPersonnel(personnelData);
