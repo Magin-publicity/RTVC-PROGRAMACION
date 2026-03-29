@@ -2,7 +2,92 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { classifyPersonnel, getResourceForPersonnel } from './personnelClassification';
 
-export const generateSchedulePDF = (personnel, programs, assignments, callTimes, selectedDate, programMappings = {}, novelties = [], assignmentNotes = {}, endTimes = {}) => {
+export const generateSchedulePDF = (personnel, programs, assignments, callTimes, selectedDate, programMappings = {}, novelties = [], assignmentNotes = {}, endTimes = {}, manualAssignments = {}) => {
+  // 🔍 DEBUG: Ver qué datos recibe el PDF
+  console.log('📄 [PDF] Datos recibidos:');
+  console.log('  - Programs:', programs.length, programs.map(p => ({ id: p.id, name: p.name })));
+  console.log('  - Assignments:', Object.keys(assignments).length, 'asignaciones');
+  console.log('  - Assignment Notes:', Object.keys(assignmentNotes).length, 'notas');
+  console.log('  - Program Mappings:', Object.keys(programMappings).length, 'mapeos');
+  console.log('  - Manual Assignments:', Object.keys(manualAssignments).length, 'asignaciones manuales');
+
+  // Función para convertir tiempo a minutos
+  const timeToMinutes = (time) => {
+    if (!time || time === '--:--') return 0;
+    const [hours, minutes] = time.split(':').map(Number);
+    return (hours || 0) * 60 + (minutes || 0);
+  };
+
+  // Función para verificar si un programa debe mostrarse (IGUAL QUE LA PANTALLA)
+  const shouldShowProgram = (personnelId, programId, program) => {
+    const key = `${personnelId}_${programId}`;
+
+    // Si es asignación manual, siempre mostrarla
+    if (manualAssignments[key]) {
+      return true;
+    }
+
+    // Obtener callTime del trabajador
+    const workerCallTime = callTimes[personnelId];
+    if (!workerCallTime || workerCallTime === '--:--') {
+      return true; // Si no tiene callTime, mostrar todos
+    }
+
+    // Obtener hora de inicio del programa
+    const programTime = program.defaultTime || program.time || '';
+    const programStartTime = programTime.split('-')[0].trim();
+
+    if (!programStartTime) return true;
+
+    // Comparar tiempos
+    const callMinutes = timeToMinutes(workerCallTime);
+    const programMinutes = timeToMinutes(programStartTime);
+
+    // Solo mostrar si el programa empieza en o después del llamado
+    return programMinutes >= callMinutes;
+  };
+
+  // Verificar asignaciones de Andrés Patiño, Henry Villarraga y Ronald Ortiz
+  const andresPatino = personnel.find(p => p.name.includes('Andrés Patiño'));
+  const henryVillarraga = personnel.find(p => p.name.includes('Henry Villarraga'));
+  const ronaldOrtiz = personnel.find(p => p.name.includes('Ronald Ortiz'));
+
+  if (andresPatino) {
+    console.log(`  - Andrés Patiño (ID: ${andresPatino.id}) asignaciones:`);
+    Object.keys(assignments).filter(k => k.startsWith(`${andresPatino.id}_`)).forEach(key => {
+      const programId = key.split('_')[1];
+      const program = programs.find(p => p.id == programId);
+      const value = assignments[key];
+      const shouldShow = program ? shouldShowProgram(andresPatino.id, program.id, program) : false;
+      const willShow = value === true && shouldShow;
+      console.log(`    ${key} (${program?.name || 'unknown'}): value=${value}, shouldShow=${shouldShow} → ${willShow ? '✅ SE MOSTRARÁ' : '❌ NO SE MOSTRARÁ'}`);
+    });
+  }
+
+  if (henryVillarraga) {
+    console.log(`  - Henry Villarraga (ID: ${henryVillarraga.id}) asignaciones:`);
+    Object.keys(assignments).filter(k => k.startsWith(`${henryVillarraga.id}_`)).forEach(key => {
+      const programId = key.split('_')[1];
+      const program = programs.find(p => p.id == programId);
+      const value = assignments[key];
+      const shouldShow = program ? shouldShowProgram(henryVillarraga.id, program.id, program) : false;
+      const willShow = value === true && shouldShow;
+      console.log(`    ${key} (${program?.name || 'unknown'}): value=${value}, shouldShow=${shouldShow} → ${willShow ? '✅ SE MOSTRARÁ' : '❌ NO SE MOSTRARÁ'}`);
+    });
+  }
+
+  if (ronaldOrtiz) {
+    console.log(`  - Ronald Ortiz (ID: ${ronaldOrtiz.id}) asignaciones:`);
+    Object.keys(assignments).filter(k => k.startsWith(`${ronaldOrtiz.id}_`)).forEach(key => {
+      const programId = key.split('_')[1];
+      const program = programs.find(p => p.id == programId);
+      const value = assignments[key];
+      const shouldShow = program ? shouldShowProgram(ronaldOrtiz.id, program.id, program) : false;
+      const willShow = value === true && shouldShow;
+      console.log(`    ${key} (${program?.name || 'unknown'}): value=${value}, shouldShow=${shouldShow} → ${willShow ? '✅ SE MOSTRARÁ' : '❌ NO SE MOSTRARÁ'}`);
+    });
+  }
+
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
@@ -43,25 +128,28 @@ export const generateSchedulePDF = (personnel, programs, assignments, callTimes,
   doc.text(`COORDINACIÓN PARA EL CUMPLIMIENTO DE ACTIVIDADES DE RTVC ${formatDate(selectedDate)}`,
            doc.internal.pageSize.getWidth() / 2, 12, { align: 'center' });
 
-  // MISMO ORDEN QUE LA INTERFAZ
+  // MISMO ORDEN QUE LA INTERFAZ (ScheduleTable.jsx)
   const areaOrder = [
+    'PRODUCCIÓN',
     'PRODUCTORES',
     'ASISTENTES DE PRODUCCIÓN',
     'DIRECTORES DE CÁMARA',
     'VTR',
+    'VIMIX',
     'OPERADORES DE VMIX',
+    'OPERADORES DE VIMIX',
     'OPERADORES DE PANTALLAS',
     'GENERADORES DE CARACTERES',
     'OPERADORES DE SONIDO',
     'ASISTENTES DE SONIDO',
     'OPERADORES DE PROMPTER',
+    'OPERADORES DE TELEPROMPTER',
     'CAMARÓGRAFOS DE ESTUDIO',
     'ASISTENTES DE ESTUDIO',
     'COORDINADOR ESTUDIO',
     'ESCENOGRAFÍA',
     'ASISTENTES DE LUCES',
     'OPERADORES DE VIDEO',
-    'CONTRIBUCIONES',
     'REALIZADORES',
     'CAMARÓGRAFOS DE REPORTERÍA',
     'ASISTENTES DE REPORTERÍA',
@@ -69,16 +157,131 @@ export const generateSchedulePDF = (personnel, programs, assignments, callTimes,
     'MAQUILLAJE',
   ];
 
+  // Roles de producción permitidos (excluir productores jefes/gerentes)
+  const allowedProductionRoles = [
+    'Productor de Emisión',
+    'Produccion',
+    'Asistente de producción',
+    'Asistente de Producción',
+  ];
+
+  // Función para normalizar nombres de áreas (quitar tildes, espacios extras)
+  const normalizeArea = (area) => {
+    if (!area) return '';
+    return area
+      .toUpperCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, ''); // Quitar tildes
+  };
+
+  // Crear mapa normalizado de áreas permitidas
+  const normalizedAreaOrder = areaOrder.map(normalizeArea);
+
+  // Filtrar solo el personal de áreas de producción (IGUAL QUE LA PANTALLA)
   const personnelByDept = personnel.reduce((acc, person) => {
-    if (!acc[person.area]) acc[person.area] = [];
-    acc[person.area].push(person);
+    const normalizedPersonArea = normalizeArea(person.area);
+
+    // Solo incluir si el área está en areaOrder
+    if (normalizedAreaOrder.includes(normalizedPersonArea)) {
+      // Usar el nombre original del área para agrupar
+      const areaKey = person.area;
+
+      // Si es PRODUCCIÓN, PRODUCTORES o ASISTENTES DE PRODUCCIÓN, filtrar por roles permitidos
+      const isProductionArea =
+        normalizedPersonArea === 'PRODUCCION' ||
+        normalizedPersonArea === 'PRODUCTORES' ||
+        normalizedPersonArea === 'ASISTENTES DE PRODUCCION';
+
+      if (isProductionArea) {
+        if (allowedProductionRoles.includes(person.role)) {
+          if (!acc[areaKey]) acc[areaKey] = [];
+          acc[areaKey].push(person);
+        }
+      } else {
+        // Para otras áreas, incluir todo el personal
+        if (!acc[areaKey]) acc[areaKey] = [];
+        acc[areaKey].push(person);
+      }
+    }
     return acc;
   }, {});
 
+  // Orden hardcodeado del personal (DEBE COINCIDIR CON ScheduleTable.jsx)
+  const personnelOrder = {
+    'PRODUCCIÓN': ['Luis Fajardo', 'Laura Ávila', 'Rocio Ruiz', 'Marilú Durán', 'Juliana Coronel', 'Luis Solano', 'Juan Carlos Boada', 'Nicolle Diaz', 'Angela Cabezas', 'Isabella Rojas', 'Valentina Vélez', 'Camila Carvajal', 'Sebastián Arango', 'Alexander Paez', 'Sara Daza', 'Juana Ullune'],
+    'PRODUCTORES': ['Luis Fajardo', 'Laura Ávila', 'Rocio Ruiz', 'Marilú Durán', 'Juliana Coronel', 'Luis Solano', 'Juan Carlos Boada'],
+    'ASISTENTES DE PRODUCCIÓN': ['Nicolle Diaz', 'Angela Cabezas', 'Isabella Rojas', 'Valentina Vélez', 'Camila Carvajal', 'Sebastián Arango', 'Alexander Paez', 'Sara Daza', 'Juana Ullune'],
+    'DIRECTORES DE CÁMARA': ['Andrés Patiño', 'Camilo Hernández', 'Diego Gamboa', 'Eduardo Contreras', 'Julián Jiménez', 'Alejandro La Torre'],
+    'VTR': ['Alfredo Méndez', 'David Córdoba', 'Henry Villarraga', 'William Aldana'],
+    'VIMIX': ['Sofía Fajardo', 'Ronald Ortiz', 'Vanesa Castañeda', 'Tania Morales'],
+    'OPERADORES DE VMIX': ['Sofía Fajardo', 'Ronald Ortiz', 'Vanesa Castañeda', 'Tania Morales'],
+    'OPERADORES DE VIMIX': ['Sofía Fajardo', 'Ronald Ortiz', 'Vanesa Castañeda', 'Tania Morales'],
+    'OPERADORES DE PANTALLAS': ['Paola Borrero', 'Dary Segura', 'Leidy Salazar', 'Ashlei Montero'],
+    'GENERADORES DE CARACTERES': ['Diana Ospina', 'Maria Jose Escobar', 'Santiago Ortiz', 'Santiago Rico', 'Dayana Rodríguez', 'María Suárez'],
+    'OPERADORES DE SONIDO': ['Oscar Bernal', 'John Valencia', 'Wilmar Matiz', 'Harold Barrero', 'Lenin Gutiérrez', 'Huber Salazar'],
+    'ASISTENTES DE SONIDO': ['Jimmy Estupiñán', 'Marcela Vélez', 'Luis Fonseca', 'Jaime Rueda', 'Wilson Cano'],
+    'OPERADORES DE PROMPTER': ['Duván Díaz', 'Katherine Montoya', 'Kevin Alejandro Lerma', 'Lina Rodríguez'],
+    'OPERADORES DE TELEPROMPTER': ['Duván Díaz', 'Katherine Montoya', 'Kevin Alejandro Lerma', 'Lina Rodríguez'],
+    'CAMARÓGRAFOS DE ESTUDIO': ['Jorge Jaramillo', 'Juan Sacristán', 'Jefferson Pérez', 'John Jiménez', 'Alexander Quiñonez', 'Sebastián Hernández', 'Carlos López', 'Carlos A. López', 'Cesar Jimenez', 'Ángel Zapata', 'Angel Zapata', 'John Loaiza', 'Ernesto Corchuelo', 'Carlos García', 'Carlos Garcia', 'John Daminston', 'John Daminston Arevalo', 'William Mosquera', 'Pedro Niño', 'Pedro Nino', 'Luis Bernal', 'Raul Ramírez', 'Raul Ramirez', 'Samuel Romero', 'Oscar González', 'Oscar Gonzalez'],
+    'ASISTENTES DE ESTUDIO': ['Diego González', 'Julio Vega', 'Rodolfo Saldaña', 'José Peña', 'Carlos Orlando Espinel'],
+    'COORDINADOR ESTUDIO': ['Jonathan Contreras'],
+    'ESCENOGRAFÍA': ['Rafael López', 'Néstor Peña', 'John Forero', 'Jacson Urrego', 'Joaquín Alonso'],
+    'ASISTENTES DE LUCES': ['Daniel Pinilla', 'Jaiver Galeano', 'Santiago Espinosa', 'Jhonatan Andres Ramirez', 'Julio López'],
+    'OPERADORES DE VIDEO': ['Leonardo Castro', 'Horacio Suárez', 'Pedro Torres', 'Iván Aristizábal'],
+    'REALIZADORES': ['William Ruiz', 'Carlos Wilches', 'Cesar Morales', 'Julián Luna', 'Enrique Muñoz', 'William Uribe', 'John Buitrago', 'Floresmiro Luna', 'Edgar Nieto', 'Álvaro Díaz', 'Victor Vargas', 'Erick Velásquez', 'Andrés Ramírez', 'Edgar Castillo', 'Marco Solorzano', 'Ramiro Balaguera', 'Leonel Cifuentes', 'Didier Buitrago', 'Laura Vargas', 'Alexander Valencia', 'Santiago Torres', 'David Patarroyo', 'Óscar Ortega', 'Guillermo Solarte', 'Wílmer Salamanca', 'Manuel Díaz'],
+    'CAMARÓGRAFOS DE REPORTERÍA': ['William Ruiz', 'Carlos Wilches', 'Cesar Morales', 'Julián Luna', 'Enrique Muñoz', 'William Uribe', 'John Buitrago', 'Floresmiro Luna', 'Edgar Nieto', 'Álvaro Díaz', 'Victor Vargas', 'Erick Velásquez', 'Andrés Ramírez', 'Edgar Castillo', 'Marco Solorzano', 'Ramiro Balaguera', 'Leonel Cifuentes', 'Didier Buitrago'],
+    'ASISTENTES DE REPORTERÍA': ['Richard Beltran', 'Johan Daniel Moreno', 'Walter Murillo', 'Pablo Preciado', 'Bryan Rodríguez', 'Brayan Munera', 'José Mesa'],
+    'VESTUARIO': ['Mariluz Beltrán', 'Dora Rincón', 'Yineth Tovar', 'Mercedes Malagón', 'Carlos Acosta'],
+    'MAQUILLAJE': ['Catalina Acevedo', 'María Espinosa', 'Lady Ortiz', 'Ana Villalba']
+  };
+
+  // Función para obtener índice de orden de una persona
+  const getPersonnelSortIndex = (person, area) => {
+    // 1. Primero verificar si hay un orden personalizado (manual) en localStorage
+    try {
+      const customOrders = localStorage.getItem('rtvc_personnel_custom_order');
+      if (customOrders) {
+        const orders = JSON.parse(customOrders);
+        const customOrder = orders[area];
+        if (customOrder && customOrder.length > 0) {
+          const index = customOrder.findIndex(name => name.toLowerCase() === person.name.toLowerCase());
+          if (index !== -1) return index;
+        }
+      }
+    } catch (error) {
+      console.error('Error al leer orden personalizado:', error);
+    }
+
+    // 2. Si no hay orden personalizado, usar el orden hardcodeado
+    // Buscar usando normalización (IGUAL QUE ScheduleTable.jsx)
+    const normalizedArea = normalizeArea(area);
+    const orderList = personnelOrder[area] || personnelOrder[Object.keys(personnelOrder).find(key => normalizeArea(key) === normalizedArea)];
+
+    if (!orderList) return 9999;
+    const index = orderList.findIndex(name => name.toLowerCase() === person.name.toLowerCase());
+    return index === -1 ? 9999 : index;
+  };
+
+  // Ordenar áreas según areaOrder (usando normalización para comparar)
   const sortedDepts = Object.entries(personnelByDept).sort((a, b) => {
-    const indexA = areaOrder.indexOf(a[0]);
-    const indexB = areaOrder.indexOf(b[0]);
+    const normalizedA = normalizeArea(a[0]);
+    const normalizedB = normalizeArea(b[0]);
+
+    // Buscar el índice en el array normalizado
+    const indexA = normalizedAreaOrder.indexOf(normalizedA);
+    const indexB = normalizedAreaOrder.indexOf(normalizedB);
+
     return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+  });
+
+  // CRÍTICO: Ordenar el personal dentro de cada área según el orden definido
+  sortedDepts.forEach(([area, persons]) => {
+    persons.sort((a, b) => {
+      const indexA = getPersonnelSortIndex(a, area);
+      const indexB = getPersonnelSortIndex(b, area);
+      return indexA - indexB;
+    });
   });
 
   // Convertir colores hex a RGB
@@ -188,30 +391,51 @@ export const generateSchedulePDF = (personnel, programs, assignments, callTimes,
               }
             });
           }
-        } else if (assignments[key]) {
-          // Obtener el grupo del personal para determinar si va a Master o Estudio
-          const personnelGroup = classifyPersonnel(person.role);
+        } else if (assignments[key] === true) {  // 🚨 CRÍTICO: SOLO procesar si es explícitamente true (eliminar asignaciones con false)
+          // 🔍 FILTRO POR CALLTIME: Verificar si este programa debe mostrarse (IGUAL QUE LA PANTALLA)
+          const shouldShow = shouldShowProgram(person.id, program.id, program);
 
-          // Obtener el mapeo del programa
-          const programMapping = programMappings[program.id];
-
-          // Obtener el nombre del recurso (Master X o Estudio Y)
-          const resource = getResourceForPersonnel(programMapping, personnelGroup);
+          if (!shouldShow) {
+            // No mostrar esta asignación aunque exista en assignments
+            row.push('');
+          } else {
+            // Determinar el texto de la celda (IGUAL QUE LA PANTALLA)
+            let cellText;
 
           // Si hay nota personalizada, usarla
-          const cellText = assignmentNotes[key] || resource || 'ASIGNADO';
+          if (assignmentNotes[key]) {
+            cellText = assignmentNotes[key];
+          } else {
+            // Clasificar al personal según su cargo
+            const personnelGroup = classifyPersonnel(person.role);
 
-          // Usar objeto con metadata para colorear después con naranja corporativo
-          row.push({
-            content: cellText,
-            styles: {
-              fillColor: colors.corporateOrange,
-              textColor: colors.white,
-              fontStyle: 'bold',
-              halign: 'center',
-              fontSize: 6
+            // Obtener el mapeo del programa
+            const programMapping = programMappings[program.id];
+
+            // Obtener el recurso según el grupo del personal
+            const resource = getResourceForPersonnel(programMapping, personnelGroup);
+
+            // Construir el texto de la celda - solo mostrar el recurso
+            if (resource) {
+              cellText = resource;
+            } else {
+              // Si no hay recurso asignado, mostrar el nombre del programa
+              cellText = program.name;
             }
-          });
+          }
+
+            // Usar objeto con metadata para colorear después con naranja corporativo
+            row.push({
+              content: cellText,
+              styles: {
+                fillColor: colors.corporateOrange,
+                textColor: colors.white,
+                fontStyle: 'bold',
+                halign: 'center',
+                fontSize: 6
+              }
+            });
+          }
         } else {
           row.push('');
         }

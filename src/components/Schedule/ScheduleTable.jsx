@@ -2940,7 +2940,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
             </button>
 
             <button
-              onClick={() => generateSchedulePDF(personnel, programs, assignments, callTimes, selectedDate, programMappings, novelties, assignmentNotes, endTimes)}
+              onClick={() => generateSchedulePDF(personnel, programs, assignments, callTimes, selectedDate, programMappings, novelties, assignmentNotes, endTimes, manualAssignments)}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded"
             >
               <Download size={18} />
