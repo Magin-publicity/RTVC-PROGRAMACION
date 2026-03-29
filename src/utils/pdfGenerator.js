@@ -154,15 +154,9 @@ export const generateSchedulePDF = (personnel, programs, assignments, callTimes,
 
     areaTableData.push(columnHeaderRow);
 
-    // ORDENAR PERSONAL POR HORA DE LLAMADO (igual que la interfaz)
-    const sortedByTime = [...deptPersonnel].sort((a, b) => {
-      const timeA = callTimes[a.id] || '99:99';
-      const timeB = callTimes[b.id] || '99:99';
-      return timeA.localeCompare(timeB);
-    });
-
+    // NO ordenar - mantener el mismo orden que la interfaz
     // Filas de personal
-    sortedByTime.forEach(person => {
+    deptPersonnel.forEach(person => {
       // Verificar si la persona tiene novedad para determinar la hora de llamado
       const novelty = hasNoveltyOnDate(person.id);
       const hasNoContract = novelty && novelty.type === 'SIN_CONTRATO';
