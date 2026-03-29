@@ -1361,7 +1361,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     }]);
 
     // Guardar nuevo orden
-    personnelOrderService.setAreaOrder(area, newOrder.map(p => p.name));
+    personnelOrderService.setAreaOrder(area, newOrder.map(p => p.name), selectedDate);
     setOrderVersion(prev => prev + 1);
 
     // Restaurar posición del scroll después del re-render usando múltiples estrategias
@@ -1698,7 +1698,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
         timestamp: Date.now()
       }]);
 
-      personnelOrderService.setAreaOrder(area, newOrder.map(p => p.name));
+      personnelOrderService.setAreaOrder(area, newOrder.map(p => p.name), selectedDate);
       setOrderVersion(prev => prev + 1);
       setDropTarget(null);
       setSelectedPersonnel([]);
@@ -1743,7 +1743,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
       timestamp: Date.now()
     }]);
 
-    personnelOrderService.setAreaOrder(area, newOrder.map(p => p.name));
+    personnelOrderService.setAreaOrder(area, newOrder.map(p => p.name), selectedDate);
     setOrderVersion(prev => prev + 1);
     setDropTarget(null);
 
@@ -1754,7 +1754,7 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
     if (!confirm(`¿Restaurar el orden por defecto del PDF para ${area}?`)) return;
 
     console.log(`🔄 Reseteando orden de: ${area}`);
-    personnelOrderService.resetAreaOrder(area);
+    personnelOrderService.resetAreaOrder(area, selectedDate);
 
     // Forzar re-render
     setOrderVersion(prev => prev + 1);
@@ -2740,8 +2740,8 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
 
   // Función para obtener el índice de orden de una persona según el PDF o orden personalizado
   const getPersonnelSortIndex = (person, area) => {
-    // 1. Primero verificar si hay un orden personalizado (manual) para esta área
-    const customOrder = personnelOrderService.getAreaOrder(area);
+    // 1. Primero verificar si hay un orden personalizado (manual) para esta área y semana
+    const customOrder = personnelOrderService.getAreaOrder(area, selectedDate);
     if (customOrder && customOrder.length > 0) {
       const index = customOrder.findIndex(name => name.toLowerCase() === person.name.toLowerCase());
       if (index !== -1) return index;
@@ -3052,24 +3052,10 @@ export const ScheduleTable = ({ personnel, selectedDate, novelties, onExportPDF,
                     // Verificar si esta persona está seleccionada
                     const isSelected = selectedPersonnel.some(p => p.id === person.id);
 
-                    // Calcular número de grupo
+                    // Calcular número consecutivo (sin grupos)
                     let displayNumber = personIndex + 1;
                     let usesGroups = false;
                     let maxGroup = 4;
-
-                    if (dept === 'CAMARÓGRAFOS DE ESTUDIO' || dept === 'CAMARÓGRAFOS DE REPORTERÍA') {
-                      usesGroups = true;
-                      maxGroup = dept === 'CAMARÓGRAFOS DE ESTUDIO' ? 4 : 2;
-
-                      // Primero intentar obtener el grupo personalizado de esta semana
-                      const weeklyGroups = getWeeklyGroups(selectedDate, dept);
-                      if (weeklyGroups[person.id]) {
-                        displayNumber = weeklyGroups[person.id];
-                      } else {
-                        // Si no hay grupo personalizado, usar el grupo por defecto basado en posición
-                        displayNumber = getDefaultGroup(dept, personIndex) || displayNumber;
-                      }
-                    }
 
                     return (
                     <tr

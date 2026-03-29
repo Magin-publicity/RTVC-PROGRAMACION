@@ -151,16 +151,6 @@ export function clearWeeklyGroups(date, area = null) {
  * @returns {number|null} Número de grupo o null si no aplica
  */
 export function getDefaultGroup(area, personIndex) {
-  if (area === 'CAMARÓGRAFOS DE ESTUDIO') {
-    // Grupos: 1-6 = grupo 1, 7-11 = grupo 2, 12-15 = grupo 3, 16-20 = grupo 4
-    if (personIndex < 6) return 1;
-    else if (personIndex < 11) return 2;
-    else if (personIndex < 15) return 3;
-    else return 4;
-  } else if (area === 'CAMARÓGRAFOS DE REPORTERÍA') {
-    // Grupos: 1-9 = grupo 1, 10-18 = grupo 2
-    if (personIndex < 9) return 1;
-    else return 2;
-  }
+  // Usar numeración consecutiva para todas las áreas (sin grupos)
   return null;
 }

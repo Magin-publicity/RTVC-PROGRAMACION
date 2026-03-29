@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { classifyPersonnel, getResourceForPersonnel } from './personnelClassification';
+import { personnelOrderService } from '../services/personnelOrderService';
 
 export const generateSchedulePDF = (personnel, programs, assignments, callTimes, selectedDate, programMappings = {}, novelties = [], assignmentNotes = {}, endTimes = {}, manualAssignments = {}) => {
   // 🔍 DEBUG: Ver qué datos recibe el PDF
@@ -238,19 +239,11 @@ export const generateSchedulePDF = (personnel, programs, assignments, callTimes,
 
   // Función para obtener índice de orden de una persona
   const getPersonnelSortIndex = (person, area) => {
-    // 1. Primero verificar si hay un orden personalizado (manual) en localStorage
-    try {
-      const customOrders = localStorage.getItem('rtvc_personnel_custom_order');
-      if (customOrders) {
-        const orders = JSON.parse(customOrders);
-        const customOrder = orders[area];
-        if (customOrder && customOrder.length > 0) {
-          const index = customOrder.findIndex(name => name.toLowerCase() === person.name.toLowerCase());
-          if (index !== -1) return index;
-        }
-      }
-    } catch (error) {
-      console.error('Error al leer orden personalizado:', error);
+    // 1. Primero verificar si hay un orden personalizado (manual) para esta semana
+    const customOrder = personnelOrderService.getAreaOrder(area, selectedDate);
+    if (customOrder && customOrder.length > 0) {
+      const index = customOrder.findIndex(name => name.toLowerCase() === person.name.toLowerCase());
+      if (index !== -1) return index;
     }
 
     // 2. Si no hay orden personalizado, usar el orden hardcodeado
